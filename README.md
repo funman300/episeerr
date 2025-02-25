@@ -66,6 +66,36 @@ This is particularly useful for:
    ```bash
    python episeerr.py
    ```
+Systemd Service Setup
+
+Create the systemd service file:
+
+```bash
+sudo nano /etc/systemd/system/episeerr.service
+```
+Copy the following content (replace your_username and /path/to/episeerr with your actual username and installation path):
+```
+[Unit]
+Description=EpisEERR - Episode Request Manager for Sonarr/Jellyseerr
+After=network.target
+
+[Service]
+Type=simple
+User=your_username
+WorkingDirectory=/path/to/episeerr
+ExecStart=/usr/bin/python3 /path/to/episeerr/episeerr.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+Reload systemd, enable, and start the service:
+```
+sudo systemctl daemon-reload
+sudo systemctl enable episeerr.service
+sudo systemctl start episeerr.service
+```
 
 ### Option 2: Docker Installation
 
