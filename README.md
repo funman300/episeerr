@@ -1,5 +1,6 @@
 # EpisEERR - Episode Request Manager for Sonarr/Jellyseerr
 Support This Project If you find this project helpful, please consider supporting it. Your contributions help maintain and improve the project. Any support is greatly appreciated! ❤️ https://buymeacoffee.com/vansmak Thank you for your support!
+
 EpisEERR is a specialized middleware tool that enhances the integration between Jellyseerr (or Overseerr) and Sonarr by allowing users to request specific episodes rather than entire seasons.
 
 ## What Problem Does This Solve?
