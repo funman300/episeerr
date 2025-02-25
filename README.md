@@ -1,5 +1,5 @@
 # EpisEERR - Episode Request Manager for Sonarr/Jellyseerr
-
+Support This Project If you find this project helpful, please consider supporting it. Your contributions help maintain and improve the project. Any support is greatly appreciated! ❤️ https://buymeacoffee.com/vansmak Thank you for your support!
 EpisEERR is a specialized middleware tool that enhances the integration between Jellyseerr (or Overseerr) and Sonarr by allowing users to request specific episodes rather than entire seasons.
 
 ## What Problem Does This Solve?
@@ -9,18 +9,18 @@ When users request TV shows in Jellyseerr, it sends the entire season to Sonarr,
 1. Select only specific episodes you want
 2. Cancel the full-season request in Jellyseerr
 3. Monitor and search for only your chosen episodes
-4. Request episodes directly via Telegram (even for shows not in Jellyseerr yet)
+4. Request episodes directly via Telegram 
 
 This is particularly useful for:
 - Reality TV shows where you only want certain episodes
 - Shows with mixed quality episodes
 - Conserving disk space
-- Shows available in Sonarr but not yet in Jellyseerr (via direct Telegram requests)
+- Quick add epecific episoded on the go (via direct Telegram requests)
 
 ## Important Notes Before Using
 
 - **Tag Requirement**: EpisEERR creates a tag in Sonarr called "episodes" which is required for operation
-- **Indexer Impact**: The script will temporarily send searches to your indexers and may initiate downloads
+- **Indexer Impact**: The script will temporarily send searches to your indexers and may initiate downloads (that get cancelled)
 - **Resource Considerations**: If you have download limits with your provider, be aware this will use those resources (though likely less than full-season downloads would)
 - **Continuous Operation**: The script must be running continuously to catch webhooks
 - **Existing Tags**: This should not affect other tags you may be using in Sonarr
@@ -30,8 +30,8 @@ This is particularly useful for:
 - Intercepts Jellyseerr TV requests via webhook
 - Provides a Telegram interface for episode selection
 - Allows direct episode requests via Telegram (without going through Jellyseerr)
-- Supports requesting multiple episodes across different seasons
-- Automatically cancels the full season request in Jellyseerr
+   - Supports requesting multiple episodes across different seasons
+- Automatically cancels the full season request in Jellyseerr (neccessary or seer app will get confused)
 - Handles only the specific episodes you want
 
 ## Installation
@@ -41,7 +41,7 @@ This is particularly useful for:
 - Sonarr
 - Jellyseerr or Overseerr
 - Python 3.7+
-- Telegram Bot (optional but recommended)
+- Telegram Bot 
 
 ### Option 1: Manual Installation
 
@@ -129,7 +129,7 @@ TELEGRAM_ADMIN_IDS=comma,separated,admin,user,ids
 
 ### Via Jellyseerr/Overseerr
 
-1. Request a TV show through Jellyseerr as normal
+1. Request a TV show (must be season only) through Jellyseerr and choose the tag "episodes"
 2. Approve the request in Jellyseerr
 3. EpisEERR will intercept the request and send you a Telegram message
 4. Select the specific episodes you want via the Telegram interface
@@ -161,7 +161,7 @@ Show Title S01EP01-03,S02EP07,S03EP10-12
 
 ### Jellyseerr Workflow
 
-1. Request "The Ultimate Fighter Season 3" in Jellyseerr
+1. Request "This show 3" in Jellyseerr
 2. Approve the request
 3. Receive a Telegram message with all episodes from that season
 4. Select episodes 2 and 8 via Telegram
@@ -169,7 +169,7 @@ Show Title S01EP01-03,S02EP07,S03EP10-12
 
 ### Direct Telegram Request
 
-1. Send a message to your bot: `The Ultimate Fighter S03E02,S03E05`
+1. Send a message to your bot: `This show S03E02,S03E05`
 2. The bot finds the show in Sonarr
 3. It monitors and searches for episodes 2 and 5 from season 3
 4. You get a confirmation message when this is complete
