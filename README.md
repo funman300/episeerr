@@ -139,7 +139,7 @@ TELEGRAM_TOKEN=your_telegram_bot_token_here
 TELEGRAM_CHAT_ID=your_telegram_chat_id_here
 TELEGRAM_ADMIN_IDS=comma,separated,admin,user,ids
 ```
-### Sonarr delayed release profile 
+### Sonarr delayed release profile - this byes time while the script unmonitors episodes so downloads don't start
 1. Settings - profiles - add delay profile 
 2. add time like 3 minutes
 3. choose episodes tag
