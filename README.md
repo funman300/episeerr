@@ -21,8 +21,8 @@ This is particularly useful for:
 ## Important Notes Before Using
 
 - **Tag Requirement**: EpisEERR creates a tag in Sonarr called "episodes" which is required for operation
-- **Indexer Impact**: The script will temporarily send searches to your indexers and may initiate downloads (that get cancelled)
-- **Resource Considerations**: If you have download limits with your provider, be aware this will use those resources (though likely less than full-season downloads would)
+- **Indexer Impact**: The script may temporarily send searches to your indexers and may initiate downloads (that get cancelled), use delayed profile to prevent this 
+
 - **Continuous Operation**: The script must be running continuously to catch webhooks
 - **Existing Tags**: This should not affect other tags you may be using in Sonarr
 
@@ -139,7 +139,11 @@ TELEGRAM_TOKEN=your_telegram_bot_token_here
 TELEGRAM_CHAT_ID=your_telegram_chat_id_here
 TELEGRAM_ADMIN_IDS=comma,separated,admin,user,ids
 ```
-
+### Sonarr delayed release profile 
+1. Settings - profiles - add delay profile 
+2. add time like 3 minutes
+3. choose episodes tag
+4. do not select bypass
 ### Jellyseerr/Overseerr Webhook Setup
 
 1. In Jellyseerr, go to Settings > Notifications
