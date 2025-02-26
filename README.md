@@ -99,7 +99,7 @@ sudo systemctl start episeerr.service
 ```
 
 ### Option 2: Docker Installation
-
+****untested
 1. Clone this repository:
    ```bash
    git clone https://github.com/vansmak/episeerr.git
