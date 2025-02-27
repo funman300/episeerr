@@ -5,6 +5,8 @@ import requests
 import logging
 import threading
 import re
+import asyncio
+import websockets
 from logging.handlers import RotatingFileHandler
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
@@ -49,6 +51,7 @@ logger.addHandler(console_handler)
 # Sonarr connection details
 SONARR_URL = os.getenv('SONARR_URL', 'http://sonarr:8989')
 SONARR_API_KEY = os.getenv('SONARR_API_KEY')
+SONARR_WS_URL = os.getenv('SONARR_WS_URL', 'ws://sonarr:8989/api/v3/notification')
 
 # Telegram connection details
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -73,7 +76,53 @@ def get_sonarr_headers():
         'X-Api-Key': SONARR_API_KEY,
         'Content-Type': 'application/json'
     }
-
+async def monitor_sonarr_queue():
+    """
+    Monitor Sonarr's WebSocket for queue events and cancel 
+    unmonitored downloads for specific seasons.
+    """
+    headers = get_sonarr_headers()
+    logger.info(f"Starting WebSocket monitoring with URL: {SONARR_WS_URL}")
+    logger.info(f"WebSocket Headers: {headers}")
+    
+    # Construct WebSocket headers
+    ws_headers = {
+        "X-Api-Key": SONARR_API_KEY
+    }
+    
+    try:
+        # Log connection details
+        logger.info("Attempting to connect to WebSocket...")
+        async with websockets.connect(
+            SONARR_WS_URL, 
+            extra_headers=ws_headers, 
+            ping_interval=20,  # Send ping every 20 seconds
+            ping_timeout=10    # Wait 10 seconds for pong
+        ) as websocket:
+            logger.info("WebSocket connection established successfully")
+            
+            while True:
+                try:
+                    logger.debug("Waiting to receive WebSocket message...")
+                    message = await websocket.recv()
+                    logger.debug(f"Received WebSocket message: {message}")
+                    
+                    data = json.loads(message)
+                    logger.debug(f"Parsed WebSocket data: {data}")
+                    
+                    # Existing monitoring logic...
+                    
+                except json.JSONDecodeError:
+                    logger.warning("Received invalid JSON from WebSocket")
+                except Exception as e:
+                    logger.error(f"Error processing WebSocket message: {str(e)}")
+                
+    except Exception as e:
+        logger.error(f"WebSocket connection error: {str(e)}")
+        # Attempt to reconnect
+        await asyncio.sleep(5)
+        await monitor_sonarr_queue()
+        
 def create_episode_tag():
     """Create a single 'episodes' tag in Sonarr."""
     try:
@@ -148,72 +197,315 @@ def unmonitor_season(series_id, season_number, headers):
     except Exception as e:
         logger.error(f"Error unmonitoring season: {str(e)}", exc_info=True)
         return False
+    
+def blocklist_season_episodes(series_id, season_number, headers):
+    """Blocklist all episodes in a specific season."""
+    try:
+        # Get episodes for the specific season
+        episodes_response = requests.get(
+            f"{SONARR_URL}/api/v3/episode?seriesId={series_id}&seasonNumber={season_number}",
+            headers=headers
+        )
+        
+        if not episodes_response.ok:
+            logger.error(f"Failed to get episodes for blocklisting. Status: {episodes_response.status_code}")
+            return False
 
-def cancel_season_downloads(series_id, season_number, headers):
+        episodes = episodes_response.json()
+        if not episodes:
+            logger.info(f"No episodes found to blocklist for series {series_id} season {season_number}")
+            return True
+        
+        # Get series title for the blocklist entry
+        series_title = get_series_title(series_id, headers)
+        
+        # Create a single blocklist entry for the whole season
+        # This is more efficient than creating one per episode
+        season_episode_ids = [ep['id'] for ep in episodes]
+        
+        if season_episode_ids:
+            blocklist_data = {
+                "seriesId": series_id,
+                "episodeIds": season_episode_ids,
+                "sourceTitle": f"{series_title} S{season_number:02d} - ALL EPISODES BLOCKED",
+                "message": "Season blocklisted by EpisEERR"
+            }
+            
+            blocklist_response = requests.post(
+                f"{SONARR_URL}/api/v3/blocklist",
+                headers=headers,
+                json=blocklist_data
+            )
+            
+            if blocklist_response.ok:
+                logger.info(f"Blocklisted all {len(season_episode_ids)} episodes in series ID {series_id} season {season_number}")
+                return True
+            else:
+                logger.error(f"Failed to blocklist episodes. Status: {blocklist_response.status_code}")
+                return False
+        else:
+            logger.info(f"No episode IDs found for blocklisting in series {series_id} season {season_number}")
+            return True
+            
+    except Exception as e:
+        logger.error(f"Error blocklisting season: {str(e)}", exc_info=True)
+        return False
+
+def unblock_episodes(series_id, season_number, episode_numbers, headers):
+    """Unblock specific episodes in a season."""
+    try:
+        # Get blocklist entries
+        blocklist_response = requests.get(
+            f"{SONARR_URL}/api/v3/blocklist",
+            headers=headers
+        )
+        
+        if not blocklist_response.ok:
+            logger.error(f"Failed to get blocklist. Status: {blocklist_response.status_code}")
+            return False
+            
+        blocklist = blocklist_response.json().get('records', [])
+        
+        # Get episodes for the specific season to match IDs
+        episodes_response = requests.get(
+            f"{SONARR_URL}/api/v3/episode?seriesId={series_id}&seasonNumber={season_number}",
+            headers=headers
+        )
+        
+        if not episodes_response.ok:
+            logger.error(f"Failed to get episodes for unblocking. Status: {episodes_response.status_code}")
+            return False
+            
+        episodes = episodes_response.json()
+        
+        # Create a map of episode numbers to episode IDs
+        episode_map = {ep.get('episodeNumber'): ep.get('id') for ep in episodes}
+        
+        # Get episode IDs for the ones we want to unblock
+        episode_ids_to_unblock = [episode_map.get(num) for num in episode_numbers if num in episode_map]
+        
+        if not episode_ids_to_unblock:
+            logger.warning(f"No matching episode IDs found for unblocking")
+            return False
+            
+        # Find blocklist entries for our episodes
+        entries_to_delete = []
+        
+        for entry in blocklist:
+            if entry.get('seriesId') == series_id:
+                # Check if this blocklist entry contains any of our episodes
+                for ep_id in entry.get('episodeIds', []):
+                    if ep_id in episode_ids_to_unblock:
+                        entries_to_delete.append(entry.get('id'))
+                        break
+        
+        # Delete the found blocklist entries
+        for entry_id in entries_to_delete:
+            delete_response = requests.delete(
+                f"{SONARR_URL}/api/v3/blocklist/{entry_id}",
+                headers=headers
+            )
+            
+            if delete_response.ok:
+                logger.debug(f"Deleted blocklist entry {entry_id}")
+            else:
+                logger.warning(f"Failed to delete blocklist entry {entry_id}. Status: {delete_response.status_code}")
+        
+        logger.info(f"Unblocked {len(entries_to_delete)} entries for {len(episode_ids_to_unblock)} episodes in series {series_id} season {season_number}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error unblocking episodes: {str(e)}", exc_info=True)
+        return False
+
+def unblock_remaining_episodes(series_id, season_number, already_unblocked, headers=None):
+    """Unblock remaining episodes after a delay, keeping them unmonitored."""
+    if not headers:
+        headers = get_sonarr_headers()
+        
+    try:
+        logger.info(f"Running scheduled unblock for remaining episodes in series {series_id} season {season_number}")
+        
+        # Get all episodes for the season
+        episodes_response = requests.get(
+            f"{SONARR_URL}/api/v3/episode?seriesId={series_id}&seasonNumber={season_number}",
+            headers=headers
+        )
+        
+        if not episodes_response.ok:
+            logger.error(f"Failed to get episodes for cleanup unblock. Status: {episodes_response.status_code}")
+            return False
+            
+        episodes = episodes_response.json()
+        
+        # Get all episode numbers except already unblocked ones
+        remaining_episode_numbers = [
+            ep.get('episodeNumber') for ep in episodes 
+            if ep.get('episodeNumber') not in already_unblocked
+        ]
+        
+        if not remaining_episode_numbers:
+            logger.info(f"No remaining episodes to unblock for series {series_id} season {season_number}")
+            return True
+            
+        # Unblock these episodes (but they remain unmonitored)
+        unblock_episodes(series_id, season_number, remaining_episode_numbers, headers)
+        
+        logger.info(f"Completed scheduled unblock for {len(remaining_episode_numbers)} episodes")
+        return True
+            
+    except Exception as e:
+        logger.error(f"Error in scheduled unblocking: {str(e)}", exc_info=True)
+        return False
+    
+def get_episode_info(episode_id, headers):
+    """Get episode information from Sonarr API"""
+    try:
+        response = requests.get(f"{SONARR_URL}/api/v3/episode/{episode_id}", headers=headers)
+        if response.ok:
+            return response.json()
+        return None
+    except Exception as e:
+        logger.error(f"Error getting episode info: {str(e)}")
+        return None
+
+def get_series_title(series_id, headers):
+    """Get series title from Sonarr API"""
+    try:
+        response = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers)
+        if response.ok:
+            return response.json().get('title', 'Unknown Series')
+        return 'Unknown Series'
+    except Exception as e:
+        logger.error(f"Error getting series title: {str(e)}")
+        return 'Unknown Series'
+
+def process_episode_selection(series_id, episode_numbers):
     """
-    Cancel downloads for a specific series and season.
+    Process selected episodes by monitoring and searching for them.
+    
+    :param series_id: Sonarr series ID
+    :param episode_numbers: List of episode numbers to process
     """
     try:
-        # Get check parameters from environment
-        check_interval = int(os.getenv('SONARR_QUEUE_CHECK_INTERVAL', 15))  # Default 15 seconds
-        max_checks = int(os.getenv('SONARR_QUEUE_MAX_CHECKS', 8))  # Default 8 checks
+        series_id = int(series_id)
+        headers = get_sonarr_headers()
         
-        total_cancelled = 0
+        # Get series info
+        series_response = requests.get(
+            f"{SONARR_URL}/api/v3/series/{series_id}",
+            headers=headers
+        )
         
-        for check_num in range(max_checks):
-            # Check queue
-            queue_response = requests.get(f"{SONARR_URL}/api/v3/queue", headers=headers)
-            if not queue_response.ok:
-                logger.error(f"Failed to retrieve queue. Status: {queue_response.status_code}")
-                return 0
+        if not series_response.ok:
+            logger.error(f"Failed to get series. Status: {series_response.status_code}")
+            return False
             
-            queue = queue_response.json()
-            
-            # Filter for items to cancel (only items for this specific series and season)
-            queue_items_to_cancel = [
-                item for item in queue.get('records', []) 
-                if item.get('seriesId') == series_id and item.get('seasonNumber') == season_number
-            ]
-            
-            if queue_items_to_cancel:
-                # Detailed logging of items to be cancelled
-                for item in queue_items_to_cancel:
-                    logger.info(f"Cancelling download - Series ID: {item.get('seriesId')}, "
-                                f"Season: {item.get('seasonNumber')}, "
-                                f"Episode ID: {item.get('episodeId')}")
-                
-                remove_payload = {
-                    "ids": [item['id'] for item in queue_items_to_cancel],
-                    "removeFromClient": True,
-                    "removeFromDownloadClient": True
-                }
-                
-                bulk_remove_response = requests.delete(
-                    f"{SONARR_URL}/api/v3/queue/bulk",
-                    headers=headers,
-                    json=remove_payload
-                )
-                
-                if bulk_remove_response.ok:
-                    total_cancelled += len(queue_items_to_cancel)
-                    logger.info(f"Cancelled {len(queue_items_to_cancel)} downloads for series ID {series_id}")
-                else:
-                    logger.error(f"Failed to cancel downloads. Status: {bulk_remove_response.status_code}")
-                    logger.error(f"Response content: {bulk_remove_response.text}")
-                    return total_cancelled
+        series = series_response.json()
+        season_number = pending_selections[str(series_id)]['season']
+        
+        logger.info(f"Processing episode selection for {series['title']} Season {season_number}: {episode_numbers}")
+        
+        # Get episode IDs for searching
+        episodes = get_series_episodes(series_id, season_number, headers)
+        
+        if not episodes:
+            logger.error(f"No episodes found for series {series_id} season {season_number}")
+            send_telegram_message(f"⚠️ Error: No episodes found for {series['title']} Season {season_number}", cleanup_after=300)
+            return False
+        
+        # Filter to only valid episode numbers
+        valid_episode_numbers = []
+        for num in episode_numbers:
+            if any(ep['episodeNumber'] == num for ep in episodes):
+                valid_episode_numbers.append(num)
             else:
-                logger.info(f"No queue items found for series ID {series_id} in check {check_num+1}")
-            
-            # Wait between checks (skip after last check)
-            if check_num < max_checks - 1:
-                logger.info(f"Waiting {check_interval} seconds before next check...")
-                time.sleep(check_interval)
+                logger.warning(f"Episode {num} not found in {series['title']} Season {season_number}")
         
-        return total_cancelled
-    
+        if not valid_episode_numbers:
+            logger.error(f"No valid episodes found for selection {episode_numbers}")
+            send_telegram_message(f"⚠️ Error: No valid episodes found in {series['title']} Season {season_number}", cleanup_after=300)
+            return False
+            
+        # Monitor selected episodes
+        monitor_success = monitor_specific_episodes(
+            series_id, 
+            season_number, 
+            valid_episode_numbers, 
+            headers
+        )
+        
+        if not monitor_success:
+            logger.error(f"Failed to monitor episodes for series {series_id}")
+            send_telegram_message(f"⚠️ Error: Failed to monitor episodes for {series['title']}", cleanup_after=300)
+            return False
+            
+        # Get episode IDs for searching
+        episode_ids = [
+            ep['id'] for ep in episodes 
+            if ep['episodeNumber'] in valid_episode_numbers
+        ]
+        
+        if not episode_ids:
+            logger.error(f"Failed to find episode IDs for {valid_episode_numbers}")
+            send_telegram_message(f"⚠️ Error: Failed to find episode IDs for {series['title']}", cleanup_after=300)
+            return False
+        
+        # Log episode IDs for debugging
+        logger.info(f"Episode IDs for search: {episode_ids}")
+        
+        # Trigger search for the episodes
+        search_success = search_episodes(series_id, episode_ids, headers)
+        
+        if search_success:
+            logger.info(f"Successfully set up monitoring and search for {len(valid_episode_numbers)} episodes")
+            
+            # Create a more permanent final message with complete information
+            episodes_str = ", ".join(str(e) for e in sorted(valid_episode_numbers))
+            final_msg = send_telegram_message(
+                f"✅ *Request Processed*: {series['title']} Season {season_number}\n\n"
+                f"Selected Episodes: {episodes_str}\n\n"
+                f"Search has been started for these episodes."
+                # No cleanup_after - this message stays
+            )
+            return True
+        else:
+            logger.error(f"Failed to search for episodes")
+            send_telegram_message(f"⚠️ Failed to search for episodes in {series['title']} Season {season_number}", cleanup_after=300)
+            return False
+            
     except Exception as e:
-        logger.error(f"Error cancelling series downloads: {str(e)}", exc_info=True)
-        return 0
+        logger.error(f"Error processing episode selection: {str(e)}", exc_info=True)
+        return False
+        
+def cancel_download(queue_id, headers):
+    """Cancel a download in Sonarr's queue with multiple methods"""
+    try:
+        # Primary method: Bulk remove with client removal
+        payload = {
+            "ids": [queue_id],
+            "removeFromClient": True,
+            "removeFromDownloadClient": True,
+            "blocklist": True
+        }
+        response = requests.delete(f"{SONARR_URL}/api/v3/queue/bulk", headers=headers, json=payload)
+        
+        # If primary method fails, try alternative
+        if not response.ok:
+            logger.warning(f"Bulk removal failed for queue item {queue_id}. Trying alternative method.")
+            response = requests.delete(
+                f"{SONARR_URL}/api/v3/queue/{queue_id}", 
+                headers=headers,
+                params={
+                    "removeFromClient": "true",
+                    "blocklist": "true"
+                }
+            )
+        
+        return response.ok
+    except Exception as e:
+        logger.error(f"Error cancelling download: {str(e)}")
+        return False
 
 def monitor_specific_episodes(series_id, season_number, episode_numbers, headers):
     """
@@ -1194,7 +1486,7 @@ def process_episode_selection(series_id, episode_numbers):
             logger.error(f"Failed to find episode IDs for {valid_episode_numbers}")
             send_telegram_message(f"⚠️ Error: Failed to find episode IDs for {series['title']}", cleanup_after=300)
             return False
-            
+        
         # Log episode IDs for debugging
         logger.info(f"Episode IDs for search: {episode_ids}")
         
@@ -1221,15 +1513,8 @@ def process_episode_selection(series_id, episode_numbers):
     except Exception as e:
         logger.error(f"Error processing episode selection: {str(e)}", exc_info=True)
         return False
-
-def process_series(tvdb_id, season_number, request_id=None):
-    """
-    Process series: unmonitor all episodes, cancel all downloads, and offer episode selection via Telegram.
     
-    :param tvdb_id: TVDB ID of the series
-    :param season_number: Season number
-    :param request_id: Optional Jellyseerr request ID to delete later
-    """
+def process_series(tvdb_id, season_number, request_id=None):
     headers = get_sonarr_headers()
     
     for attempt in range(12):  # Max 12 attempts
@@ -1254,13 +1539,9 @@ def process_series(tvdb_id, season_number, request_id=None):
             series_id = series['id']
             logger.info(f"Found series: {series['title']} (ID: {series_id})")
             
-            # Unmonitor episodes only for the requested season
+            # 1. Unmonitor episodes only for the requested season
             unmonitor_success = unmonitor_season(series_id, season_number, headers)
             
-            # Cancel downloads only for the requested season
-            cancelled_count = cancel_season_downloads(series_id, season_number, headers)
-            
-            logger.info(f"Series {series['title']} Season {season_number} processed: unmonitored={unmonitor_success}, cancelled={cancelled_count}")
             
             # Send episode selection to Telegram if configured
             if bot and TELEGRAM_CHAT_ID:
@@ -1369,13 +1650,16 @@ def handle_webhook():
 
 # Start Telegram bot polling in a separate thread
 def start_telegram_polling():
-    """Start the Telegram bot polling in a separate thread."""
+    """Start the Telegram bot polling in a separate thread with reconnection."""
     if bot:
-        logger.info("Starting Telegram bot polling")
-        try:
-            bot.infinity_polling(timeout=60, long_polling_timeout=30)
-        except Exception as e:
-            logger.error(f"Telegram polling error: {str(e)}", exc_info=True)
+        while True:
+            try:
+                logger.info("Starting Telegram bot polling")
+                bot.infinity_polling(timeout=60, long_polling_timeout=30)
+            except Exception as e:
+                logger.error(f"Telegram polling error: {str(e)}", exc_info=True)
+                logger.info("Attempting to reconnect Telegram bot in 10 seconds...")
+                time.sleep(10)
 
 def main():
     # Log startup
