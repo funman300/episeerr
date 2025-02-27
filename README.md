@@ -127,8 +127,6 @@ Copy `.env.example` to `.env` and configure the following variables:
 # Sonarr connection details
 SONARR_URL=http://192.168.x.x:8989
 SONARR_API_KEY=your_sonarr_api_key_here
-SONARR_QUEUE_CHECK_INTERVAL=15
-SONARR_QUEUE_MAX_CHECKS=8
 
 # Overseerr/Jellyseerr connection details
 OVERSEERR_URL=http://192.168.x.x:5055
@@ -141,7 +139,7 @@ TELEGRAM_ADMIN_IDS=comma,separated,admin,user,ids
 ```
 ### Sonarr delayed release profile - this byes time while the script unmonitors episodes so downloads don't start
 1. Settings - profiles - add delay profile 
-2. add time like 3 minutes
+2. add time like 1 minute
 3. choose episodes tag
 4. do not select bypass
 ### Jellyseerr/Overseerr Webhook Setup
