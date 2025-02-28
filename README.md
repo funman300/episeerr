@@ -139,7 +139,7 @@ TELEGRAM_ADMIN_IDS=comma,separated,admin,user,ids
 ```
 ### Sonarr delayed release profile - this byes time while the script unmonitors episodes so downloads don't start
 1. Settings - profiles - add delay profile 
-2. add time like 1 minute
+2. add a riduculous time like 10519200  # this is just to prevent downloads, it wont dl anything less than 20 years old, its a failsafe
 3. choose episodes tag
 4. do not select bypass
 ### Jellyseerr/Overseerr Webhook Setup
