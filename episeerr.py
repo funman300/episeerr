@@ -57,7 +57,8 @@ SONARR_WS_URL = os.getenv('SONARR_WS_URL', 'ws://sonarr:8989/api/v3/notification
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 TELEGRAM_ADMIN_IDS = [int(id.strip()) for id in os.getenv('TELEGRAM_ADMIN_IDS', '').split(',') if id.strip()]
-
+# Global variables
+EPISODES_TAG_ID = None  # Will be set when create_episode_tag() is called
 # Initialize Telegram bot
 if TELEGRAM_TOKEN:
     bot = telebot.TeleBot(TELEGRAM_TOKEN)
@@ -65,6 +66,8 @@ if TELEGRAM_TOKEN:
 else:
     bot = None
     logger.warning("Telegram bot not initialized - token missing")
+
+
 
 # Store pending episode selections
 # Format: {series_id: {'title': 'Series Title', 'season': 1, 'episodes': [1, 2, 3, ...]}}
@@ -76,55 +79,10 @@ def get_sonarr_headers():
         'X-Api-Key': SONARR_API_KEY,
         'Content-Type': 'application/json'
     }
-async def monitor_sonarr_queue():
-    """
-    Monitor Sonarr's WebSocket for queue events and cancel 
-    unmonitored downloads for specific seasons.
-    """
-    headers = get_sonarr_headers()
-    logger.info(f"Starting WebSocket monitoring with URL: {SONARR_WS_URL}")
-    logger.info(f"WebSocket Headers: {headers}")
-    
-    # Construct WebSocket headers
-    ws_headers = {
-        "X-Api-Key": SONARR_API_KEY
-    }
-    
-    try:
-        # Log connection details
-        logger.info("Attempting to connect to WebSocket...")
-        async with websockets.connect(
-            SONARR_WS_URL, 
-            extra_headers=ws_headers, 
-            ping_interval=20,  # Send ping every 20 seconds
-            ping_timeout=10    # Wait 10 seconds for pong
-        ) as websocket:
-            logger.info("WebSocket connection established successfully")
-            
-            while True:
-                try:
-                    logger.debug("Waiting to receive WebSocket message...")
-                    message = await websocket.recv()
-                    logger.debug(f"Received WebSocket message: {message}")
-                    
-                    data = json.loads(message)
-                    logger.debug(f"Parsed WebSocket data: {data}")
-                    
-                    # Existing monitoring logic...
-                    
-                except json.JSONDecodeError:
-                    logger.warning("Received invalid JSON from WebSocket")
-                except Exception as e:
-                    logger.error(f"Error processing WebSocket message: {str(e)}")
-                
-    except Exception as e:
-        logger.error(f"WebSocket connection error: {str(e)}")
-        # Attempt to reconnect
-        await asyncio.sleep(5)
-        await monitor_sonarr_queue()
+
         
 def create_episode_tag():
-    """Create a single 'episodes' tag in Sonarr."""
+    """Create a single 'episodes' tag in Sonarr and return its ID."""
     try:
         headers = get_sonarr_headers()
         logger.debug(f"Making request to {SONARR_URL}/api/v3/tag")
@@ -137,29 +95,37 @@ def create_episode_tag():
         
         if not tags_response.ok:
             logger.error(f"Failed to get tags. Status: {tags_response.status_code}")
-            return False
+            return None
 
-        existing_tags = {tag['label'].lower() for tag in tags_response.json()}
+        # Look for existing episodes tag
+        episodes_tag_id = None
+        for tag in tags_response.json():
+            if tag['label'].lower() == 'episodes':
+                episodes_tag_id = tag['id']
+                logger.info(f"Found existing 'episodes' tag with ID {episodes_tag_id}")
+                break
         
         # Create episodes tag if it doesn't exist
-        if 'episodes' not in existing_tags:
+        if episodes_tag_id is None:
             tag_create_response = requests.post(
                 f"{SONARR_URL}/api/v3/tag",
                 headers=headers,
                 json={"label": "episodes"}
             )
             if tag_create_response.ok:
-                logger.info("Created tag: episodes")
-                return True
+                episodes_tag_id = tag_create_response.json().get('id')
+                logger.info(f"Created tag: 'episodes' with ID {episodes_tag_id}")
             else:
                 logger.error(f"Failed to create episodes tag. Status: {tag_create_response.status_code}")
-                return False
+                return None
         
-        logger.info("Tag 'episodes' already exists")
-        return True
+        # Store the episodes tag ID in a global variable for later use
+        global EPISODES_TAG_ID
+        EPISODES_TAG_ID = episodes_tag_id
+        return episodes_tag_id
     except Exception as e:
         logger.error(f"Error creating episode tag: {str(e)}")
-        return False
+        return None
 
 def unmonitor_season(series_id, season_number, headers):
     """Unmonitor all episodes in a specific season."""
@@ -198,165 +164,7 @@ def unmonitor_season(series_id, season_number, headers):
         logger.error(f"Error unmonitoring season: {str(e)}", exc_info=True)
         return False
     
-def blocklist_season_episodes(series_id, season_number, headers):
-    """Blocklist all episodes in a specific season."""
-    try:
-        # Get episodes for the specific season
-        episodes_response = requests.get(
-            f"{SONARR_URL}/api/v3/episode?seriesId={series_id}&seasonNumber={season_number}",
-            headers=headers
-        )
-        
-        if not episodes_response.ok:
-            logger.error(f"Failed to get episodes for blocklisting. Status: {episodes_response.status_code}")
-            return False
 
-        episodes = episodes_response.json()
-        if not episodes:
-            logger.info(f"No episodes found to blocklist for series {series_id} season {season_number}")
-            return True
-        
-        # Get series title for the blocklist entry
-        series_title = get_series_title(series_id, headers)
-        
-        # Create a single blocklist entry for the whole season
-        # This is more efficient than creating one per episode
-        season_episode_ids = [ep['id'] for ep in episodes]
-        
-        if season_episode_ids:
-            blocklist_data = {
-                "seriesId": series_id,
-                "episodeIds": season_episode_ids,
-                "sourceTitle": f"{series_title} S{season_number:02d} - ALL EPISODES BLOCKED",
-                "message": "Season blocklisted by EpisEERR"
-            }
-            
-            blocklist_response = requests.post(
-                f"{SONARR_URL}/api/v3/blocklist",
-                headers=headers,
-                json=blocklist_data
-            )
-            
-            if blocklist_response.ok:
-                logger.info(f"Blocklisted all {len(season_episode_ids)} episodes in series ID {series_id} season {season_number}")
-                return True
-            else:
-                logger.error(f"Failed to blocklist episodes. Status: {blocklist_response.status_code}")
-                return False
-        else:
-            logger.info(f"No episode IDs found for blocklisting in series {series_id} season {season_number}")
-            return True
-            
-    except Exception as e:
-        logger.error(f"Error blocklisting season: {str(e)}", exc_info=True)
-        return False
-
-def unblock_episodes(series_id, season_number, episode_numbers, headers):
-    """Unblock specific episodes in a season."""
-    try:
-        # Get blocklist entries
-        blocklist_response = requests.get(
-            f"{SONARR_URL}/api/v3/blocklist",
-            headers=headers
-        )
-        
-        if not blocklist_response.ok:
-            logger.error(f"Failed to get blocklist. Status: {blocklist_response.status_code}")
-            return False
-            
-        blocklist = blocklist_response.json().get('records', [])
-        
-        # Get episodes for the specific season to match IDs
-        episodes_response = requests.get(
-            f"{SONARR_URL}/api/v3/episode?seriesId={series_id}&seasonNumber={season_number}",
-            headers=headers
-        )
-        
-        if not episodes_response.ok:
-            logger.error(f"Failed to get episodes for unblocking. Status: {episodes_response.status_code}")
-            return False
-            
-        episodes = episodes_response.json()
-        
-        # Create a map of episode numbers to episode IDs
-        episode_map = {ep.get('episodeNumber'): ep.get('id') for ep in episodes}
-        
-        # Get episode IDs for the ones we want to unblock
-        episode_ids_to_unblock = [episode_map.get(num) for num in episode_numbers if num in episode_map]
-        
-        if not episode_ids_to_unblock:
-            logger.warning(f"No matching episode IDs found for unblocking")
-            return False
-            
-        # Find blocklist entries for our episodes
-        entries_to_delete = []
-        
-        for entry in blocklist:
-            if entry.get('seriesId') == series_id:
-                # Check if this blocklist entry contains any of our episodes
-                for ep_id in entry.get('episodeIds', []):
-                    if ep_id in episode_ids_to_unblock:
-                        entries_to_delete.append(entry.get('id'))
-                        break
-        
-        # Delete the found blocklist entries
-        for entry_id in entries_to_delete:
-            delete_response = requests.delete(
-                f"{SONARR_URL}/api/v3/blocklist/{entry_id}",
-                headers=headers
-            )
-            
-            if delete_response.ok:
-                logger.debug(f"Deleted blocklist entry {entry_id}")
-            else:
-                logger.warning(f"Failed to delete blocklist entry {entry_id}. Status: {delete_response.status_code}")
-        
-        logger.info(f"Unblocked {len(entries_to_delete)} entries for {len(episode_ids_to_unblock)} episodes in series {series_id} season {season_number}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error unblocking episodes: {str(e)}", exc_info=True)
-        return False
-
-def unblock_remaining_episodes(series_id, season_number, already_unblocked, headers=None):
-    """Unblock remaining episodes after a delay, keeping them unmonitored."""
-    if not headers:
-        headers = get_sonarr_headers()
-        
-    try:
-        logger.info(f"Running scheduled unblock for remaining episodes in series {series_id} season {season_number}")
-        
-        # Get all episodes for the season
-        episodes_response = requests.get(
-            f"{SONARR_URL}/api/v3/episode?seriesId={series_id}&seasonNumber={season_number}",
-            headers=headers
-        )
-        
-        if not episodes_response.ok:
-            logger.error(f"Failed to get episodes for cleanup unblock. Status: {episodes_response.status_code}")
-            return False
-            
-        episodes = episodes_response.json()
-        
-        # Get all episode numbers except already unblocked ones
-        remaining_episode_numbers = [
-            ep.get('episodeNumber') for ep in episodes 
-            if ep.get('episodeNumber') not in already_unblocked
-        ]
-        
-        if not remaining_episode_numbers:
-            logger.info(f"No remaining episodes to unblock for series {series_id} season {season_number}")
-            return True
-            
-        # Unblock these episodes (but they remain unmonitored)
-        unblock_episodes(series_id, season_number, remaining_episode_numbers, headers)
-        
-        logger.info(f"Completed scheduled unblock for {len(remaining_episode_numbers)} episodes")
-        return True
-            
-    except Exception as e:
-        logger.error(f"Error in scheduled unblocking: {str(e)}", exc_info=True)
-        return False
     
 def get_episode_info(episode_id, headers):
     """Get episode information from Sonarr API"""
@@ -479,14 +287,13 @@ def process_episode_selection(series_id, episode_numbers):
         return False
         
 def cancel_download(queue_id, headers):
-    """Cancel a download in Sonarr's queue with multiple methods"""
+    """Cancel a download in Sonarr's queue"""
     try:
         # Primary method: Bulk remove with client removal
         payload = {
             "ids": [queue_id],
             "removeFromClient": True,
-            "removeFromDownloadClient": True,
-            "blocklist": True
+            "removeFromDownloadClient": True
         }
         response = requests.delete(f"{SONARR_URL}/api/v3/queue/bulk", headers=headers, json=payload)
         
@@ -497,8 +304,7 @@ def cancel_download(queue_id, headers):
                 f"{SONARR_URL}/api/v3/queue/{queue_id}", 
                 headers=headers,
                 params={
-                    "removeFromClient": "true",
-                    "blocklist": "true"
+                    "removeFromClient": "true"
                 }
             )
         
@@ -506,7 +312,7 @@ def cancel_download(queue_id, headers):
     except Exception as e:
         logger.error(f"Error cancelling download: {str(e)}")
         return False
-
+        
 def monitor_specific_episodes(series_id, season_number, episode_numbers, headers):
     """
     Monitor specific episodes in a series season.
@@ -1660,6 +1466,123 @@ def start_telegram_polling():
                 logger.error(f"Telegram polling error: {str(e)}", exc_info=True)
                 logger.info("Attempting to reconnect Telegram bot in 10 seconds...")
                 time.sleep(10)
+def check_and_cancel_unmonitored_downloads(initial_check=False):
+    """
+    Check and cancel unmonitored episode downloads with enhanced logging.
+    """
+    headers = get_sonarr_headers()
+    
+    logger.info("Starting unmonitored download cancellation check")
+    logger.info(f"Initial check: {initial_check}")
+    
+    try:
+        # Retrieve current queue
+        queue_response = requests.get(f"{SONARR_URL}/api/v3/queue", headers=headers)
+        
+        if not queue_response.ok:
+            logger.error(f"Failed to retrieve queue. Status: {queue_response.status_code}")
+            return
+        
+        queue = queue_response.json().get('records', [])
+        logger.info(f"Total queue items: {len(queue)}")
+        
+        # Track cancelled items
+        cancelled_count = 0
+        
+        for item in queue:
+            # Detailed logging for each queue item
+            logger.info(f"Examining queue item: {item.get('title', 'Unknown')}")
+            logger.info(f"Series ID: {item.get('seriesId')}, Episode ID: {item.get('episodeId')}")
+            
+            # Check if this is a TV episode
+            if item.get('seriesId') and item.get('episodeId'):
+                # Get series details to check for 'episodes' tag
+                series_response = requests.get(
+                    f"{SONARR_URL}/api/v3/series/{item['seriesId']}", 
+                    headers=headers
+                )
+                
+                if not series_response.ok:
+                    logger.error(f"Failed to get series details for ID {item['seriesId']}")
+                    continue
+                
+                series = series_response.json()
+                
+                # Log series tags
+                logger.info(f"Series tags: {series.get('tags', [])}")
+                
+                # Check if series has 'episodes' tag
+                if EPISODES_TAG_ID not in series.get('tags', []):
+                    logger.info(f"Series {series.get('title', 'Unknown')} does not have 'episodes' tag (ID:{EPISODES_TAG_ID}). Skipping.")
+                    continue
+                
+                # Get episode details
+                episode_info = get_episode_info(item['episodeId'], headers)
+                
+                if episode_info:
+                    logger.info(f"Episode details: Number {episode_info.get('episodeNumber')}, Monitored: {episode_info.get('monitored')}")
+                
+                if episode_info and not episode_info.get('monitored', False):
+                    # Unmonitored episode - cancel download
+                    cancel_success = cancel_download(item['id'], headers)
+                    
+                    if cancel_success:
+                        series_title = series.get('title', 'Unknown Series')
+                        logger.info(
+                            f"Cancelled unmonitored download for tagged series: "
+                            f"{series_title} - Season {item.get('seasonNumber')} "
+                            f"Episode {episode_info.get('episodeNumber')}"
+                        )
+                        
+                        # Optional: Send Telegram notification
+                        send_telegram_message(
+                            f"❌ Cancelled unmonitored download:\n"
+                            f"*{series_title}* - Season {item.get('seasonNumber')} "
+                            f"Episode {episode_info.get('episodeNumber')}"
+                        )
+                        
+                        cancelled_count += 1
+                else:
+                    logger.info("Episode is either monitored or no episode info found.")
+        
+        # Log summary
+        logger.info(f"Cancellation check complete. Cancelled {cancelled_count} unmonitored downloads for tagged series")
+    
+    except Exception as e:
+        logger.error(f"Error in download queue monitoring: {str(e)}", exc_info=True)
+
+def start_queue_monitoring(initial_check=True):
+    """
+    Start queue monitoring with aggressive initial checks followed by periodic checks.
+    
+    :param initial_check: If True, perform immediate and follow-up checks
+    """
+    logger.info("Starting queue monitoring thread")
+    
+    def monitor_thread():
+        if initial_check:
+            # Immediate first check
+            logger.info("Running initial queue check")
+            check_and_cancel_unmonitored_downloads(initial_check=True)
+            
+            # Follow-up checks with increasing intervals
+            check_intervals = [30, 60, 120, 300]  # seconds: 30s, 1min, 2min, 5min
+            
+            for interval in check_intervals:
+                time.sleep(interval)
+                logger.info(f"Running follow-up queue check after {interval} seconds")
+                check_and_cancel_unmonitored_downloads(initial_check=True)
+        
+        # Long-term periodic check - every 10 minutes instead of hourly
+        logger.info("Switching to regular interval checks")
+        while True:
+            time.sleep(600)  # Check every 10 minutes (600 seconds)
+            check_and_cancel_unmonitored_downloads()
+    
+    queue_thread = threading.Thread(target=monitor_thread)
+    queue_thread.daemon = True
+    queue_thread.start()
+    logger.info("Queue monitoring thread started successfully")
 
 def main():
     # Log startup
@@ -1676,9 +1599,13 @@ def main():
         telegram_thread.start()
         logger.info("Telegram bot thread started")
 
+    # Start queue monitoring
+    start_queue_monitoring()
+    
     # Start webhook listener
     logger.info("Starting webhook listener on port 5000")
     app.run(host='0.0.0.0', port=5000)
+    
 
 if __name__ == '__main__':
     main()
