@@ -19,16 +19,15 @@ _Use is intended for owned media or paid supscription services._
 - **Flexible Rules System**: Create and assign different management rules to shows
 - **Media Server Integration**: 
   - Plex (via Tautulli)
-  - Jellyfin (direct integration)
-- **Automatic Tag Matching**: Shows requested through Overseerr/Jellyseerr/NZB360 can automatically use specific rules
+  - Jellyfin (direct integration) # currently not ready in dev branch
+
 - **Space Management**: Optional deletion of watched episodes based on your rules
 - **User Interface**: Clean web interface for managing rules and viewing upcoming content
 - **Containerized**: Easy deployment via Docker
 - ***Request individual episodes
-- ***Make custom requests
-- ***Request from popular tmdb tests
+- ***Request from popular tmdb lists
 - ***added Radarr w\o rule management
-- ***Server page with links to your services
+  
 
 ### Interface Preview
 ![OCDarr Interface](https://github.com/Vansmak/OCDarr/assets/16037573/5491d694-2e9a-46fb-a1f8-539dcaf661df)
@@ -145,7 +144,7 @@ Monitor Watched (monitor_watched):
 
 
 Rule Assignment
-Shows can get rules in three ways:
+Shows can get rules in two ways:
 
 Default Rule: Applied if no other rule matches
   This is the first rule you should edit to how you want most shows added as it will be applied if no other rule is 
@@ -160,7 +159,7 @@ Default Rule: Applied if no other rule matches
    ```
 Manual Assignment: Through OCDarr's web interface
 Automatic via Tags: When requesting shows through Overseerr/Jellyseerr if you dont add a tag then it will goto default.  
-  If you use the "episodes" tag it will apply no rule and present you a form to select episodes you want, this is intended for one offs, not ongoing watch as you go
+  If you use the "episodes" tag it will apply no rule and present you a form to select episodes you want, this is intended for individual episodes
 ## 🔗 Media Server Integration
 
 ### Plex (via Tautulli) Setup
@@ -184,44 +183,53 @@ Automatic via Tags: When requesting shows through Overseerr/Jellyseerr if you do
 ```
 Important: Adjust your "Watched Percentage" in Tautulli's general settings to control when webhooks trigger.
 
-Jellyfin Setup
+Jellyfin Setup # not ready yet
 
 In Jellyfin, go to Dashboard > Webhooks
 Add a new webhook:
 
-URL: http://your-ocdarr-ip:5001/jellyfin-webhook
+URL: http://your-ocdarr-ip:5002/jellyfin-webhook
 Notification Type: Select "Playback Progress"
 
 
 
 No template needed - Jellyfin sends structured data automatically. OCDarr processes events when playback reaches 45-55% of the episode.
+
+Jellyseerr/Overseerr Webhook Setup  # this is used to cancel the request after its added to sonarr, because if not your seer app will keep trying to track it
+
+    In Jellyseerr, go to Settings > Notifications
+    Add a new webhook notification
+    Set the webhook URL to http://yourocdarr:5002/seerr-webhook
+    Enable notifications for "Request Approved"
+    Save the webhook configuration
+
 Sonarr Webhook Setup
-To enable automatic rule application when shows are added:
+*To enable more control of requests, like episodes
 
 In Sonarr, go to Settings > Connect
 Click the + button to add a new connection
 Select "Webhook"
 Configure:
 
-URL: http://your-ocdarr-ip:5001/sonarr-webhook
+URL: http://your-ocdarr-ip:5002/sonarr-webhook
 Triggers: Enable "On Series Add"
 Leave other settings at default
 
+Sonarr delayed release profile - this byes time while the script unmonitors episodes so downloads don't start
 
+    Settings - profiles - add delay profile
+    add a riduculous time like 10519200 # this is just to prevent downloads, it wont dl anything less than 20 years old, its a failsafe
+    choose episodes tag
+    do not select bypass
 
-When a show is added to Sonarr:
-
-If it has a tag matching a rule name -> that rule is applied
-If no matching tag -> default rule is applied
-The rule is applied to all monitored seasons
 
 Example:
 
-Create rule named "pilots" in OCDarr
-Request show in Overseerr/Jellyseerr with "pilots" tag
-When added to Sonarr, OCDarr will:
 
-Detect the "pilots" tag
-Apply the "pilots" rule configuration
-Modify episode monitoring accordingly
-Cancel any in-progress downloads that don't match the rule
+When show is added to Sonarr, OCDarr will:
+
+Unmonitor the whole series
+Cancel any downloads 
+Show request form for user to select seasons and episodes
+Modify episode monitoring and searching accordingly
+IF Detect the "episodes" tag apply no rule, if not then will use Default rule
