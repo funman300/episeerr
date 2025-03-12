@@ -38,7 +38,7 @@ _Use is intended for owned media or paid supscription services._
 - Sonarr v3
 - Either:
   - Plex + Tautulli
-  - OR Jellyfin
+  - OR Jellyfin #not yet
 - Docker environment
 - Overseerr/Jellyseerr (optional, for automatic rule assignment)
 
@@ -195,7 +195,8 @@ Notification Type: Select "Playback Progress"
 
 No template needed - Jellyfin sends structured data automatically. OCDarr processes events when playback reaches 45-55% of the episode.
 
-Jellyseerr/Overseerr Webhook Setup  # this is used to cancel the request after its added to sonarr, because if not your seer app will keep trying to track it
+Jellyseerr/Overseerr Webhook Setup  # this is used with the episodes tag to cancel the request after its added to sonarr, because if not your seer app will keep trying to track it.
+                                      if you want requests to stay in seer then dont use the episodes tage when requesting.  
 
     In Jellyseerr, go to Settings > Notifications
     Add a new webhook notification
