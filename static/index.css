@@ -1,0 +1,251 @@
+/* CSS Variables */
+:root {
+    --background-color: #121212;
+    --surface-color: #1e1e1e;
+    --primary-color: #3498db;
+    --secondary-color: #2ecc71;
+    --text-color: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --spacing-sm: 6px;  /* Tighter spacing */
+    --spacing-md: 12px; /* Tighter spacing */
+    --spacing-lg: 18px; /* Tighter spacing */
+}
+
+/* Reset and Base Styles */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+    overflow-x: hidden;
+}
+
+/* Main Container */
+.main-container {
+    padding: var(--spacing-sm) 0; /* Tighter padding */
+}
+
+/* Main Menu */
+.main-menu {
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-md);
+    background-color: var(--surface-color);
+    padding: var(--spacing-sm);
+    border-radius: 8px;
+    margin-bottom: var(--spacing-md);
+    box-shadow: var(--shadow);
+    position: relative;
+    height: 40px;
+    align-items: center;
+}
+
+.menu-item {
+    padding: var(--spacing-sm) var(--spacing-md);
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+/* Default active state (underline for text items) */
+.menu-item.active {
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--primary-color);
+}
+
+/* Override active state for menu item with settings icon */
+.menu-item:has(.settings-icon) {
+    position: relative;
+    padding: 0 var(--spacing-md); /* Adjust padding for icon-only item */
+}
+
+.menu-item:has(.settings-icon).active {
+    border-bottom: none; /* Remove underline */
+}
+
+.menu-item:has(.settings-icon).active .settings-icon {
+    border: 2px solid var(--primary-color); /* Blue circular border */
+    border-radius: 50%; /* Ensure it’s circular */
+}
+
+.menu-item:hover {
+    color: var(--primary-color);
+}
+
+.settings-icon {
+    width: 52px;
+    height: 52px;
+    vertical-align: middle;
+    margin-top: 0px;
+}
+
+/* Notification badge (unchanged, but included for context) */
+.notification-badge {
+    position: absolute;
+    top: -8px;
+    right: 0;
+    background-color: #e74c3c;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Content Wrapper */
+.content-wrapper {
+    max-width: 100%;
+}
+
+/* Content Rows */
+.content-row {
+    margin-bottom: 0; /* Tighter vertical spacing */
+}
+
+/* Row Header */
+.row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0px; 
+}
+
+.row-header h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.row-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.scroll-btn {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.scroll-btn:hover {
+    background-color: var(--primary-color);
+}
+
+/* Scrollable Row */
+.scrollable-row {
+    display: flex;
+    overflow-x: auto;
+    gap: var(--spacing-sm);
+    padding-bottom: var(--spacing-sm);
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+}
+
+.scrollable-row::-webkit-scrollbar {
+    display: none;
+}
+
+/* Media Items */
+.media-item {
+    transition: transform 0.2s ease;
+}
+
+.media-item:hover {
+    transform: scale(1.05);
+}
+
+.poster-wrapper {
+    position: relative;
+    aspect-ratio: 2/3;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    background-color: var(--surface-color);
+}
+
+.poster {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.media-info {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    padding: var(--spacing-sm);
+    text-align: center;
+}
+
+.media-subtitle {
+    font-size: 12px;
+    color: var(--text-color);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Responsive Design */
+
+/* Mobile (up to 767px) - 3 posters across, 3 rows visible */
+@media (max-width: 767px) {
+    .main-container {
+        padding: 0; /* Move everything up by removing top padding */
+    }
+
+    .main-menu {
+        margin-bottom: var(--spacing-sm); /* Tighter spacing below menu */
+    }
+
+    .media-item {
+        flex: 0 0 calc(33.33% - var(--spacing-sm) * 2 / 3); /* 3 items per row */
+        max-width: calc(33.33% - var(--spacing-sm) * 2 / 3);
+    }
+
+    .content-row {
+        height: calc((100vw / 3) * 1.5 + var(--spacing-md) * 2); /* Poster height + header space */
+        margin-bottom: var(--spacing-sm); /* Keep tight spacing */
+    }
+
+    .row-controls {
+        display: none; /* Hide scroll arrows on mobile (swipe instead) */
+    }
+
+    /* Fit 3 rows in viewport */
+    .content-wrapper {
+        max-height: calc(100vh - var(--spacing-sm) * 2 - 40px); /* Account for menu height (~40px) */
+        overflow-y: auto;
+    }
+}
+
+/* Desktop (768px and up) - 7 posters across */
+@media (min-width: 768px) {
+    .media-item {
+        flex: 0 0 calc((100% - 15px * 2 - var(--spacing-sm) * 6) / 7); /* 7 items, account for container padding */
+        max-width: calc((100% - 15px * 2 - var(--spacing-sm) * 6) / 7);
+    }
+
+    .scrollable-row {
+        gap: var(--spacing-md);
+    }
+}
