@@ -9,39 +9,39 @@ OCDarr isn't just another media management tool—it's a precision instrument fo
 🔬 Rule-Based Episode Control
 Most media management tools operate on an all-or-nothing approach. OCDarr revolutionizes this with its dynamic, per-show rule system:
 
-Granular Episode Selection: Choose exactly which episodes you want
-Intelligent Cleanup: Automatically manage your library based on your viewing habits
-Flexible Rules: Create custom management strategies for different shows
+> Granular Episode Selection: Choose exactly which episodes you want
+> Intelligent Cleanup: Automatically manage your library based on your viewing habits
+> Flexible Rules: Create custom management strategies for different shows
 
 Rule Components: Your Media, Your Rules
 
 Get Option: Control how many upcoming episodes to prepare
 
-1: Just the next episode
-3: Next three episodes
-season: Full season
-all: Everything upcoming
+  - 1: Just the next episode
+  - 3: Next three episodes
+  - season: Full season
+  - all: Everything upcoming                                                  
 
 
 Action Option: Define how episodes are handled
 
-monitor: Passive tracking
-search: Active download and monitoring
+  - monitor: Passive tracking
+  - search: Active download and monitoring
 
 
 Keep Watched: Manage post-viewing library
 
-1: Keep only the last watched episode
-2: Keep last two episodes
-season: Retain current season
-all: Keep everything
+  - 1: Keep only the last watched episode
+  - 2: Keep last two episodes
+  - season: Retain current season
+  - all: Keep everything
 
 
 Monitor Watched: Tracking behavior after watching
 
-true: Keep watched episodes monitored
-false: Automatically unmonitor after viewing
-
+  - true: Keep watched episodes monitored
+  - false: Automatically unmonitor after viewing
+                                    
 
 
 🎬 Adaptive Episode Request Workflows
@@ -50,32 +50,32 @@ External Requests (Jellyseerr/Overseerr)
 
 With "episodes" tag:
 
-Precise episode selection
-Unmonitor all initial episodes
-Cancel automatic downloads
-User-guided episode monitoring
+ - Precise episode selection
+ - Unmonitor all initial episodes
+ - Cancel automatic downloads
+ - User-guided episode monitoring
 
 
 Without "episodes" tag:
 
-Instant addition to default rule
-Automatic management based on predefined preferences
+- Instant addition to default rule
+- Automatic management based on predefined preferences
 
 
 
 Internal Requests (OCDarr Interface)
 
-Identical powerful selection mechanism
-Pilot episode handling
-Granular episode monitoring
+ - Identical powerful selection mechanism
+ - Pilot episode handling
+ - Granular episode monitoring
 
 🌟 Real-World Scenario
-Example: You're watching "Breaking Bad"
-
-You want only the next episode ready
-Automatically clean up watched episodes
-Keep the current season
-Stop tracking after you've finished
+  Example: You're watching "Breaking Bad"
+  
+  You want only the next episode ready
+  Automatically clean up watched episodes
+  Keep the current season
+  Stop tracking after you've finished
 
 Traditional Solution: Download entire seasons, manual cleanup
 OCDarr Solution: Intelligent, automated, personalized management
