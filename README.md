@@ -13,7 +13,7 @@ Most media management tools operate on an all-or-nothing approach. OCDarr revolu
 > Intelligent Cleanup: Automatically manage your library based on your viewing habits
 > Flexible Rules: Create custom management strategies for different shows
 
-Rule Components: Your Media, Your Rules
+Rule Components: Your Media, Your Rules  #control what happens as you watch a series
 
 Get Option: Control how many upcoming episodes to prepare
 
@@ -44,7 +44,7 @@ Monitor Watched: Tracking behavior after watching
                                     
 
 
-🎬 Adaptive Episode Request Workflows
+🎬 Adaptive Episode Request Workflows # control precisely what you want to add for a new series
 OCDarr supports multiple request scenarios with intelligent handling:
 External Requests (Jellyseerr/Overseerr)
 
