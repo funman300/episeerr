@@ -224,13 +224,34 @@ Sonarr delayed release profile - this byes time while the script unmonitors epis
     do not select bypass
 
 
-Example:
+## 📋 Episode Selection Flow
 
+OCDarr supports multiple ways to request and manage TV shows:
 
-When show is added to Sonarr, OCDarr will:
+### External Requests (via Jellyseerr/Overseerr)
 
-Unmonitor the whole series
-Cancel any downloads 
-Show request form for user to select seasons and episodes
-Modify episode monitoring and searching accordingly
-IF Detect the "episodes" tag apply no rule, if not then will use Default rule
+When requesting shows through Jellyseerr:
+- **With "episodes" tag**: Follows the episode selection flow:
+  1. Show is sent to Sonarr
+  2. All episodes are unmonitored
+  3. Downloads are canceled
+  4. A pending season selection request is created
+  5. User selects episodes
+  6. If only S01E01 is selected: Episodes tag is removed, show is added to default rule
+  7. If multiple episodes: Episodes tag is kept, only selected episodes are monitored
+  8. Original Jellyseerr request is canceled automatically
+
+- **Without "episodes" tag**: Show is directly added to the default rule
+
+### Internal Requests (via OCDarr)
+
+When requesting shows through OCDarr's interface:
+1. Show is added to Sonarr with episodes tag
+2. All episodes are unmonitored
+3. Downloads are canceled
+4. A pending season selection request is created
+5. User selects episodes
+6. If only E01 is selected: Episodes tag is removed, show is added to default rule (handled by your default preferences) #meant to mimic pilot episode
+7. If multiple episodes: Episodes tag is kept, only selected episodes are monitored
+
+This system gives you precise control over exactly which episodes you want, while cleaning up appropriately after requests.
