@@ -1,94 +1,16 @@
 {
-    "preferences": {
-        "radarr_quality_profile": "Remux + WEB 2160p",
-        "sonarr_quality_profile": "WEB-2160p"
-    },
+    "default_rule": "Default",
     "rules": {
         "Default": {
             "get_option": "1",
             "action_option": "search",
             "keep_watched": "1",
             "monitor_watched": true,
-            "series": [
-                "101",
-                "51",
-                "17",
-                "8",
-                "94",
-                "16",
-                "245",
-                "29",
-                "54",
-                "88",
-                "74",
-                "243",
-                "19",
-                "32",
-                "246",
-                "9",
-                "39",
-                "75",
-                "85",
-                "10",
-                "84",
-                "70",
-                "11",
-                "2",
-                "3",
-                "92",
-                "73",
-                "15",
-                "87",
-                "76",
-                "66",
-                "64",
-                "83",
-                "91",
-                "52",
-                "27",
-                "93",
-                "4",
-                "45",
-                "21",
-                "55",
-                "41",
-                "25",
-                "18",
-                "7",
-                "90",
-                "20",
-                "71",
-                "60",
-                "1",
-                "31",
-                "23",
-                "63",
-                "81",
-                "252",
-                "348"
-            ]
-        },
-        "none": {
-            "get_option": "0",
-            "action_option": "monitor",
-            "keep_watched": "0",
-            "monitor_watched": false,
-            "series": []
-        },
-        "FullSeason": {
-            "get_option": "season",
-            "action_option": "monitor",
-            "keep_watched": "season",
-            "monitor_watched": true,
-            "series": []
-        },
-        "GetSeasonkeep1": {
-            "get_option": "season",
-            "action_option": "monitor",
-            "keep_watched": "1",
-            "monitor_watched": false,
             "series": []
         }
     },
-    "default_rule": "Default"
+    "preferences": {
+        "radarr_quality_profile": "Any",
+        "sonarr_quality_profile": "Any"
+    }
 }
