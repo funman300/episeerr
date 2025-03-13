@@ -4,162 +4,498 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <title>Series Manager</title>
-    <script>
-        function toggleNewRuleName() {
-            var ruleNameSelect = document.getElementById("rule_name");
-            var newRuleNameGroup = document.getElementById("new_rule_name_group");
-            if (ruleNameSelect.value === "add_new") {
-                newRuleNameGroup.style.display = "block";
-            } else {
-                newRuleNameGroup.style.display = "none";
-            }
-        }
-        document.addEventListener("DOMContentLoaded", function() {
-            toggleNewRuleName();  // Ensure it runs on page load in case 'Add New' is already selected
-        });
-    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
+    <title>OCDarr</title>
 </head>
 <body>
-    <div class="container">
-        <div class="menu my-3">
-            <span onclick="showSection('current')" class="menu-icon active">
-                Watching
-            </span>
-            {% if not config.get('CLIENT_ONLY') %} <img src="{{ url_for('static', filename='logo_icon.png') }}" alt="Settings" class="logo-icon" onclick="showSection('settings')"> {% endif %}
-            <span onclick="showSection('upcoming')" class="menu-icon">
-                Premiering
-            </span>
-        </div>
-
-        <div id="current" class="series-container">
-            <div class="row {% if use_posters %}poster-mode{% else %}banner-mode{% endif %}">
-                {% for series in current_series %}
-                <div class="col-12 {% if use_posters %}col-md-6 col-lg-4 col-xl-3{% endif %} series-item {% if use_posters %}poster-mode{% else %}banner-mode{% endif %}">
-                    <div class="banner-wrapper {% if use_posters %}poster-mode{% else %}banner-mode{% endif %}">
-                        <a href="{{ series.sonarr_series_url }}">
-                            <img src="{{ series.artwork_url }}" alt="Artwork for {{ series.name }}" class="img-fluid">
-                        </a>
-                    </div>
-                    <div class="series-info text-center mt-1">
-                        <p class="episode-info">{{ series.latest_monitored_episode }}</p>
-                    </div>
-                </div>
-                {% endfor %}
+    <input type="hidden" id="jellyseerr-url" value="{{ jellyseerr_url }}">
+    <!-- Main Container -->
+    <div class="container main-container">
+        <!-- Main Menu -->
+        <nav class="main-menu">
+            <div class="menu-item active" onclick="showMainTab('shows-tab')">Shows</div>
+            <div class="menu-item {% if has_pending_requests %}has-notifications{% endif %}" onclick="showMainTab('settings-tab')">
+                <img src="{{ url_for('static', filename='logo_icon.png') }}" alt="Settings" class="settings-icon">
+                {% if has_pending_requests %}
+                <span class="notification-badge">{{ pending_requests|length }}</span>
+                {% endif %}
             </div>
-        </div>
-        
-        <div id="upcoming" class="series-container"> 
-            <div class="row {% if use_posters %}poster-mode{% else %}banner-mode{% endif %}">
-                {% for premiere in upcoming_premieres %}
-                <div class="col-12 {% if use_posters %}col-md-6 col-lg-4 col-xl-3{% endif %} series-item {% if use_posters %}poster-mode{% else %}banner-mode{% endif %}">
-                    <div class="banner-wrapper {% if use_posters %}poster-mode{% else %}banner-mode{% endif %}">
-                        <a href="{{ premiere.sonarr_series_url }}">
-                            <img src="{{ premiere.artwork_url }}" alt="Artwork for {{ premiere.name }}" class="img-fluid">
-                        </a>
-                    </div>
-                    <div class="series-info text-center mt-1">
-                        <p class="series-title">{{ premiere.name }}</p>
-                        <p class="episode-info">{{ premiere.nextAiring.split('at')[0] }}</p>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
+            <div class="menu-item" onclick="showMainTab('movies-tab')">Movies</div>
+        </nav>
 
-        {% if not config.get('CLIENT_ONLY') %} <div id="settings" style="display: none;">
-            <form id="settings-form" method="POST" action="{{ url_for('update_settings') }}">
-                <h3>Manage Settings</h3>
-                <div class="form-group">
-                    <label for="rule_name">Select Rule:</label>
-                    <select id="rule_name" name="rule_name" class="form-control" onchange="toggleNewRuleName()">
-                        {% for rule_name in config['rules'].keys() %}
-                        <option value="{{ rule_name }}" {{ 'selected' if rule_name == rule else '' }}>{{ rule_name|capitalize }}</option>
+        <!-- Main Content Tabs -->
+        <main class="content-wrapper">
+            <!-- Shows Tab -->
+            <section id="shows-tab" class="main-tab">
+                <!-- Recently Added Shows -->
+                <div class="content-row">
+                    <header class="row-header">
+                        <h4>Recently Added</h4>
+                        <div class="row-controls">
+                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                        </div>
+                    </header>
+                    <div class="scrollable-row">
+                        {% for item in current_series %}
+                        {% if item.type == 'tv' %}
+                        <article class="media-item">
+                            <div class="poster-wrapper">
+                                <a href="{{ item.sonarr_series_url }}">
+                                    <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
+                                    <div class="media-info">
+                                        <p class="media-subtitle">{{ item.latest_monitored_episode }}</p>
+                                    </div>
+                                </a>
+                            </div>
+                        </article>
+                        {% endif %}
                         {% endfor %}
-                        <option value="add_new">Add New</option>
-                    </select>
+                    </div>
                 </div>
-                <div class="form-group" id="new_rule_name_group" style="display:none;">
-                    <label for="new_rule_name">New Rule Name:</label>
-                    <input type="text" id="new_rule_name" name="new_rule_name" class="form-control" placeholder="Enter new rule name">
-                </div>
-                <div class="form-group">
-                    <label for="get_option">How many more episodes to get?:</label>
-                    <input type="text" id="get_option" name="get_option" placeholder="Enter 'season', 'all', or a number" class="form-control" value="">
-                </div>
-                <div class="form-group">
-                    <label for="action_option">Action for Episodes:</label>
-                    <select id="action_option" name="action_option" class="form-control">
-                        <option value="monitor">Monitor</option>
-                        <option value="search">Search</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="keep_watched">How many episodes to keep?:</label>
-                    <input type="text" id="keep_watched" name="keep_watched" placeholder="Enter 'season', 'all', or a number" class="form-control" value="">
-                </div>
-                <div class="form-group">
-                    <label for="monitor_watched">Keep monitored if watched:</label>
-                    <select id="monitor_watched" name="monitor_watched" class="form-control">
-                        <option value="true">true</option>
-                        <option value="false">false</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn btn-primary">Update Settings</button>
-            </form>
-            
-            
-            
-            <form id="delete-rule-form" method="POST" action="{{ url_for('delete_rule') }}" onsubmit="return confirmDeleteRule()">
-                <input type="hidden" name="rule_name" id="delete_rule_name">
-                <button type="submit" class="btn btn-danger" id="delete_rule">Delete Rule</button>
-            </form>
-            
-            <button class="btn btn-secondary" id="assign-rules-button" onclick="showSection('assign_rules', document.getElementById('rule_name').value)">Assign Rules</button>
 
-            <div class="form-group">
-                <h4>Missing Series Log</h4>
-                <textarea readonly rows="3" cols="40">{{ missing_log }}</textarea>
-            </div>
-            <div class="form-group">
-                <a href="{{ sonarr_url }}/add/new" target="_blank">Add New Series</a>
-            </div>
-        </div>
-        
-        <div id="assign_rules" style="display: none;">
-            <h3>Assign/Unassign Rules to Series</h3>
-            <form id="assign-rules-form" method="POST" action="{{ url_for('assign_rules') }}">
-                <div class="form-group">
-                    <label for="assign_rule_name">Select Rule:</label>
-                    <select id="assign_rule_name" name="assign_rule_name" class="form-control" onchange="updateCheckboxes()">
-                        <option value="None">None</option>
-                        {% for rule_name in config['rules'].keys() %}
-                        <option value="{{ rule_name }}" {{ 'selected' if rule_name == rule else '' }}>{{ rule_name|capitalize }}</option>
+                <!-- Upcoming Shows -->
+                <div class="content-row">
+                    <header class="row-header">
+                        <h4>Upcoming</h4> <!-- Fixed duplicate -->
+                        <div class="row-controls">
+                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                        </div>
+                    </header>
+                    <div class="scrollable-row">
+                        {% for item in upcoming_premieres %}
+                        {% if item.type == 'tv' %}
+                        <article class="media-item">
+                            <div class="poster-wrapper">
+                                <a href="{{ item.sonarr_series_url }}">
+                                    <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
+                                    <div class="media-info">
+                                        <p class="media-subtitle">{{ item.nextAiring.split(' at ')[0] }}</p>
+                                    </div>
+                                </a>
+                            </div>
+                        </article>
+                        {% endif %}
                         {% endfor %}
-                    </select>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="series_list">Select Series:</label>
-                    <div id="series_list" class="checkbox-list">
-                        {% for series in all_series %}
-                        <div class="checkbox-item">
-                            <input type="checkbox" class="series-checkbox" id="series_{{ series['id'] }}" name="series_ids" value="{{ series['id'] }}" data-rule="{{ series['assigned_rule'] }}">
-                            <label for="series_{{ series['id'] }}">{{ series['title'] }} ({{ series['assigned_rule'] or 'None' }})</label>
+
+                <!-- Popular Shows (Jellyseerr) -->
+                <div class="content-row">
+                    <header class="row-header">
+                        <h4>Popular Shows</h4>
+                        <div class="row-controls">
+                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                        </div>
+                    </header>
+                    <div class="scrollable-row" id="popular-shows-row">
+                        <div class="loading-indicator">Loading popular shows...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Movies Tab -->
+            <section id="movies-tab" class="main-tab" style="display: none;">
+                <!-- Recently Added Movies -->
+                <div class="content-row">
+                    <header class="row-header">
+                        <h4>Recently Added</h4>
+                        <div class="row-controls">
+                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                        </div>
+                    </header>
+                    <div class="scrollable-row">
+                        {% for item in current_series %}
+                        {% if item.type == 'movie' %}
+                        <article class="media-item">
+                            <div class="poster-wrapper">
+                                <a href="{{ item.radarr_movie_url }}">
+                                    <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
+                                    <div class="media-info">
+                                        <p class="media-subtitle">{{ item.year }}</p>
+                                    </div>
+                                </a>
+                            </div>
+                        </article>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Upcoming Movies -->
+                <div class="content-row">
+                    <header class="row-header">
+                        <h4>Upcoming</h4>
+                        <div class="row-controls">
+                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                        </div>
+                    </header>
+                    <div class="scrollable-row">
+                        {% for item in upcoming_premieres %}
+                        {% if item.type == 'movie' %}
+                        <article class="media-item">
+                            <div class="poster-wrapper">
+                                <a href="{{ item.radarr_movie_url }}">
+                                    <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
+                                    <div class="media-info">
+                                        <p class="media-subtitle">{{ item.releaseDate }}</p>
+                                    </div>
+                                </a>
+                            </div>
+                        </article>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Popular Movies (Jellyseerr) -->
+                <div class="content-row">
+                    <header class="row-header">
+                        <h4>Popular Movies</h4>
+                        <div class="row-controls">
+                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                        </div>
+                    </header>
+                    <div class="scrollable-row" id="popular-movies-row">
+                        <div class="loading-indicator">Loading popular movies...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Tab -->
+            <section id="settings-tab" class="main-tab" style="display: none;">
+                <!-- Sub-menu for Settings -->
+                <div class="row mb-3">
+                    <div class="col d-flex justify-content-between">
+                        <button onclick="showSettingsSection('rule_management')" class="btn btn-secondary">Rules</button>
+                        <button onclick="showSettingsSection('requests_section')" class="btn btn-secondary">Requests</button>
+                        <button onclick="showSettingsSection('profile_settings')" class="btn btn-secondary">Profiles</button>
+                    </div>
+                </div>
+
+                
+
+                <!-- Requests Section -->
+                <div id="requests_section" class="settings-subsection" style="display: none;">
+                    <h4>Requests</h4>
+                    <!-- Direct Request Form -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-dark">
+                            <h5 class="mb-0 text-light">Direct Request</h5>
+                        </div>
+                        <div class="card-body bg-dark text-light">
+                            <form id="direct-request-form" method="POST" action="{{ url_for('process_direct_request') }}">
+                                <div class="form-group">
+                                    <label for="request_input">Enter your request:</label>
+                                    <input type="text" id="request_input" name="request_input" class="form-control" 
+                                        placeholder="Show Name, or Movie Title" required>
+                                    <small class="form-text text-muted">
+                                        Examples: "Breaking Bad" </small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Media Type:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="media_type" id="type_auto" value="auto" checked>
+                                        <label class="form-check-label" for="type_auto">Auto-detect</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="media_type" id="type_tv" value="tv">
+                                        <label class="form-check-label" for="type_tv">TV Show</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="media_type" id="type_movie" value="movie">
+                                        <label class="form-check-label" for="type_movie">Movie</label>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex justify-content-between">
+                                    <button type="submit" class="btn btn-primary">Submit Request</button>
+                                    <button type="button" id="open-jellyseerr" class="btn btn-secondary">Open Jellyseerr</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Pending Requests Section -->
+                    <h5 class="mb-3">Pending Requests</h5>
+                    <div class="requests-container">
+                        {% if pending_requests %}
+                        {% for request in pending_requests %}
+                        <div class="request-card card mb-3 {% if request.get('needs_attention', False) %}needs-attention{% endif %}">
+                            <div class="card-header bg-dark text-light d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    {{ request.title }} 
+                                    {% if request.get('needs_season_selection', False) %}
+                                    <span class="badge badge-info">Season Selection Required</span>
+                                    {% else %}
+                                    - Season {{ request.season }}
+                                    {% endif %}
+                                    {% if request.get('needs_attention', False) %}
+                                    <span class="badge badge-warning">Needs Attention</span>
+                                    {% endif %}
+                                </h5>
+                                <div>
+                                    {% if request.get('source', '') %}
+                                    <span class="badge badge-info">{{ request.get('source_name', request.get('source')|capitalize) }}</span>
+                                    {% endif %}
+                                    {% if request.get('episodes') %}
+                                    <span class="badge badge-secondary">{{ request.episodes|length }} episodes</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="card-body bg-dark text-light">
+                                <div class="banner-wrapper mb-3">
+                                    <img src="{{ sonarr_url }}/api/v3/mediacover/series/{{ request.series_id }}/banner.jpg?apikey={{ config.get('sonarr_api_key', '') }}" 
+                                         alt="Banner for {{ request.title }}" 
+                                         class="img-fluid banner"
+                                         onerror="this.onerror=null; this.src='{{ url_for('static', filename='placeholder-banner.png') }}';">
+                                </div>
+                                
+                                {% if request.get('needs_season_selection', False) %}
+                                <!-- Season Selection UI -->
+                                <div class="text-center">
+                                    <p>This show needs season selection before episodes can be selected.</p>
+                                    <a href="/select-seasons/{{ request.tmdb_id }}" class="btn btn-primary">Select Season</a>
+                                    
+                                    <form action="{{ url_for('process_episode_selection') }}" method="POST" class="mt-3">
+                                        <input type="hidden" name="request_id" value="{{ request.id }}">
+                                        <input type="hidden" name="action" value="cancel">
+                                        <button type="submit" class="btn btn-danger">Cancel Request</button>
+                                    </form>
+                                </div>
+                                {% else %}
+                                <!-- Episode Selection UI -->
+                                <form action="{{ url_for('process_episode_selection') }}" method="POST" class="episode-selection-form">
+                                    <input type="hidden" name="request_id" value="{{ request.id }}">
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="text-light">Episode Selection:</h6>
+                                            <div>
+                                                <button type="button" class="btn btn-sm btn-secondary select-all">Select All</button>
+                                                <button type="button" class="btn btn-sm btn-secondary select-none">Clear All</button>
+                                            </div>
+                                        </div>
+                                        <div class="episode-list row">
+                                            {% for episode in request.episodes %}
+                                            <div class="col-md-4 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input episode-checkbox" type="checkbox" name="episodes" value="{{ episode.episodeNumber }}" id="ep_{{ request.id }}_{{ episode.episodeNumber }}">
+                                                    <label class="form-check-label text-light" for="ep_{{ request.id }}_{{ episode.episodeNumber }}">
+                                                        {{ episode.episodeNumber }}. {{ episode.title }}
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <button type="submit" class="btn btn-primary">Download Selected</button>
+                                        <button type="button" class="btn btn-danger cancel-request">Cancel Request</button>
+                                    </div>
+                                </form>
+                                {% endif %}
+                            </div>
                         </div>
                         {% endfor %}
+                        {% else %}
+                            <div class="empty-requests-container">
+                                <div class="alert alert-info">No pending requests</div>
+                                {% if last_processed_show %}
+                                    <div class="processing-card card mb-3">
+                                        <div class="card-header bg-dark text-light">
+                                            <h5 class="mb-0">Processing Downloads</h5>
+                                        </div>
+                                        <div class="card-body bg-dark text-light">
+                                            <p>Processing episodes for {{ last_processed_show.title }} - Season {{ last_processed_show.season }}</p>
+                                            <div class="banner-wrapper mb-3">
+                                                <img src="{{ sonarr_url }}/api/v3/mediacover/series/{{ last_processed_show.series_id }}/banner.jpg?apikey={{ config.get('sonarr_api_key', '') }}" 
+                                                     alt="Banner for {{ last_processed_show.title }}" 
+                                                     class="img-fluid banner"
+                                                     onerror="this.onerror=null; this.src='{{ url_for('static', filename='placeholder-banner.png') }}';">
+                                            </div>
+                                            <p class="processing-time">Started {{ last_processed_show.time_ago }}</p>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
-                <button type="submit" class="btn btn-primary">Assign checked shows to above rule</button>
-                <span class="disclaimer">(will override current assignments)</span>
-            </form>
-        
-            
-        </div>
-        {% endif %}
-        
-        <script type="application/json" id="config-data">{{ config|tojson|safe }}</script>
-        <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+                <!-- Rule Management Subsection -->
+                <div id="rule_management" class="settings-subsection" style="display: none;">
+                    <h4>Rules</h4>
+                    <form id="settings-form" method="POST" action="{{ url_for('update_settings') }}">
+                        <div class="form-group">
+                            <label for="rule_name">Select Rule:</label>
+                            <select id="rule_name" name="rule_name" class="form-control" onchange="toggleNewRuleName()">
+                                {% for rule_name in config['rules'].keys() %}
+                                <option value="{{ rule_name }}" {{ 'selected' if rule_name == rule else '' }}>{{ rule_name|capitalize }}</option>
+                                {% endfor %}
+                                <option value="add_new">Add New</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="new_rule_name_group" style="display:none;">
+                            <label for="new_rule_name">New Rule Name:</label>
+                            <input type="text" id="new_rule_name" name="new_rule_name" class="form-control" placeholder="Enter new rule name">
+                        </div>
+                        <div class="form-group">
+                            <label for="get_option">How many more episodes to get?:</label>
+                            <input type="text" id="get_option" name="get_option" placeholder="Enter 'season', 'all', or a number" class="form-control" value="">
+                        </div>
+                        <div class="form-group">
+                            <label for="action_option">Action for Episodes:</label>
+                            <select id="action_option" name="action_option" class="form-control">
+                                <option value="monitor">Monitor</option>
+                                <option value="search">Search</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="keep_watched">How many episodes to keep?:</label>
+                            <input type="text" id="keep_watched" name="keep_watched" placeholder="Enter 'season', 'all', or a number" class="form-control" value="">
+                        </div>
+                        <div class="form-group">
+                            <label for="monitor_watched">Keep monitored if watched:</label>
+                            <select id="monitor_watched" name="monitor_watched" class="form-control">
+                                <option value="true">true</option>
+                                <option value="false">false</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Update Settings</button>
+                    </form>
+                    <form id="delete-rule-form" method="POST" action="{{ url_for('delete_rule') }}" onsubmit="return confirmDeleteRule()">
+                        <input type="hidden" name="rule_name" id="delete_rule_name">
+                        <button type="submit" class="btn btn-danger" id="delete_rule">Delete Rule</button>
+                    </form>
+                    <button class="btn btn-secondary mt-3 settings-button" onclick="showSection('assign_rules')">Assign Rules</button>
+                </div>
+
+                <!-- Profile Settings Subsection -->
+                <div id="profile_settings" class="settings-subsection" style="display: none;">
+                    <h4>Profile Settings</h4>
+                    <form id="profile-settings-form" method="POST" action="{{ url_for('update_profile_settings') }}">
+                        <div class="form-group">
+                            <label for="radarr_quality_profile">Radarr Quality Profile:</label>
+                            <select id="radarr_quality_profile" name="radarr_quality_profile" class="form-control">
+                                <option value="Any" {% if config.get('preferences', {}).get('radarr_quality_profile') == 'Any' %}selected{% endif %}>Any (Use First Available)</option>
+                                {% for profile in radarr_profiles %}
+                                <option value="{{ profile.name }}" {% if config.get('preferences', {}).get('radarr_quality_profile') == profile.name %}selected{% endif %}>{{ profile.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="sonarr_quality_profile">Sonarr Quality Profile:</label>
+                            <select id="sonarr_quality_profile" name="sonarr_quality_profile" class="form-control">
+                                <option value="Any" {% if config.get('preferences', {}).get('sonarr_quality_profile') == 'Any' %}selected{% endif %}>Any (Use First Available)</option>
+                                {% for profile in sonarr_profiles %}
+                                <option value="{{ profile.name }}" {% if config.get('preferences', {}).get('sonarr_quality_profile') == profile.name %}selected{% endif %}>{{ profile.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save Settings</button>
+                    </form>
+                </div>
+
+                 <!-- Assign Rules Section -->
+                 <div id="assign_rules" class="settings-subsection" style="display: none;">
+                    <h3>Assign/Unassign Rules to Series</h3>
+                    <form id="assign-rules-form" method="POST" action="{{ url_for('assign_rules') }}">
+                        <div class="form-group">
+                            <label for="assign_rule_name">Select Rule:</label>
+                            <select id="assign_rule_name" name="assign_rule_name" class="form-control" onchange="updateCheckboxes()">
+                                <option value="None">None</option>
+                                {% for rule_name in config['rules'].keys() %}
+                                <option value="{{ rule_name }}" {{ 'selected' if rule_name == rule else '' }}>{{ rule_name|capitalize }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="series_list">Select Series:</label>
+                            <div id="series_list" class="checkbox-list">
+                                {% for series in all_series %}
+                                <div class="checkbox-item">
+                                    <input type="checkbox" class="series-checkbox" id="series_{{ series['id'] }}" name="series_ids" value="{{ series['id'] }}" data-rule="{{ series['assigned_rule'] }}">
+                                    <label for="series_{{ series['id'] }}">{{ series['title'] }} ({{ series['assigned_rule'] or 'None' }})</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Assign checked shows to above rule</button>
+                        <span class="disclaimer">(will override current assignments)</span>
+                    </form>
+                </div>
+            </section>
+        </main>
     </div>
+
+    <!-- Details Modal -->
+    <div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="detailsModalLabel">Media Details</h5>
+                    <button type="button" class="close text-light" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">×</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="detailsModalBody">
+                    <div class="row">
+                        <div class="col-5">
+                            <img id="detailsPoster" src="" alt="Poster" class="img-fluid rounded">
+                        </div>
+                        <div class="col-7">
+                            <h5 id="detailsTitle"></h5>
+                            <p id="detailsYear" class="text-muted"></p>
+                            <p id="detailsOverview" class="small"></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" id="detailsModalFooter">
+                    <!-- Buttons will be added dynamically based on content type -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="{{ url_for('static', filename='index.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            setInterval(function() {
+                const activeElement = document.activeElement;
+                const isUserTyping = activeElement && (activeElement.tagName === 'INPUT' || 
+                                                       activeElement.tagName === 'TEXTAREA' || 
+                                                       activeElement.isContentEditable);
+                if (!isUserTyping) {
+                    const currentTab = document.querySelector('.main-tab:not([style*="display: none"])').id;
+                    const scrollPos = window.scrollY;
+                    localStorage.setItem('lastActiveTab', currentTab);
+                    localStorage.setItem('lastScrollPos', scrollPos);
+                    location.reload();
+                }
+            }, 60000);
+            const lastTab = localStorage.getItem('lastActiveTab');
+            if (lastTab) {
+                showMainTab(lastTab);
+                setTimeout(function() {
+                    const lastScroll = localStorage.getItem('lastScrollPos');
+                    if (lastScroll) {
+                        window.scrollTo(0, parseInt(lastScroll));
+                    }
+                }, 100);
+            }
+        });
+    </script>
+    <script type="application/json" id="config-data">
+        {{ config|tojson|safe }}
+    </script>
 </body>
 </html>

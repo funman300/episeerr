@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Select Seasons - {{ show.name }}</title>
+    <style>
+        body {
+            background-color: #343a40;
+            color: #f8f9fa;
+            padding-bottom: 70px; /* Space for bottom buttons */
+        }
+        .show-header {
+            display: flex;
+            margin-bottom: 15px;
+        }
+        .show-poster {
+            width: 120px;
+            border-radius: 8px;
+            margin-right: 15px;
+        }
+        .show-info {
+            flex: 1;
+        }
+        .season-list {
+            margin-bottom: 20px;
+        }
+        .season-item {
+            display: flex;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background-color: #495057;
+            align-items: center;
+        }
+        .season-number {
+            width: 100px;
+            font-weight: bold;
+            color: #f8f9fa;
+        }
+        .season-info {
+            flex: 1;
+            color: #f8f9fa;
+        }
+        .season-check {
+            transform: scale(1.2);
+            margin-left: 10px;
+        }
+        .bottom-actions {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: space-between;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+        }
+        .container {
+            max-width: 800px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="show-header">
+            <img src="{{ show.posterUrl }}" alt="{{ show.name }}" class="show-poster">
+            <div class="show-info">
+                <h3>{{ show.name }}</h3>
+                <p>{{ show.overview[:150] }}{% if show.overview|length > 150 %}...{% endif %}</p>
+            </div>
+        </div>
+        
+        <h5>Select Seasons</h5>
+        <div class="season-list">
+            {% for season in show.seasons %}
+                {% if season.seasonNumber > 0 %}  <!-- Skip specials (season 0) -->
+                <div class="season-item">
+                    <div class="season-number">Season {{ season.seasonNumber }}</div>
+                    <div class="season-info">
+                        <div>{{ season.episodeCount or '?' }} episodes</div>
+                    </div>
+                    <input type="checkbox" class="season-check" data-season="{{ season.seasonNumber }}">
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        
+        <div class="bottom-actions">
+            <button class="btn btn-secondary" onclick="window.history.back()">Cancel</button>
+            <div>
+                <button class="btn btn-info" onclick="selectAll()">Select All</button>
+                <button class="btn btn-info" onclick="selectNone()">Clear All</button>
+            </div>
+            <button class="btn btn-primary" onclick="proceedToEpisodes()">Proceed to Episode Selection</button>
+        </div>
+    </div>
+
+    <script>
+        // Select/deselect all seasons
+        function selectAll() {
+            document.querySelectorAll('.season-check').forEach(check => check.checked = true);
+        }
+        
+        function selectNone() {
+            document.querySelectorAll('.season-check').forEach(check => check.checked = false);
+        }
+        
+        function proceedToEpisodes() {
+            const selectedSeasons = Array.from(document.querySelectorAll('.season-check:checked')).map(check => {
+                return parseInt(check.dataset.season)
+            });
+            
+            if (selectedSeasons.length === 0) {
+                alert('Please select at least one season');
+                return;
+            }
+            
+            // Just redirect to the episode selection page with the first selected season
+            const firstSeason = selectedSeasons[0];
+            window.location.href = `/select-episodes/{{ tmdb_id }}?seasons=${firstSeason}`;
+        }
+    </script>
+</body>
+</html>
