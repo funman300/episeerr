@@ -99,10 +99,11 @@ _Use is intended for owned media or paid supscription services._
   
 
 ### Interface Preview
-![OCDarr Interface](https://github.com/Vansmak/OCDarr/assets/16037573/5491d694-2e9a-46fb-a1f8-539dcaf661df)
+![ocd](https://github.com/user-attachments/assets/cd7b5c0f-275f-4222-99e6-40fd76c6f495)
 
 
 ## 📋 Requirements
+
 
 - Sonarr v3
 - Either:
