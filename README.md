@@ -3,7 +3,91 @@ Dev branch is developmental, consider it beta
 
 [![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/vansmak)
 
-OCDarr automates TV show management in Sonarr based on your viewing activity. It ensures upcoming episodes are ready while cleaning up watched content according to your preferences. Perfect for viewers who:
+
+🎯 Unprecedented Episode Management
+OCDarr isn't just another media management tool—it's a precision instrument for curating your media library with unparalleled granularity.
+🔬 Rule-Based Episode Control
+Most media management tools operate on an all-or-nothing approach. OCDarr revolutionizes this with its dynamic, per-show rule system:
+
+Granular Episode Selection: Choose exactly which episodes you want
+Intelligent Cleanup: Automatically manage your library based on your viewing habits
+Flexible Rules: Create custom management strategies for different shows
+
+Rule Components: Your Media, Your Rules
+
+Get Option: Control how many upcoming episodes to prepare
+
+1: Just the next episode
+3: Next three episodes
+season: Full season
+all: Everything upcoming
+
+
+Action Option: Define how episodes are handled
+
+monitor: Passive tracking
+search: Active download and monitoring
+
+
+Keep Watched: Manage post-viewing library
+
+1: Keep only the last watched episode
+2: Keep last two episodes
+season: Retain current season
+all: Keep everything
+
+
+Monitor Watched: Tracking behavior after watching
+
+true: Keep watched episodes monitored
+false: Automatically unmonitor after viewing
+
+
+
+🎬 Adaptive Episode Request Workflows
+OCDarr supports multiple request scenarios with intelligent handling:
+External Requests (Jellyseerr/Overseerr)
+
+With "episodes" tag:
+
+Precise episode selection
+Unmonitor all initial episodes
+Cancel automatic downloads
+User-guided episode monitoring
+
+
+Without "episodes" tag:
+
+Instant addition to default rule
+Automatic management based on predefined preferences
+
+
+
+Internal Requests (OCDarr Interface)
+
+Identical powerful selection mechanism
+Pilot episode handling
+Granular episode monitoring
+
+🌟 Real-World Scenario
+Example: You're watching "Breaking Bad"
+
+You want only the next episode ready
+Automatically clean up watched episodes
+Keep the current season
+Stop tracking after you've finished
+
+Traditional Solution: Download entire seasons, manual cleanup
+OCDarr Solution: Intelligent, automated, personalized management
+🔑 Key Differentiators
+
+🎯 Episode-level control
+🧹 Automatic library management
+🔧 Highly configurable rules
+🚀 Proactive episode preparation
+
+OCDarr isn't just a tool—it's your personal media librarian.
+
 - Want the next episode ready when they finish the current one
 - Prefer to keep their media library tidy
 - Don't need to keep entire seasons after watching
@@ -12,21 +96,6 @@ OCDarr automates TV show management in Sonarr based on your viewing activity. It
 
 _Not designed for media hoarders or large household servers with multiple users at different points in series._
 _Use is intended for owned media or paid supscription services._
-
-## 🌟 Features
-
-- **Smart Episode Management**: Automatically prepares upcoming episodes based on your watching patterns
-- **Flexible Rules System**: Create and assign different management rules to shows
-- **Media Server Integration**: 
-  - Plex (via Tautulli)
-  - Jellyfin (direct integration) # currently not ready in dev branch
-
-- **Space Management**: Optional deletion of watched episodes based on your rules
-- **User Interface**: Clean web interface for managing rules and viewing upcoming content
-- **Containerized**: Easy deployment via Docker
-- ***Request individual episodes
-- ***Request from popular tmdb lists
-- ***added Radarr w\o rule management
   
 
 ### Interface Preview
