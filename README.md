@@ -47,7 +47,7 @@ Monitor Watched: Tracking behavior after watching
 🎬 Adaptive Episode Request Workflows # control precisely what you want to add for a new series
 OCDarr supports multiple request scenarios with intelligent handling:
 External Requests (Jellyseerr/Overseerr)
-
+**use episodes tag when requestiing something from seer, sonarr, 3rd party apps if you want to control what your request down to individual episodes
 With "episodes" tag:
 
  - Precise episode selection
