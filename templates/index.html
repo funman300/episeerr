@@ -1,3 +1,5 @@
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -212,6 +214,8 @@
         }
         </style>
 </head>
+<body>
+
 <div class="sidebar" id="sidebar">
     <div class="sidebar-logo">
         <img src="{{ url_for('static', filename='logo_icon.png') }}" alt="OCDarr" class="logo-image">
@@ -711,6 +715,7 @@
 <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
+
 <!-- Fix Bootstrap autofill overlay errors -->
 <script>
 // Comprehensive fix for Bootstrap autofill overlay errors
@@ -965,3 +970,8 @@
         };
     });
     </script>
+     <script type="application/json" id="config-data">
+        {{ config|tojson|safe }}
+    </script>
+</body>
+</html>
