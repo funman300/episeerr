@@ -1,0 +1,86 @@
+<!-- View Watchlist Section -->
+<div id="watchlist-view-section" class="watchlist-subsection">
+    <div class="section-header d-flex justify-content-between align-items-center mb-3">
+        <h4>Plex Watchlist</h4>
+        <div class="watchlist-controls">
+            <button id="sync-plex-btn" class="btn btn-primary btn-sm">
+                <i class="fas fa-sync-alt mr-1"></i> Refresh Watchlist
+            </button>
+        </div>
+    </div>
+    
+    <!-- Watchlist Status Card -->
+    <div class="card bg-dark mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <span id="connection-status">
+                        <i class="fas fa-circle-notch fa-spin mr-2"></i> Checking connection...
+                    </span>
+                    <div id="last-sync-time" class="text-muted small mt-1">Last synced: Checking...</div>
+                </div>
+            </div>
+            
+            <!-- Plex Stats -->
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <div class="stat-card">
+                        <h6 class="text-muted">Library</h6>
+                        <div class="d-flex justify-content-between">
+                            <span>Movies:</span>
+                            <span id="library-movies">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>TV Shows:</span>
+                            <span id="library-tv">0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="stat-card">
+                        <h6 class="text-muted">Watchlist</h6>
+                        <div class="d-flex justify-content-between">
+                            <span>Movies:</span>
+                            <span id="watchlist-movies">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>TV Shows:</span>
+                            <span id="watchlist-tv">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+   
+
+    <!-- Unassigned TV Shows Row -->
+    <div class="content-row">
+        <header class="row-header">
+            <h4>Missing TV Shows</h4>
+            <div class="row-controls">
+                <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+            </div>
+        </header>
+        <div class="scrollable-row" id="watchlist-tv-unassigned-row">
+            <div class="loading-indicator">Loading missing TV shows...</div>
+        </div>
+    </div>
+
+    <!-- Unassigned Movies Row -->
+    <div class="content-row">
+        <header class="row-header">
+            <h4>Missing Movies</h4>
+            <div class="row-controls">
+                <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+            </div>
+        </header>
+        <div class="scrollable-row" id="watchlist-movies-unassigned-row">
+            <div class="loading-indicator">Loading unassigned movies...</div>
+        </div>
+    </div>
+</div>
+    <script src="{{ url_for('static', filename='plex-watchlist.js') }}"></script>

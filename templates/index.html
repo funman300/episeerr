@@ -1,501 +1,967 @@
-<!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='plex-watchlist.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <title>OCDarr</title>
+
+    <style>
+        /* Sidebar Variables */
+        :root {
+            --sidebar-width: 240px;
+            --sidebar-collapsed-width: 60px;
+            --background-color: #121212;
+            --surface-color: #1e1e1e;
+            --primary-color: #3498db;
+            --text-color: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Sidebar Container */
+        .sidebar {
+            width: var(--sidebar-width);
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background-color: var(--surface-color);
+            color: var(--text-color);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            box-shadow: var(--shadow);
+        }
+        
+        /* Content Wrapper Adjustments */
+        .content-wrapper {
+            margin-left: var(--sidebar-width);
+            padding: 15px;
+            transition: margin-left 0.3s ease;
+            width: calc(100% - var(--sidebar-width));
+        }
+        
+        /* Collapsed Sidebar */
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
+        }
+        
+        .sidebar.collapsed + .content-wrapper {
+            margin-left: var(--sidebar-collapsed-width);
+            width: calc(100% - var(--sidebar-collapsed-width));
+        }
+        
+        /* Logo Section */
+        .sidebar-logo {
+            padding: 20px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .logo-image {
+            height: 30px;
+        }
+        
+        .sidebar-toggle {
+            background: transparent;
+            border: none;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 20px;
+        }
+        
+        /* Navigation Section */
+        .sidebar-nav {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 15px 0;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 15px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .nav-item:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-color);
+        }
+        
+        .nav-item.active {
+            color: var(--primary-color);
+            background-color: rgba(52, 152, 219, 0.1);
+            border-left: 3px solid var(--primary-color);
+        }
+        
+        .nav-icon {
+            margin-right: 10px;
+            font-size: 18px;
+            width: 24px;
+            text-align: center;
+        }
+        
+        .nav-text {
+            white-space: nowrap;
+        }
+        
+        .collapsed .nav-text {
+            display: none;
+        }
+        
+        /* Submenu */
+        .submenu {
+            margin-left: 25px;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        
+        .nav-item.expanded + .submenu {
+            max-height: 200px;
+        }
+        
+        .collapsed .submenu {
+            display: none;
+        }
+        
+        /* Notification badge */
+        .notification-badge {
+            position: absolute;
+            top: -6px;
+            right: 5px;
+            background-color: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Mobile Specific Styles */
+        @media (max-width: 768px) {
+            /* Default state on mobile - completely hidden */
+            .sidebar {
+                transform: translateX(-100%);
+                width: var(--sidebar-width);
+                z-index: 1030;
+            }
+            
+            /* Expanded state on mobile */
+            .sidebar.expanded {
+                transform: translateX(0);
+            }
+            
+            /* Content wrapper should not have margin when sidebar is not expanded */
+            .content-wrapper {
+                margin-left: 0;
+                width: 100%;
+                padding-top: 30px; /* Add padding at the top for the toggle */
+            }
+            
+            /* Mobile toggle button - only visible when sidebar is collapsed */
+            .mobile-sidebar-toggle {
+                position: fixed;
+                top: 7px;
+                left: 10px;
+                z-index: 1031;
+                background-color: var(--surface-color);
+                border-radius: 50%;
+                width: 20px;
+                height: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: var(--shadow);
+                opacity: 0.9;
+                transition: opacity 0.3s ease;
+            }
+            
+            /* Hide mobile toggle when sidebar is expanded */
+            .sidebar.expanded ~ .mobile-sidebar-toggle,
+            body:has(.sidebar.expanded) .mobile-sidebar-toggle {
+                opacity: 0;
+                pointer-events: none;
+            }
+        }
+        
+        /* Has notifications animation */
+        .nav-item.has-notifications {
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+        </style>
 </head>
-<body>
-    <input type="hidden" id="jellyseerr-url" value="{{ jellyseerr_url }}">
-    <!-- Main Container -->
-    <div class="container main-container">
-        <!-- Main Menu -->
-        <nav class="main-menu">
-            <div class="menu-item active" onclick="showMainTab('shows-tab')">Shows</div>
-            <div class="menu-item {% if has_pending_requests %}has-notifications{% endif %}" onclick="showMainTab('settings-tab')">
-                <img src="{{ url_for('static', filename='logo_icon.png') }}" alt="Settings" class="settings-icon">
-                {% if has_pending_requests %}
-                <span class="notification-badge">{{ pending_requests|length }}</span>
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+        <img src="{{ url_for('static', filename='logo_icon.png') }}" alt="OCDarr" class="logo-image">
+        <button class="sidebar-toggle" id="sidebar-toggle">
+            <i class="fas fa-bars"></i>
+        </button>
+    </div>
+    
+    <nav class="sidebar-nav">
+             
+        <!-- Shows Section (simplified to a single item) -->
+        <a href="#" class="nav-item" onclick="showMainTab('shows-tab')" data-section="shows">
+            <span class="nav-icon"><i class="fas fa-tv"></i></span>
+            <span class="nav-text">Shows</span>
+        </a>
+
+        <!-- Movies Section (simplified to a single item) -->
+        <a href="#" class="nav-item" onclick="showMainTab('movies-tab')" data-section="movies">
+            <span class="nav-icon"><i class="fas fa-film"></i></span>
+            <span class="nav-text">Movies</span>
+        </a>
+        <a href="#" class="nav-item" onclick="showMainTab('requests-tab')" data-section="requests">
+            <span class="nav-icon"><i class="fas fa-download"></i></span>
+            <span class="nav-text">Requests</span>
+            {% if has_pending_requests %}
+            <span class="notification-badge">{{ pending_requests|length }}</span>
+            {% endif %}
+        </a>
+        
+        <!-- Plex Watchlist Section -->
+        <a href="#" class="nav-item" onclick="showMainTab('plex-tab')" data-section="plex">
+            <span class="nav-icon"><i class="fas fa-play-circle"></i></span>
+            <span class="nav-text">Plex Watchlist</span>
+        </a>
+        
+        <!-- Settings Section -->
+        <div class="nav-item" data-toggle="submenu" data-target="settings-submenu" data-section="settings">
+            <span class="nav-icon"><i class="fas fa-cog"></i></span>
+            <span class="nav-text">Settings</span>
+        </div>
+        <div class="submenu" id="settings-submenu">
+            <a href="#" class="nav-item" onclick="showMainTab('settings-tab'); showSettingsSection('rule_management');">
+                <span class="nav-text">Rules</span>
+            </a>
+            <a href="#" class="nav-item" onclick="showMainTab('settings-tab'); showSettingsSection('profile_settings');">
+                <span class="nav-text">Profiles</span>
+            </a>
+        </div>
+    </nav>
+</div>
+   <input type="hidden" id="jellyseerr-url" value="{{ jellyseerr_url }}">
+
+<!-- The main content container -->
+<div class="content-wrapper" id="content-wrapper">
+    
+        <section id="dashboard-tab" class="main-tab">
+            <h4>Dashboard</h4>
+            <div class="content-row">
+                <!-- Dashboard content here -->
+                <p>Welcome to OCDarr Dashboard!</p>
+            </div>
+        </section>
+        <!-- Shows Tab -->
+        <section id="shows-tab" class="main-tab">
+            <!-- Recently Added Shows -->
+            <div class="content-row">
+                <header class="row-header">
+                    <h4>Recently Added</h4>
+                    <div class="row-controls">
+                        <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                        <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                    </div>
+                </header>
+                <div class="scrollable-row">
+                    {% for item in current_series %}
+                    {% if item.type == 'tv' %}
+                    <article class="media-item">
+                        <div class="poster-wrapper">
+                            <a href="{{ item.sonarr_series_url }}">
+                                <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
+                                <div class="media-info">
+                                    <p class="media-subtitle">{{ item.latest_monitored_episode }}</p>
+                                </div>
+                            </a>
+                        </div>
+                    </article>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Upcoming Shows -->
+            <div class="content-row">
+                <header class="row-header">
+                    <h4>Upcoming</h4> <!-- Fixed duplicate -->
+                    <div class="row-controls">
+                        <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                        <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                    </div>
+                </header>
+                <div class="scrollable-row">
+                    {% for item in upcoming_premieres %}
+                    {% if item.type == 'tv' %}
+                    <article class="media-item">
+                        <div class="poster-wrapper">
+                            <a href="{{ item.sonarr_series_url }}">
+                                <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
+                                <div class="media-info">
+                                    <p class="media-subtitle">{{ item.nextAiring.split(' at ')[0] }}</p>
+                                </div>
+                            </a>
+                        </div>
+                    </article>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Popular Shows (Jellyseerr) -->
+            <div class="content-row">
+                <header class="row-header">
+                    <h4>Popular Shows</h4>
+                    <div class="row-controls">
+                        <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                        <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                    </div>
+                </header>
+                <div class="scrollable-row" id="popular-shows-row">
+                    <div class="loading-indicator">Loading popular shows...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Movies Tab -->
+        <section id="movies-tab" class="main-tab" style="display: none;">
+            <!-- Recently Added Movies -->
+            <div class="content-row">
+                <header class="row-header">
+                    <h4>Recently Added</h4>
+                    <div class="row-controls">
+                        <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                        <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                    </div>
+                </header>
+                <div class="scrollable-row">
+                    {% for item in current_series %}
+                    {% if item.type == 'movie' %}
+                    <article class="media-item">
+                        <div class="poster-wrapper">
+                            <a href="{{ item.radarr_movie_url }}">
+                                <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
+                                <div class="media-info">
+                                    <p class="media-subtitle">{{ item.year }}</p>
+                                </div>
+                            </a>
+                        </div>
+                    </article>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Upcoming Movies -->
+            <div class="content-row">
+                <header class="row-header">
+                    <h4>Upcoming</h4>
+                    <div class="row-controls">
+                        <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                        <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                    </div>
+                </header>
+                <div class="scrollable-row">
+                    {% for item in upcoming_premieres %}
+                    {% if item.type == 'movie' %}
+                    <article class="media-item">
+                        <div class="poster-wrapper">
+                            <a href="{{ item.radarr_movie_url }}">
+                                <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
+                                <div class="media-info">
+                                    <p class="media-subtitle">{{ item.releaseDate }}</p>
+                                </div>
+                            </a>
+                        </div>
+                    </article>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Popular Movies (Jellyseerr) -->
+            <div class="content-row">
+                <header class="row-header">
+                    <h4>Popular Movies</h4>
+                    <div class="row-controls">
+                        <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                        <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+                    </div>
+                </header>
+                <div class="scrollable-row" id="popular-movies-row">
+                    <div class="loading-indicator">Loading popular movies...</div>
+                </div>
+            </div>
+        </section>
+
+        
+        <section id="requests-tab" class="main-tab" style="display: none;">
+            <h4>Requests</h4>
+            <!-- Direct Request Form -->
+            <div class="card mb-4">
+                <div class="card-header bg-dark">
+                    <h5 class="mb-0 text-light">Direct Request</h5>
+                </div>
+                <div class="card-body bg-dark text-light">
+                    <form id="direct-request-form" method="POST" action="{{ url_for('process_direct_request') }}">
+                        <div class="form-group">
+                            <label for="request_input">Enter your request:</label>
+                            <input type="text" id="request_input" name="request_input" class="form-control" 
+                                placeholder="Show Name, or Movie Title" required>
+                            <small class="form-text text-muted">
+                                Examples: "Breaking Bad" </small>
+                        </div>
+                        <div class="form-group">
+                            <label>Media Type:</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="media_type" id="type_auto" value="auto" checked>
+                                <label class="form-check-label" for="type_auto">Auto-detect</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="media_type" id="type_tv" value="tv">
+                                <label class="form-check-label" for="type_tv">TV Show</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="media_type" id="type_movie" value="movie">
+                                <label class="form-check-label" for="type_movie">Movie</label>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <button type="submit" class="btn btn-primary">Submit Request</button>
+                            <button type="button" id="open-jellyseerr" class="btn btn-secondary">Open Jellyseerr</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Pending Requests Section -->
+            <h5 class="mb-3">Pending Requests</h5>
+            <div class="requests-container">
+                {% if pending_requests %}
+                {% for request in pending_requests %}
+                <div class="request-card card mb-3 {% if request.get('needs_attention', False) %}needs-attention{% endif %}">
+                    <div class="card-header bg-dark text-light d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            {{ request.title }} 
+                            {% if request.get('needs_season_selection', False) %}
+                            <span class="badge badge-info">Season Selection Required</span>
+                            {% else %}
+                            - Season {{ request.season }}
+                            {% endif %}
+                            {% if request.get('needs_attention', False) %}
+                            <span class="badge badge-warning">Needs Attention</span>
+                            {% endif %}
+                        </h5>
+                        <div>
+                            {% if request.get('source', '') %}
+                            <span class="badge badge-info">{{ request.get('source_name', request.get('source')|capitalize) }}</span>
+                            {% endif %}
+                            {% if request.get('episodes') %}
+                            <span class="badge badge-secondary">{{ request.episodes|length }} episodes</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-body bg-dark text-light">
+                        
+                        
+                        {% if request.get('needs_season_selection', False) %}
+                        <!-- Season Selection UI -->
+                        <div class="text-center">
+                            <p>This show needs season selection before episodes can be selected.</p>
+                            <a href="/select-seasons/{{ request.tmdb_id }}" class="btn btn-primary">Select Season</a>
+                            
+                            <form action="{{ url_for('process_episode_selection') }}" method="POST" class="mt-3">
+                                <input type="hidden" name="request_id" value="{{ request.id }}">
+                                <input type="hidden" name="action" value="cancel">
+                                <button type="submit" class="btn btn-danger">Cancel Request</button>
+                            </form>
+                        </div>
+                        {% else %}
+                        <!-- Episode Selection UI -->
+                        <form action="{{ url_for('process_episode_selection') }}" method="POST" class="episode-selection-form">
+                            <input type="hidden" name="request_id" value="{{ request.id }}">
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="text-light">Episode Selection:</h6>
+                                    <div>
+                                        <button type="button" class="btn btn-sm btn-secondary select-all">Select All</button>
+                                        <button type="button" class="btn btn-sm btn-secondary select-none">Clear All</button>
+                                    </div>
+                                </div>
+                                <div class="episode-list row">
+                                    {% for episode in request.episodes %}
+                                    <div class="col-md-4 mb-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input episode-checkbox" type="checkbox" name="episodes" value="{{ episode.episodeNumber }}" id="ep_{{ request.id }}_{{ episode.episodeNumber }}">
+                                            <label class="form-check-label text-light" for="ep_{{ request.id }}_{{ episode.episodeNumber }}">
+                                                {{ episode.episodeNumber }}. {{ episode.title }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <button type="submit" class="btn btn-primary">Download Selected</button>
+                                <button type="button" class="btn btn-danger cancel-request">Cancel Request</button>
+                            </div>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                    <div class="empty-requests-container">
+                        <div class="alert alert-info">No pending requests</div>
+                        {% if last_processed_show %}
+                            <div class="processing-card card mb-3">
+                                <div class="card-header bg-dark text-light">
+                                    <h5 class="mb-0">Processing Downloads</h5>
+                                </div>
+                                <div class="card-body bg-dark text-light">
+                                    <p>Processing episodes for {{ last_processed_show.title }} - Season {{ last_processed_show.season }}</p>
+                                    <div class="banner-wrapper mb-3">
+                                        <img src="{{ sonarr_url }}/api/v3/mediacover/series/{{ last_processed_show.series_id }}/banner.jpg?apikey={{ config.get('sonarr_api_key', '') }}" 
+                                            alt="Banner for {{ last_processed_show.title }}" 
+                                            class="img-fluid banner"
+                                            onerror="this.onerror=null; this.src='{{ url_for('static', filename='placeholder-banner.png') }}';">
+                                    </div>
+                                    <p class="processing-time">Started {{ last_processed_show.time_ago }}</p>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
                 {% endif %}
             </div>
-            <div class="menu-item" onclick="showMainTab('movies-tab')">Movies</div>
-        </nav>
-
-        <!-- Main Content Tabs -->
-        <main class="content-wrapper">
-            <!-- Shows Tab -->
-            <section id="shows-tab" class="main-tab">
-                <!-- Recently Added Shows -->
-                <div class="content-row">
-                    <header class="row-header">
-                        <h4>Recently Added</h4>
-                        <div class="row-controls">
-                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
-                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
-                        </div>
-                    </header>
-                    <div class="scrollable-row">
-                        {% for item in current_series %}
-                        {% if item.type == 'tv' %}
-                        <article class="media-item">
-                            <div class="poster-wrapper">
-                                <a href="{{ item.sonarr_series_url }}">
-                                    <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
-                                    <div class="media-info">
-                                        <p class="media-subtitle">{{ item.latest_monitored_episode }}</p>
-                                    </div>
-                                </a>
-                            </div>
-                        </article>
-                        {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <!-- Upcoming Shows -->
-                <div class="content-row">
-                    <header class="row-header">
-                        <h4>Upcoming</h4> <!-- Fixed duplicate -->
-                        <div class="row-controls">
-                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
-                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
-                        </div>
-                    </header>
-                    <div class="scrollable-row">
-                        {% for item in upcoming_premieres %}
-                        {% if item.type == 'tv' %}
-                        <article class="media-item">
-                            <div class="poster-wrapper">
-                                <a href="{{ item.sonarr_series_url }}">
-                                    <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
-                                    <div class="media-info">
-                                        <p class="media-subtitle">{{ item.nextAiring.split(' at ')[0] }}</p>
-                                    </div>
-                                </a>
-                            </div>
-                        </article>
-                        {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <!-- Popular Shows (Jellyseerr) -->
-                <div class="content-row">
-                    <header class="row-header">
-                        <h4>Popular Shows</h4>
-                        <div class="row-controls">
-                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
-                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
-                        </div>
-                    </header>
-                    <div class="scrollable-row" id="popular-shows-row">
-                        <div class="loading-indicator">Loading popular shows...</div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Movies Tab -->
-            <section id="movies-tab" class="main-tab" style="display: none;">
-                <!-- Recently Added Movies -->
-                <div class="content-row">
-                    <header class="row-header">
-                        <h4>Recently Added</h4>
-                        <div class="row-controls">
-                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
-                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
-                        </div>
-                    </header>
-                    <div class="scrollable-row">
-                        {% for item in current_series %}
-                        {% if item.type == 'movie' %}
-                        <article class="media-item">
-                            <div class="poster-wrapper">
-                                <a href="{{ item.radarr_movie_url }}">
-                                    <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
-                                    <div class="media-info">
-                                        <p class="media-subtitle">{{ item.year }}</p>
-                                    </div>
-                                </a>
-                            </div>
-                        </article>
-                        {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <!-- Upcoming Movies -->
-                <div class="content-row">
-                    <header class="row-header">
-                        <h4>Upcoming</h4>
-                        <div class="row-controls">
-                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
-                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
-                        </div>
-                    </header>
-                    <div class="scrollable-row">
-                        {% for item in upcoming_premieres %}
-                        {% if item.type == 'movie' %}
-                        <article class="media-item">
-                            <div class="poster-wrapper">
-                                <a href="{{ item.radarr_movie_url }}">
-                                    <img src="{{ item.artwork_url }}" alt="{{ item.name }}" class="poster">
-                                    <div class="media-info">
-                                        <p class="media-subtitle">{{ item.releaseDate }}</p>
-                                    </div>
-                                </a>
-                            </div>
-                        </article>
-                        {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <!-- Popular Movies (Jellyseerr) -->
-                <div class="content-row">
-                    <header class="row-header">
-                        <h4>Popular Movies</h4>
-                        <div class="row-controls">
-                            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
-                            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
-                        </div>
-                    </header>
-                    <div class="scrollable-row" id="popular-movies-row">
-                        <div class="loading-indicator">Loading popular movies...</div>
-                    </div>
-                </div>
-            </section>
+        </section>
+        <section id="plex-tab" class="main-tab" style="display: none;">
+            {% include 'plex-watchlist.html' %}
+        </section>
 
             <!-- Settings Tab -->
             <section id="settings-tab" class="main-tab" style="display: none;">
-                <!-- Sub-menu for Settings -->
-                <div class="row mb-3">
-                    <div class="col d-flex justify-content-between">
-                        <button onclick="showSettingsSection('rule_management')" class="btn btn-secondary">Rules</button>
-                        <button onclick="showSettingsSection('requests_section')" class="btn btn-secondary">Requests</button>
-                        <button onclick="showSettingsSection('profile_settings')" class="btn btn-secondary">Profiles</button>
-                    </div>
-                </div>
-
+            <!-- Sub-menu for Settings -->
+            
                 
+            
 
-                <!-- Requests Section -->
-                <div id="requests_section" class="settings-subsection" style="display: none;">
-                    <h4>Requests</h4>
-                    <!-- Direct Request Form -->
-                    <div class="card mb-4">
-                        <div class="card-header bg-dark">
-                            <h5 class="mb-0 text-light">Direct Request</h5>
-                        </div>
-                        <div class="card-body bg-dark text-light">
-                            <form id="direct-request-form" method="POST" action="{{ url_for('process_direct_request') }}">
-                                <div class="form-group">
-                                    <label for="request_input">Enter your request:</label>
-                                    <input type="text" id="request_input" name="request_input" class="form-control" 
-                                        placeholder="Show Name, or Movie Title" required>
-                                    <small class="form-text text-muted">
-                                        Examples: "Breaking Bad" </small>
-                                </div>
-                                <div class="form-group">
-                                    <label>Media Type:</label>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="media_type" id="type_auto" value="auto" checked>
-                                        <label class="form-check-label" for="type_auto">Auto-detect</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="media_type" id="type_tv" value="tv">
-                                        <label class="form-check-label" for="type_tv">TV Show</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="media_type" id="type_movie" value="movie">
-                                        <label class="form-check-label" for="type_movie">Movie</label>
-                                    </div>
-                                </div>
-                                
-                                <div class="d-flex justify-content-between">
-                                    <button type="submit" class="btn btn-primary">Submit Request</button>
-                                    <button type="button" id="open-jellyseerr" class="btn btn-secondary">Open Jellyseerr</button>
-                                </div>
-                            </form>
+            
+            
+            <!-- Rule Management Subsection -->
+            <div id="rule_management" class="settings-subsection" style="display: none;">
+                <h4>Rules</h4>
+                <form id="settings-form" method="POST" action="{{ url_for('update_settings') }}">
+                    <div class="form-group">
+                        <label for="rule_name">Select Rule:</label>
+                        <select id="rule_name" name="rule_name" class="form-control" onchange="toggleNewRuleName()">
+                            {% for rule_name in config['rules'].keys() %}
+                            <option value="{{ rule_name }}" {{ 'selected' if rule_name == rule else '' }}>{{ rule_name|capitalize }}</option>
+                            {% endfor %}
+                            <option value="add_new">Add New</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="new_rule_name_group" style="display:none;">
+                        <label for="new_rule_name">New Rule Name:</label>
+                        <input type="text" id="new_rule_name" name="new_rule_name" class="form-control" placeholder="Enter new rule name">
+                    </div>
+                    <div class="form-group">
+                        <label for="get_option">How many more episodes to get?:</label>
+                        <input type="text" id="get_option" name="get_option" placeholder="Enter 'season', 'all', or a number" class="form-control" value="">
+                    </div>
+                    <div class="form-group">
+                        <label for="action_option">Action for Episodes:</label>
+                        <select id="action_option" name="action_option" class="form-control">
+                            <option value="monitor">Monitor</option>
+                            <option value="search">Search</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="keep_watched">How many episodes to keep?:</label>
+                        <input type="text" id="keep_watched" name="keep_watched" placeholder="Enter 'season', 'all', or a number" class="form-control" value="">
+                    </div>
+                    <div class="form-group">
+                        <label for="monitor_watched">Keep monitored if watched:</label>
+                        <select id="monitor_watched" name="monitor_watched" class="form-control">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Update Settings</button>
+                </form>
+                <form id="delete-rule-form" method="POST" action="{{ url_for('delete_rule') }}" onsubmit="return confirmDeleteRule()">
+                    <input type="hidden" name="rule_name" id="delete_rule_name">
+                    <button type="submit" class="btn btn-danger" id="delete_rule">Delete Rule</button>
+                </form>
+                <button class="btn btn-secondary mt-3 settings-button" onclick="showSection('assign_rules')">Assign Rules</button>
+            </div>
+
+            <!-- Profile Settings Subsection -->
+            <div id="profile_settings" class="settings-subsection" style="display: none;">
+                <h4>Profile Settings</h4>
+                <form id="profile-settings-form" method="POST" action="{{ url_for('update_profile_settings') }}">
+                    <div class="form-group">
+                        <label for="radarr_quality_profile">Radarr Quality Profile:</label>
+                        <select id="radarr_quality_profile" name="radarr_quality_profile" class="form-control">
+                            <option value="Any" {% if config.get('preferences', {}).get('radarr_quality_profile') == 'Any' %}selected{% endif %}>Any (Use First Available)</option>
+                            {% for profile in radarr_profiles %}
+                            <option value="{{ profile.name }}" {% if config.get('preferences', {}).get('radarr_quality_profile') == profile.name %}selected{% endif %}>{{ profile.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sonarr_quality_profile">Sonarr Quality Profile:</label>
+                        <select id="sonarr_quality_profile" name="sonarr_quality_profile" class="form-control">
+                            <option value="Any" {% if config.get('preferences', {}).get('sonarr_quality_profile') == 'Any' %}selected{% endif %}>Any (Use First Available)</option>
+                            {% for profile in sonarr_profiles %}
+                            <option value="{{ profile.name }}" {% if config.get('preferences', {}).get('sonarr_quality_profile') == profile.name %}selected{% endif %}>{{ profile.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                </form>
+            </div>
+
+             <!-- Assign Rules Section -->
+             <div id="assign_rules" class="settings-subsection" style="display: none;">
+                <h3>Assign/Unassign Rules to Series</h3>
+                <form id="assign-rules-form" method="POST" action="{{ url_for('assign_rules') }}">
+                    <div class="form-group">
+                        <label for="assign_rule_name">Select Rule:</label>
+                        <select id="assign_rule_name" name="assign_rule_name" class="form-control" onchange="updateCheckboxes()">
+                            <option value="None">None</option>
+                            {% for rule_name in config['rules'].keys() %}
+                            <option value="{{ rule_name }}" {{ 'selected' if rule_name == rule else '' }}>{{ rule_name|capitalize }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="series_list">Select Series:</label>
+                        <div id="series_list" class="checkbox-list">
+                            {% for series in all_series %}
+                            <div class="checkbox-item">
+                                <input type="checkbox" class="series-checkbox" id="series_{{ series['id'] }}" name="series_ids" value="{{ series['id'] }}" data-rule="{{ series['assigned_rule'] }}">
+                                <label for="series_{{ series['id'] }}">{{ series['title'] }} ({{ series['assigned_rule'] or 'None' }})</label>
+                            </div>
+                            {% endfor %}
                         </div>
                     </div>
+                    <button type="submit" class="btn btn-primary">Assign checked shows to above rule</button>
+                    <span class="disclaimer">(will override current assignments)</span>
+                </form>
+            </div>
+        </section>
+    
+</div>
 
-                    <!-- Pending Requests Section -->
-                    <h5 class="mb-3">Pending Requests</h5>
-                    <div class="requests-container">
-                        {% if pending_requests %}
-                        {% for request in pending_requests %}
-                        <div class="request-card card mb-3 {% if request.get('needs_attention', False) %}needs-attention{% endif %}">
-                            <div class="card-header bg-dark text-light d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0">
-                                    {{ request.title }} 
-                                    {% if request.get('needs_season_selection', False) %}
-                                    <span class="badge badge-info">Season Selection Required</span>
-                                    {% else %}
-                                    - Season {{ request.season }}
-                                    {% endif %}
-                                    {% if request.get('needs_attention', False) %}
-                                    <span class="badge badge-warning">Needs Attention</span>
-                                    {% endif %}
-                                </h5>
-                                <div>
-                                    {% if request.get('source', '') %}
-                                    <span class="badge badge-info">{{ request.get('source_name', request.get('source')|capitalize) }}</span>
-                                    {% endif %}
-                                    {% if request.get('episodes') %}
-                                    <span class="badge badge-secondary">{{ request.episodes|length }} episodes</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="card-body bg-dark text-light">
-                                <div class="banner-wrapper mb-3">
-                                    <img src="{{ sonarr_url }}/api/v3/mediacover/series/{{ request.series_id }}/banner.jpg?apikey={{ config.get('sonarr_api_key', '') }}" 
-                                         alt="Banner for {{ request.title }}" 
-                                         class="img-fluid banner"
-                                         onerror="this.onerror=null; this.src='{{ url_for('static', filename='placeholder-banner.png') }}';">
-                                </div>
-                                
-                                {% if request.get('needs_season_selection', False) %}
-                                <!-- Season Selection UI -->
-                                <div class="text-center">
-                                    <p>This show needs season selection before episodes can be selected.</p>
-                                    <a href="/select-seasons/{{ request.tmdb_id }}" class="btn btn-primary">Select Season</a>
-                                    
-                                    <form action="{{ url_for('process_episode_selection') }}" method="POST" class="mt-3">
-                                        <input type="hidden" name="request_id" value="{{ request.id }}">
-                                        <input type="hidden" name="action" value="cancel">
-                                        <button type="submit" class="btn btn-danger">Cancel Request</button>
-                                    </form>
-                                </div>
-                                {% else %}
-                                <!-- Episode Selection UI -->
-                                <form action="{{ url_for('process_episode_selection') }}" method="POST" class="episode-selection-form">
-                                    <input type="hidden" name="request_id" value="{{ request.id }}">
-                                    <div class="mb-3">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <h6 class="text-light">Episode Selection:</h6>
-                                            <div>
-                                                <button type="button" class="btn btn-sm btn-secondary select-all">Select All</button>
-                                                <button type="button" class="btn btn-sm btn-secondary select-none">Clear All</button>
-                                            </div>
-                                        </div>
-                                        <div class="episode-list row">
-                                            {% for episode in request.episodes %}
-                                            <div class="col-md-4 mb-2">
-                                                <div class="form-check">
-                                                    <input class="form-check-input episode-checkbox" type="checkbox" name="episodes" value="{{ episode.episodeNumber }}" id="ep_{{ request.id }}_{{ episode.episodeNumber }}">
-                                                    <label class="form-check-label text-light" for="ep_{{ request.id }}_{{ episode.episodeNumber }}">
-                                                        {{ episode.episodeNumber }}. {{ episode.title }}
-                                                    </label>
-                                                </div>
-                                            </div>
-                                            {% endfor %}
-                                        </div>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <button type="submit" class="btn btn-primary">Download Selected</button>
-                                        <button type="button" class="btn btn-danger cancel-request">Cancel Request</button>
-                                    </div>
-                                </form>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% endfor %}
-                        {% else %}
-                            <div class="empty-requests-container">
-                                <div class="alert alert-info">No pending requests</div>
-                                {% if last_processed_show %}
-                                    <div class="processing-card card mb-3">
-                                        <div class="card-header bg-dark text-light">
-                                            <h5 class="mb-0">Processing Downloads</h5>
-                                        </div>
-                                        <div class="card-body bg-dark text-light">
-                                            <p>Processing episodes for {{ last_processed_show.title }} - Season {{ last_processed_show.season }}</p>
-                                            <div class="banner-wrapper mb-3">
-                                                <img src="{{ sonarr_url }}/api/v3/mediacover/series/{{ last_processed_show.series_id }}/banner.jpg?apikey={{ config.get('sonarr_api_key', '') }}" 
-                                                     alt="Banner for {{ last_processed_show.title }}" 
-                                                     class="img-fluid banner"
-                                                     onerror="this.onerror=null; this.src='{{ url_for('static', filename='placeholder-banner.png') }}';">
-                                            </div>
-                                            <p class="processing-time">Started {{ last_processed_show.time_ago }}</p>
-                                        </div>
-                                    </div>
-                                {% endif %}
-                            </div>
-                        {% endif %}
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-light">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailsModalLabel">Media Details</h5>
+                <button type="button" class="close text-light" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">×</span>
+                </button>
+            </div>
+            <div class="modal-body" id="detailsModalBody">
+                <div class="row">
+                    <div class="col-5">
+                        <img id="detailsPoster" src="" alt="Poster" class="img-fluid rounded">
+                    </div>
+                    <div class="col-7">
+                        <h5 id="detailsTitle"></h5>
+                        <p id="detailsYear" class="text-muted"></p>
+                        <p id="detailsOverview" class="small"></p>
                     </div>
                 </div>
-
-                <!-- Rule Management Subsection -->
-                <div id="rule_management" class="settings-subsection" style="display: none;">
-                    <h4>Rules</h4>
-                    <form id="settings-form" method="POST" action="{{ url_for('update_settings') }}">
-                        <div class="form-group">
-                            <label for="rule_name">Select Rule:</label>
-                            <select id="rule_name" name="rule_name" class="form-control" onchange="toggleNewRuleName()">
-                                {% for rule_name in config['rules'].keys() %}
-                                <option value="{{ rule_name }}" {{ 'selected' if rule_name == rule else '' }}>{{ rule_name|capitalize }}</option>
-                                {% endfor %}
-                                <option value="add_new">Add New</option>
-                            </select>
-                        </div>
-                        <div class="form-group" id="new_rule_name_group" style="display:none;">
-                            <label for="new_rule_name">New Rule Name:</label>
-                            <input type="text" id="new_rule_name" name="new_rule_name" class="form-control" placeholder="Enter new rule name">
-                        </div>
-                        <div class="form-group">
-                            <label for="get_option">How many more episodes to get?:</label>
-                            <input type="text" id="get_option" name="get_option" placeholder="Enter 'season', 'all', or a number" class="form-control" value="">
-                        </div>
-                        <div class="form-group">
-                            <label for="action_option">Action for Episodes:</label>
-                            <select id="action_option" name="action_option" class="form-control">
-                                <option value="monitor">Monitor</option>
-                                <option value="search">Search</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="keep_watched">How many episodes to keep?:</label>
-                            <input type="text" id="keep_watched" name="keep_watched" placeholder="Enter 'season', 'all', or a number" class="form-control" value="">
-                        </div>
-                        <div class="form-group">
-                            <label for="monitor_watched">Keep monitored if watched:</label>
-                            <select id="monitor_watched" name="monitor_watched" class="form-control">
-                                <option value="true">true</option>
-                                <option value="false">false</option>
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Update Settings</button>
-                    </form>
-                    <form id="delete-rule-form" method="POST" action="{{ url_for('delete_rule') }}" onsubmit="return confirmDeleteRule()">
-                        <input type="hidden" name="rule_name" id="delete_rule_name">
-                        <button type="submit" class="btn btn-danger" id="delete_rule">Delete Rule</button>
-                    </form>
-                    <button class="btn btn-secondary mt-3 settings-button" onclick="showSection('assign_rules')">Assign Rules</button>
-                </div>
-
-                <!-- Profile Settings Subsection -->
-                <div id="profile_settings" class="settings-subsection" style="display: none;">
-                    <h4>Profile Settings</h4>
-                    <form id="profile-settings-form" method="POST" action="{{ url_for('update_profile_settings') }}">
-                        <div class="form-group">
-                            <label for="radarr_quality_profile">Radarr Quality Profile:</label>
-                            <select id="radarr_quality_profile" name="radarr_quality_profile" class="form-control">
-                                <option value="Any" {% if config.get('preferences', {}).get('radarr_quality_profile') == 'Any' %}selected{% endif %}>Any (Use First Available)</option>
-                                {% for profile in radarr_profiles %}
-                                <option value="{{ profile.name }}" {% if config.get('preferences', {}).get('radarr_quality_profile') == profile.name %}selected{% endif %}>{{ profile.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="sonarr_quality_profile">Sonarr Quality Profile:</label>
-                            <select id="sonarr_quality_profile" name="sonarr_quality_profile" class="form-control">
-                                <option value="Any" {% if config.get('preferences', {}).get('sonarr_quality_profile') == 'Any' %}selected{% endif %}>Any (Use First Available)</option>
-                                {% for profile in sonarr_profiles %}
-                                <option value="{{ profile.name }}" {% if config.get('preferences', {}).get('sonarr_quality_profile') == profile.name %}selected{% endif %}>{{ profile.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Save Settings</button>
-                    </form>
-                </div>
-
-                 <!-- Assign Rules Section -->
-                 <div id="assign_rules" class="settings-subsection" style="display: none;">
-                    <h3>Assign/Unassign Rules to Series</h3>
-                    <form id="assign-rules-form" method="POST" action="{{ url_for('assign_rules') }}">
-                        <div class="form-group">
-                            <label for="assign_rule_name">Select Rule:</label>
-                            <select id="assign_rule_name" name="assign_rule_name" class="form-control" onchange="updateCheckboxes()">
-                                <option value="None">None</option>
-                                {% for rule_name in config['rules'].keys() %}
-                                <option value="{{ rule_name }}" {{ 'selected' if rule_name == rule else '' }}>{{ rule_name|capitalize }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="series_list">Select Series:</label>
-                            <div id="series_list" class="checkbox-list">
-                                {% for series in all_series %}
-                                <div class="checkbox-item">
-                                    <input type="checkbox" class="series-checkbox" id="series_{{ series['id'] }}" name="series_ids" value="{{ series['id'] }}" data-rule="{{ series['assigned_rule'] }}">
-                                    <label for="series_{{ series['id'] }}">{{ series['title'] }} ({{ series['assigned_rule'] or 'None' }})</label>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Assign checked shows to above rule</button>
-                        <span class="disclaimer">(will override current assignments)</span>
-                    </form>
-                </div>
-            </section>
-        </main>
-    </div>
-
-    <!-- Details Modal -->
-    <div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark text-light">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="detailsModalLabel">Media Details</h5>
-                    <button type="button" class="close text-light" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">×</span>
-                    </button>
-                </div>
-                <div class="modal-body" id="detailsModalBody">
-                    <div class="row">
-                        <div class="col-5">
-                            <img id="detailsPoster" src="" alt="Poster" class="img-fluid rounded">
-                        </div>
-                        <div class="col-7">
-                            <h5 id="detailsTitle"></h5>
-                            <p id="detailsYear" class="text-muted"></p>
-                            <p id="detailsOverview" class="small"></p>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer" id="detailsModalFooter">
-                    <!-- Buttons will be added dynamically based on content type -->
-                </div>
+            </div>
+            <div class="modal-footer" id="detailsModalFooter">
+                <!-- Buttons will be added dynamically based on content type -->
             </div>
         </div>
     </div>
+</div>
+</div>
 
-    <!-- Scripts -->
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-    <script src="{{ url_for('static', filename='index.js') }}"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            setInterval(function() {
-                const activeElement = document.activeElement;
-                const isUserTyping = activeElement && (activeElement.tagName === 'INPUT' || 
-                                                       activeElement.tagName === 'TEXTAREA' || 
-                                                       activeElement.isContentEditable);
-                if (!isUserTyping) {
-                    const currentTab = document.querySelector('.main-tab:not([style*="display: none"])').id;
-                    const scrollPos = window.scrollY;
-                    localStorage.setItem('lastActiveTab', currentTab);
-                    localStorage.setItem('lastScrollPos', scrollPos);
-                    location.reload();
-                }
-            }, 60000);
-            const lastTab = localStorage.getItem('lastActiveTab');
-            if (lastTab) {
-                showMainTab(lastTab);
-                setTimeout(function() {
-                    const lastScroll = localStorage.getItem('lastScrollPos');
-                    if (lastScroll) {
-                        window.scrollTo(0, parseInt(lastScroll));
-                    }
-                }, 100);
+<!-- JavaScript for the sidebar functionality -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+<!-- Fix Bootstrap autofill overlay errors -->
+<script>
+// Comprehensive fix for Bootstrap autofill overlay errors
+(function() {
+    try {
+        window.bootstrap = window.bootstrap || {};
+        
+        // Create a comprehensive dummy service
+        const dummyService = {
+            domQueryService: {
+                addOrUpdateListeners: () => {},
+                removeListener: () => {},
+                getAllActiveTokens: () => [],
+                get: () => null,
+                set: () => {},
+                has: () => false
+            },
+            addOrUpdateListeners: () => {},
+            removeListener: () => {},
+            getAllActiveTokens: () => [],
+            get: () => null,
+            set: () => {},
+            has: () => false
+        };
+
+        // Safely define properties
+        Object.defineProperties(window.bootstrap, {
+            'domQueryService': {
+                value: dummyService,
+                writable: false,
+                configurable: false,
+                enumerable: true
             }
         });
+
+        console.log("Bootstrap service patch applied");
+    } catch (error) {
+        console.error("Error applying Bootstrap patch:", error);
+    }
+})();
+</script>
+
+<!-- Load your custom scripts -->
+<script src="{{ url_for('static', filename='index.js') }}"></script>
+<script src="{{ url_for('static', filename='plex-watchlist.js') }}"></script>
+<!-- Auto refresh functionality -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto-refresh every 60 seconds, but not during user input
+        let refreshTimer = setInterval(function() {
+            const activeElement = document.activeElement;
+            const isUserTyping = activeElement && (
+                activeElement.tagName === 'INPUT' ||
+                activeElement.tagName === 'TEXTAREA' ||
+                activeElement.isContentEditable
+            );
+            
+            if (!isUserTyping) {
+                const currentTab = document.querySelector('.main-tab:not([style*="display: none"])').id;
+                const scrollPos = window.scrollY;
+                localStorage.setItem('lastActiveTab', currentTab);
+                localStorage.setItem('lastScrollPos', scrollPos);
+                location.reload();
+            }
+        }, 60000);
+
+        // Restore last tab and scroll position
+        const lastTab = localStorage.getItem('lastActiveTab');
+        if (lastTab) {
+            showMainTab(lastTab);
+            setTimeout(function() {
+                const lastScroll = localStorage.getItem('lastScrollPos');
+                if (lastScroll) {
+                    window.scrollTo(0, parseInt(lastScroll));
+                }
+            }, 100);
+        }
+    });
+</script>
+
+<script>
+    // Unified sidebar functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const contentWrapper = document.getElementById('content-wrapper');
+        
+        // Check if a mobile toggle already exists
+        let mobileToggle = document.querySelector('.mobile-sidebar-toggle');
+        
+        // Create mobile toggle button if it doesn't exist
+        if (!mobileToggle && window.innerWidth <= 768) {
+            mobileToggle = document.createElement('button');
+            mobileToggle.className = 'sidebar-toggle mobile-sidebar-toggle';
+            mobileToggle.innerHTML = '<i class="fas fa-bars"></i>';
+            document.body.appendChild(mobileToggle);
+            
+            mobileToggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                sidebar.classList.toggle('expanded');
+                // Keep the hamburger icon consistent, no need to change to X
+            });
+        }
+        
+        // Regular toggle button (in the sidebar header)
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                
+                if (window.innerWidth <= 768) {
+                    // On mobile, toggle between hidden and expanded
+                    sidebar.classList.toggle('expanded');
+                } else {
+                    // On desktop, toggle between normal and collapsed
+                    sidebar.classList.toggle('collapsed');
+                }
+            });
+        }
+        
+        // Submenu toggles
+        document.querySelectorAll('[data-toggle="submenu"]').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.stopPropagation();
+                this.classList.toggle('expanded');
+            });
+        });
+        
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function(e) {
+            if (window.innerWidth <= 768 && sidebar.classList.contains('expanded')) {
+                // Check if the click is outside the sidebar
+                if (!sidebar.contains(e.target) && !e.target.classList.contains('mobile-sidebar-toggle')) {
+                    sidebar.classList.remove('expanded');
+                }
+            }
+        });
+        
+        // Set active menu based on current tab
+        function setActiveMenu(tabId) {
+            // Remove -tab suffix if present
+            const section = tabId.endsWith('-tab') ? tabId.slice(0, -4) : tabId;
+            
+            // Clear all active classes
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Set active class for the selected section
+            const mainItem = document.querySelector(`.nav-item[data-section="${section}"]`);
+            if (mainItem) {
+                mainItem.classList.add('active');
+                
+                // If this is in a submenu, expand the parent
+                const submenuParent = mainItem.closest('.submenu');
+                if (submenuParent) {
+                    const parentToggle = submenuParent.previousElementSibling;
+                    if (parentToggle) {
+                        parentToggle.classList.add('expanded');
+                    }
+                }
+            }
+        }
+        
+        // Initialize with the current active tab
+        const lastActiveTab = localStorage.getItem('lastActiveTab') || 'shows-tab';
+        setActiveMenu(lastActiveTab);
+        
+        // Update active menu when tab changes
+        window.addEventListener('tabChanged', function(e) {
+            setActiveMenu(e.detail.tabId);
+        });
+        
+        // Handle responsive behavior on window resize
+        function handleResponsive() {
+            // Create mobile toggle if needed
+            if (window.innerWidth <= 768 && !document.querySelector('.mobile-sidebar-toggle')) {
+                const newMobileToggle = document.createElement('button');
+                newMobileToggle.className = 'sidebar-toggle mobile-sidebar-toggle';
+                newMobileToggle.innerHTML = '<i class="fas fa-bars"></i>';
+                document.body.appendChild(newMobileToggle);
+                
+                newMobileToggle.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    sidebar.classList.toggle('expanded');
+                    // Keep the hamburger icon consistent
+                });
+                
+                mobileToggle = newMobileToggle;
+            }
+            
+            if (window.innerWidth <= 768) {
+                // On mobile, make sure toggle is visible
+                if (mobileToggle) {
+                    mobileToggle.style.display = 'flex';
+                }
+                
+                // Reset sidebar classes for mobile
+                sidebar.classList.remove('collapsed');
+            } else {
+                // On desktop, hide mobile toggle
+                if (mobileToggle) {
+                    mobileToggle.style.display = 'none';
+                }
+                
+                // Remove mobile-specific classes
+                sidebar.classList.remove('expanded');
+            }
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', handleResponsive);
+        
+        // Initial setup
+        handleResponsive();
+        
+        // Custom event for tab changes
+        window.showMainTab = function(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.main-tab').forEach(tab => {
+                tab.style.display = 'none';
+            });
+            
+            // Show selected tab
+            const selectedTab = document.getElementById(tabId);
+            if (selectedTab) {
+                selectedTab.style.display = 'block';
+            } else {
+                console.error("Tab not found:", tabId);
+                // Fallback to shows tab
+                const showsTab = document.getElementById('shows-tab');
+                if (showsTab) showsTab.style.display = 'block';
+            }
+            
+            // Save the current tab to localStorage
+            localStorage.setItem('lastActiveTab', tabId);
+            
+            // Special handling for settings
+            if (tabId === 'settings-tab') {
+                const lastSubsection = localStorage.getItem('lastSettingsSubsection') || 'rule_management';
+                showSettingsSection(lastSubsection);
+            }
+            
+            // Dispatch custom event for sidebar to update active state
+            window.dispatchEvent(new CustomEvent('tabChanged', { 
+                detail: { tabId: tabId }
+            }));
+            
+            // On mobile, auto-close the sidebar after selection
+            if (window.innerWidth <= 768 && sidebar.classList.contains('expanded')) {
+                sidebar.classList.remove('expanded');
+            }
+        };
+    });
     </script>
-    <script type="application/json" id="config-data">
-        {{ config|tojson|safe }}
-    </script>
-</body>
-</html>
