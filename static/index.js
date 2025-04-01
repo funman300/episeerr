@@ -8,7 +8,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectNoneButtons = document.querySelectorAll('.select-none');
     const cancelRequestButtons = document.querySelectorAll('.cancel-request');
     const directRequestForm = document.getElementById('direct-request-form');
-    
+    const lastActiveTab = localStorage.getItem('lastActiveTab') || 'shows-tab';
+
+    showMainTab(lastActiveTab);
+
     if (directRequestForm) {
         directRequestForm.addEventListener('submit', function(e) {
             e.preventDefault(); // Prevent default form submission
@@ -17,15 +20,29 @@ document.addEventListener('DOMContentLoaded', function() {
             
             fetch(directRequestForm.action, {
                 method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
                 body: formData
             })
             .then(response => {
-                // Redirect to settings tab with requests section
-                window.location.href = '/?section=settings&subsection=requests_section';
+                if (response.redirected) {
+                    window.location.href = response.url;
+                    return;
+                }
+                
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('text/html')) {
+                    window.location.href = '/?section=requests';
+                    return;
+                }
+                
+                // For JSON responses, just redirect to requests
+                window.location.href = '/?section=requests';
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An error occurred while processing your request');
+                window.location.href = '/?section=requests';
             });
         });
     }
@@ -53,11 +70,20 @@ document.addEventListener('DOMContentLoaded', function() {
     if (section) {
         showSection(section, rule);
     }
-    if (message && section === 'settings') {
-        var messageDiv = document.createElement('div');
-        messageDiv.className = 'alert alert-success';
-        messageDiv.textContent = message;
-        document.getElementById(section).prepend(messageDiv);
+    if (message && section) {
+        // Try multiple strategies to find the section element
+        const sectionElement = 
+            document.getElementById(section + '-tab') || 
+            document.getElementById(section);
+        
+        if (sectionElement) {
+            var messageDiv = document.createElement('div');
+            messageDiv.className = 'alert alert-success';
+            messageDiv.textContent = message;
+            sectionElement.prepend(messageDiv);
+        } else {
+            console.warn(`Could not find element for section: ${section}`);
+        }
     }
 
     // Get rule select element
@@ -130,89 +156,42 @@ document.addEventListener('DOMContentLoaded', function() {
             window.open(`${jellyseerrUrl}${discoverPath}`, '_blank');
         });
     }
-    // NEW CODE: Check for pending requests every 30 seconds
-    setInterval(checkForNewRequests, 30000);
-    // Show the determined tab
-    showMainTab(tabToShow);
-    // If we're on the settings tab, restore the last active subsection
-    if (tabToShow === 'settings-tab') {
-        const lastSubsection = subsectionParam || localStorage.getItem('lastSettingsSubsection') || 'service_status';
-        showSettingsSection(lastSubsection);
-        
-        // Initialize rule form if it exists - must do this AFTER showing the settings tab
-        if (document.getElementById('rule_name') && document.getElementById('config-data')) {
-            const initialRule = document.getElementById('rule_name').value;
-            try {
-                loadRule(initialRule);
-            } catch (e) {
-                console.error("Error loading rule:", e);
-            }
-        }
-    }
 
-   
+    // Set up periodic check for new requests
+    setInterval(checkForNewRequests, 30000);
+        
     // After adding content, check if we need to adjust the rows
     adjustScrollableRows();
 });
-// NEW FUNCTION: Check for pending requests
+
+// Function to check for new pending requests
 function checkForNewRequests() {
     // Fetch the current number of pending requests
     fetch('/api/pending-requests/count')
         .then(response => response.json())
         .then(data => {
-            // If there are new requests and we're not already on the settings tab
-            if (data.count > 0 && !document.getElementById('settings-tab').classList.contains('active')) {
-                // Add a pulsing effect to the settings icon if it doesn't already have it
-                const settingsIcon = document.querySelector('.menu-item:nth-child(2)');
-                if (!settingsIcon.classList.contains('has-notifications')) {
-                    settingsIcon.classList.add('has-notifications');
+            // If there are new requests and we're not already on the requests tab
+            if (data.count > 0 && !document.getElementById('requests-tab').classList.contains('active')) {
+                // Add a pulsing effect to the requests icon if it doesn't already have it
+                const requestsIcon = document.querySelector('.nav-item[data-section="requests"]');
+                if (!requestsIcon.classList.contains('has-notifications')) {
+                    requestsIcon.classList.add('has-notifications');
                    
                     // Add notification badge if it doesn't exist
-                    if (!settingsIcon.querySelector('.notification-badge')) {
+                    if (!requestsIcon.querySelector('.notification-badge')) {
                         const badge = document.createElement('span');
                         badge.className = 'notification-badge';
                         badge.textContent = data.count;
-                        settingsIcon.appendChild(badge);
+                        requestsIcon.appendChild(badge);
                     } else {
                         // Update the count
-                        settingsIcon.querySelector('.notification-badge').textContent = data.count;
+                        requestsIcon.querySelector('.notification-badge').textContent = data.count;
                     }
                 }
             }
         })
         .catch(error => console.error('Error checking for requests:', error));
 }
-function showMainTab(tabId) {
-    // Hide all tabs
-    document.querySelectorAll('.main-tab').forEach(tab => {
-        tab.style.display = 'none';
-    });
-    
-    // Show selected tab
-    document.getElementById(tabId).style.display = 'block';
-    
-    // Update menu active states
-    document.querySelectorAll('.menu-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    
-    // Find the menu item that called this function
-    if (tabId === 'shows-tab') {
-        document.querySelector('.menu-item:nth-child(1)').classList.add('active');
-    } else if (tabId === 'settings-tab') {
-        document.querySelector('.menu-item:nth-child(2)').classList.add('active');
-        
-        // If we're showing the settings tab, also show the last active subsection
-        const lastSubsection = localStorage.getItem('lastSettingsSubsection') || 'service_status';
-        showSettingsSection(lastSubsection);
-    } else if (tabId === 'movies-tab') {
-        document.querySelector('.menu-item:nth-child(3)').classList.add('active');
-    }
-    
-    // Save the current tab to localStorage for persistence
-    localStorage.setItem('lastActiveTab', tabId);
-}
-
 
 function loadRule() {
     console.log("Attempting to load rule - START");
@@ -282,31 +261,6 @@ function loadRule() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    console.log("DOMContentLoaded event triggered");
-    
-    const ruleSelect = document.getElementById('rule_name');
-    
-    if (ruleSelect) {
-        console.log("Rule select found, adding event listener");
-        ruleSelect.addEventListener('change', loadRule);
-        
-        // Initial load
-        loadRule();
-    } else {
-        console.warn("Rule select not found during DOMContentLoaded");
-    }
-});
-
-// Fallback method
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log("Fallback DOMContentLoaded triggered");
-    });
-} else {
-    console.log("Document already loaded, calling loadRule directly");
-    loadRule();
-}
 function toggleNewRuleName() {
     const ruleSelect = document.getElementById('rule_name');
     const newRuleNameGroup = document.getElementById('new_rule_name_group');
@@ -342,38 +296,6 @@ function toggleNewRuleName() {
     } else {
         newRuleNameGroup.style.display = 'none';
         loadRule();
-    }
-}
-
-// Ensure DOM is fully loaded before adding event listeners
-document.addEventListener('DOMContentLoaded', function() {
-    const ruleSelect = document.getElementById('rule_name');
-    
-    if (ruleSelect) {
-        ruleSelect.addEventListener('change', loadRule);
-        
-        // Initial load
-        loadRule();
-    }
-});
-
-function toggleNewRuleName() {
-    const ruleSelect = document.getElementById('rule_name');
-    const newRuleNameGroup = document.getElementById('new_rule_name_group');
-    
-    if (ruleSelect.value === 'add_new') {
-        newRuleNameGroup.style.display = 'block';
-        
-        // Reset form fields to default/empty values when creating a new rule
-        document.getElementById('get_option').value = '';
-        document.getElementById('action_option').value = 'monitor';
-        document.getElementById('keep_watched').value = '';
-        document.getElementById('monitor_watched').value = 'false';
-    } else {
-        newRuleNameGroup.style.display = 'none';
-        
-        // Load the rule values when a rule is selected
-        loadRule(ruleSelect.value);
     }
 }
 
@@ -626,42 +548,6 @@ function showDetailsModal(data) {
         });
         modalFooter.appendChild(requestBtn);
 
-        /*
-        // Pilot Only button
-        const pilotBtn = document.createElement('button');
-        pilotBtn.className = 'btn btn-secondary me-2';
-        pilotBtn.textContent = 'Pilot Only';
-        pilotBtn.addEventListener('click', function() {
-            $('#detailsModal').modal('hide');
-            fetch('/api/request/tv', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    tmdbId: data.id,
-                    check_existing: true,
-                    create_season_request: true,
-                    pilot: true
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Pilot request processed. Check requests section.');
-                    window.location.href = '/?section=settings&subsection=requests_section';
-                } else {
-                    alert(`Error: ${data.error || 'Unknown error'}`);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('There was an error processing your request.');
-            });
-        });
-        modalFooter.appendChild(pilotBtn);
-        */
-
         // Jellyseerr Link button
         const jellyseerrBtn = document.createElement('button');
         jellyseerrBtn.className = 'btn btn-secondary';
@@ -679,6 +565,7 @@ function showDetailsModal(data) {
     // Show the modal
     $('#detailsModal').modal('show');
 }
+
 // function to handle show requests
 function requestShow(tmdbId, title) {
     fetch('/api/request/tv', {
@@ -700,7 +587,7 @@ function requestShow(tmdbId, title) {
             } else {
                 alert(`Show "${title}" added. Check requests for season selection.`);
             }
-            window.location.href = '/?section=settings&subsection=requests_section';
+            window.location.href = '/?section=requests';
         } else {
             alert(`Error: ${data.error || 'Unknown error'}`);
         }
@@ -768,38 +655,64 @@ function requestAllSeasons(tmdbId, title) {
     }
 }
 
-function showSection(sectionId) {
-    // First, check if the section exists
-    const element = document.getElementById(sectionId);
+function showSection(sectionId, rule) {
+    console.log("Showing section:", sectionId);
     
-    if (!element) {
-        console.error(`Error: Section with ID "${sectionId}" not found in the DOM`);
-        return; // Exit early if element doesn't exist
-    }
-    
-    // Check if it's a settings subsection
-    if (element.classList.contains('settings-subsection')) {
-        // It's a settings subsection
-        
-        // Make sure we're in the settings tab
+    // If it's a settings subsection
+    if (sectionId === 'rule_management' || sectionId === 'profile_settings' || sectionId === 'assign_rules') {
         showMainTab('settings-tab');
-        
-        // Hide all other settings subsections
-        document.querySelectorAll('.settings-subsection').forEach(section => {
-            section.style.display = 'none';
-        });
-        
-        // Show this settings subsection
-        element.style.display = 'block';
-    } else {
-        // It's a main tab or something else
-        document.querySelectorAll('.main-tab').forEach(tab => {
-            tab.style.display = 'none';
-        });
-        
-        // Show the requested section
-        element.style.display = 'block';
+        showSettingsSection(sectionId);
+        return;
     }
+    
+    // For main sections
+    let tabId = sectionId + '-tab';
+    showMainTab(tabId);
+    
+    // If rule is specified, set the rule dropdown
+    if (rule && document.getElementById('rule_name')) {
+        document.getElementById('rule_name').value = rule;
+        loadRule();
+    }
+}
+
+function showMainTab(tabId) {
+    console.log("Showing tab:", tabId);
+    
+    // Normalize tabId if needed
+    if (!tabId.endsWith('-tab')) {
+        tabId = tabId + '-tab';
+    }
+    
+    // Hide all tabs
+    document.querySelectorAll('.main-tab').forEach(tab => {
+        tab.style.display = 'none';
+    });
+    
+    // Show selected tab
+    const selectedTab = document.getElementById(tabId);
+    if (selectedTab) {
+        selectedTab.style.display = 'block';
+    } else {
+        console.error("Tab not found:", tabId);
+        // Fallback to shows tab
+        const showsTab = document.getElementById('shows-tab');
+        if (showsTab) showsTab.style.display = 'block';
+    }
+    
+    // Save the current tab to localStorage
+    localStorage.setItem('lastActiveTab', tabId);
+    
+    // Special handling for settings
+    if (tabId === 'settings-tab') {
+        const lastSubsection = localStorage.getItem('lastSettingsSubsection') || 'rule_management';
+        showSettingsSection(lastSubsection);
+    }
+    
+    // Dispatch custom event for sidebar to update active state
+    window.dispatchEvent(new CustomEvent('tabChanged', { 
+        detail: { tabId: tabId }
+    }));
 }
 
 // Toggle request form fields based on selected type
@@ -823,6 +736,7 @@ function toggleRequestFields() {
         yearField.style.display = 'block';
     }
 }
+
 function scrollRowLeft(button) {
     const row = button.closest('.row-header').nextElementSibling;
     row.scrollBy({
@@ -843,5 +757,23 @@ window.addEventListener('DOMContentLoaded', (event) => {
     if (window.location.search.indexOf('message=') >= 0) {
         let clean_uri = window.location.protocol + "//" + window.location.host + window.location.pathname;
         window.history.replaceState({}, document.title, clean_uri);
+    }
+});
+
+window.addEventListener('error', function(event) {
+    console.error('Unhandled error:', {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        error: event.error
+    });
+    
+    // Prevent default handling for specific known errors
+    if (event.message.includes('postMessage on disconnected port') || 
+        event.message.includes("can't access property") ||
+        event.message.includes('domQueryService')) {
+        event.preventDefault();
+        return false;
     }
 });

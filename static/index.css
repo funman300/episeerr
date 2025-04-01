@@ -21,10 +21,15 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: var(--background-color);
     color: var(--text-color);
     line-height: 1.6;
     overflow-x: hidden;
+    background-image: url('https://hass.lan/local/backgrounds/background.jpg');
+    background-size: 175%;
+    background-position: calc(100% + 220px) -135px;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-color: #121212;
 }
 
 /* Main Container */
@@ -76,7 +81,7 @@ body {
 
 .menu-item:has(.settings-icon).active .settings-icon {
     border: 2px solid var(--primary-color); /* Blue circular border */
-    border-radius: 50%; /* Ensure it’s circular */
+    border-radius: 50%; /* Ensure it's circular */
 }
 
 .menu-item:hover {
@@ -90,25 +95,10 @@ body {
     margin-top: 0px;
 }
 
-/* Notification badge (unchanged, but included for context) */
-.notification-badge {
-    position: absolute;
-    top: -8px;
-    right: 0;
-    background-color: #e74c3c;
-    color: white;
-    border-radius: 50%;
-    width: 18px;
-    height: 18px;
-    font-size: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
 /* Content Wrapper */
 .content-wrapper {
-    max-width: 100%;
+    overflow-y: auto;
+    height: 100vh; /* Full viewport height */
 }
 
 /* Content Rows */
@@ -157,11 +147,10 @@ body {
     padding-bottom: var(--spacing-sm);
     scroll-behavior: smooth;
     scrollbar-width: none;
+    margin-bottom: 5px;
 }
 
-.scrollable-row::-webkit-scrollbar {
-    display: none;
-}
+
 
 /* Media Items */
 .media-item {
@@ -217,10 +206,18 @@ body {
         margin-bottom: var(--spacing-sm); /* Tighter spacing below menu */
     }
 
-    .media-item {
-        flex: 0 0 calc(33.33% - var(--spacing-sm) * 2 / 3); /* 3 items per row */
-        max-width: calc(33.33% - var(--spacing-sm) * 2 / 3);
+    .row-header h4 {
+        text-align: right;
+        width: 100%;
+        padding-right: 10px;
     }
+    
+    /* Adjust poster sizes to fit more on screen */
+    .media-item {
+        flex: 0 0 calc(33.33% - 8px);
+        max-width: calc(33.33% - 8px);
+    }
+
 
     .content-row {
         height: calc((100vw / 3) * 1.5 + var(--spacing-md) * 2); /* Poster height + header space */
@@ -241,11 +238,19 @@ body {
 /* Desktop (768px and up) - 7 posters across */
 @media (min-width: 768px) {
     .media-item {
-        flex: 0 0 calc((100% - 15px * 2 - var(--spacing-sm) * 6) / 7); /* 7 items, account for container padding */
-        max-width: calc((100% - 15px * 2 - var(--spacing-sm) * 6) / 7);
+        flex: 0 0 calc(16.666% - 6px); /* Show 6 items per row instead of 7 */
+        max-width: calc(16.666% - 6px);
+        margin: 3px;
     }
-
-    .scrollable-row {
-        gap: var(--spacing-md);
+    
+    /* Make posters a bit smaller with a fixed height */
+    .poster-wrapper {
+        height: 240px; /* Fixed height for desktop */
+    }
+    
+    /* Make sure content rows have proper spacing */
+    .content-row {
+        margin-bottom: 15px;
+        max-height: 290px; /* Limit height to fit 3 rows on screen */
     }
 }
