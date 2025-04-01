@@ -140,12 +140,15 @@ def connect_to_plex():
         if 'MediaContainer' not in watchlist:
             return jsonify({"success": False, "message": "Invalid Plex token"}), 400
             
-        # Save token to config
+        # Save token to .env file instead of config
+        with open('.env', 'a') as f:
+            f.write(f"\nPLEX_TOKEN={plex_token}\n")
+        
+        # Update config to mark Plex as connected
         config = load_config()
         if 'plex' not in config:
             config['plex'] = {}
             
-        config['plex']['token'] = plex_token
         config['plex']['connected'] = True
         config['plex']['auto_download'] = False  # Default to off
         config['plex']['last_sync'] = datetime.now().isoformat()
@@ -163,8 +166,8 @@ def connect_to_plex():
 @app.route('/api/plex/watchlist')
 def get_plex_watchlist():
     try:
-        config = load_config()
-        plex_token = config.get('plex', {}).get('token', '')
+        # Read Plex token directly from .env
+        plex_token = os.getenv('PLEX_TOKEN', '')
        
         if not plex_token:
             return jsonify({"success": False, "message": "Plex not connected"}), 400
@@ -288,32 +291,7 @@ def get_plex_watchlist():
         app.logger.error(f"Error fetching Plex watchlist: {str(e)}")
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route('/api/plex/recommendations', methods=['GET'])
-def get_plex_recommendations():
-    try:
-        config = load_config()
-        plex_token = config.get('plex', {}).get('token', '')
-        
-        if not plex_token:
-            return jsonify({"success": False, "message": "Plex not connected"}), 400
-        
-        plex_api = plex_utils.PlexWatchlistAPI(plex_token)
-        recommendations = plex_api.get_recommendations()
-        
-        # If we couldn't get recommendations from Plex, log it
-        if not recommendations:
-            app.logger.warning("No recommendations found from Plex")
-        
-        return jsonify({
-            'success': True,
-            'recommendations': recommendations
-        })
-    except Exception as e:
-        app.logger.error(f"Error getting recommendations: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f"Error: {str(e)}"
-        })
+
 def cleanup_config_rules():
     """Remove series from rules that no longer exist in Sonarr."""
     try:
@@ -381,34 +359,7 @@ def cleanup_config_rules():
 
 
 
-@app.route('/api/plex/sync', methods=['POST'])
-def sync_plex_watchlist():
-    """Force a refresh of the Plex watchlist data."""
-    try:
-        config = load_config()
-        plex_token = config.get('plex', {}).get('token', '')
-        
-        if not plex_token:
-            return jsonify({"success": False, "message": "Plex not connected"}), 400
-            
-        plex_api = plex_utils.PlexWatchlistAPI(plex_token)
-        success = plex_api.save_watchlist_data()
-        
-        if success:
-            # Update last sync time in config
-            config['plex']['last_sync'] = datetime.now().isoformat()
-            save_config(config)
-            
-            return jsonify({
-                "success": True, 
-                "message": "Plex watchlist refreshed successfully"
-            })
-        else:
-            return jsonify({"success": False, "message": "Failed to refresh watchlist"}), 500
-            
-    except Exception as e:
-        app.logger.error(f"Error refreshing Plex watchlist: {str(e)}")
-        return jsonify({"success": False, "message": str(e)}), 500
+
     
 @app.route('/api/tmdb/filtered/tv')
 def tmdb_filtered_tv():
