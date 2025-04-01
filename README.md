@@ -4,9 +4,9 @@ Dev branch is developmental, consider it beta
 [![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/vansmak)
 
 
-🎯 Unprecedented Episode Management
-OCDarr isn't just another media management tool—it's a precision instrument for curating your media library with unparalleled granularity.
-🔬 Rule-Based Episode Control
+🎯 Episode Management and arr consolidation
+OCDarr isn't just another media management tool—it's a precision instrument for curating your sonarr library with granularity.
+🔬 Rule-Based Episode Control, the heart of OCDarr
 Most media management tools operate on an all-or-nothing approach. OCDarr revolutionizes this with its dynamic, per-show rule system:
 
 > Granular Episode Selection: Choose exactly which episodes you want
