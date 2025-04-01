@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from api.jellyseerr_api import JellyseerrAPI
 import tmdb_utils
+import plex_utils
 
 app = Flask(__name__)
 
@@ -124,6 +125,291 @@ def check_service_status(url):
     
     return "Offline"
 
+@app.route('/api/plex/connect', methods=['POST'])
+def connect_to_plex():
+    try:
+        plex_token = request.form.get('plex_token', '')
+        
+        if not plex_token:
+            return jsonify({"success": False, "message": "Plex token is required"}), 400
+            
+        # Test the token
+        plex_api = plex_utils.PlexWatchlistAPI(plex_token)
+        watchlist = plex_api.get_watchlist()
+        
+        if 'MediaContainer' not in watchlist:
+            return jsonify({"success": False, "message": "Invalid Plex token"}), 400
+            
+        # Save token to config
+        config = load_config()
+        if 'plex' not in config:
+            config['plex'] = {}
+            
+        config['plex']['token'] = plex_token
+        config['plex']['connected'] = True
+        config['plex']['auto_download'] = False  # Default to off
+        config['plex']['last_sync'] = datetime.now().isoformat()
+        
+        save_config(config)
+        
+        # Sync watchlist
+        plex_api.save_watchlist_data()
+        
+        return jsonify({"success": True, "message": "Connected to Plex successfully"})
+    except Exception as e:
+        app.logger.error(f"Error connecting to Plex: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/plex/watchlist')
+def get_plex_watchlist():
+    try:
+        config = load_config()
+        plex_token = config.get('plex', {}).get('token', '')
+       
+        if not plex_token:
+            return jsonify({"success": False, "message": "Plex not connected"}), 400
+           
+        plex_api = plex_utils.PlexWatchlistAPI(plex_token)
+        watchlist_data = plex_api.load_watchlist_data()
+       
+        # Get existing Sonarr/Radarr series
+        sonarr_preferences = sonarr_utils.load_preferences()
+        sonarr_series = sonarr_utils.get_series_list(sonarr_preferences)
+        sonarr_tmdb_ids = set(str(series.get('tmdbId')) for series in sonarr_series if series.get('tmdbId'))
+       
+        radarr_preferences = radarr_utils.load_preferences()
+        radarr_movies = radarr_utils.get_movie_list(radarr_preferences)
+        radarr_tmdb_ids = set(str(movie.get('tmdbId')) for movie in radarr_movies if movie.get('tmdbId'))
+       
+        # Get all items
+        all_items = watchlist_data.get('items', [])
+        
+        # Debug
+        print(f"Watchlist items: {len(all_items)}")
+        for item in all_items:
+            print(f"Item: {item.get('title')}, Type: {item.get('type')}, TMDB ID: {item.get('tmdb_id')}")
+        
+        # Categorize items
+        watchlist_categories = {
+            'tv_in_watchlist': [],
+            'tv_not_in_arr': [],
+            'movie_in_watchlist': [],
+            'movie_not_in_arr': []
+        }
+       
+        for item in all_items:
+            tmdb_id = str(item.get('tmdb_id', ''))
+            item_type = item.get('type')
+            
+            if not tmdb_id or not item_type:
+                print(f"Skipping item with missing data: {item}")
+                continue
+            
+            if item_type == 'tv':
+                # Add to tv_in_watchlist if it's in Sonarr
+                if tmdb_id in sonarr_tmdb_ids:
+                    watchlist_categories['tv_in_watchlist'].append(item)
+                else:
+                    watchlist_categories['tv_not_in_arr'].append(item)
+                    
+                # For testing: Add all TV items to not_in_arr to ensure UI works
+                watchlist_categories['tv_not_in_arr'].append(item)
+            elif item_type == 'movie':
+                # Add to movie_in_watchlist if it's in Radarr
+                if tmdb_id in radarr_tmdb_ids:
+                    watchlist_categories['movie_in_watchlist'].append(item)
+                else:
+                    watchlist_categories['movie_not_in_arr'].append(item)
+                    
+                # For testing: Add all movie items to not_in_arr to ensure UI works
+                watchlist_categories['movie_not_in_arr'].append(item)
+        
+        # Get library stats
+        library_sections = plex_api.get_library_sections()
+        library_stats = {
+            "movies": 0,
+            "tv_shows": 0
+        }
+        
+        print(f"Library sections: {library_sections}")
+        
+        # Get library counts
+        if library_sections.get("movie"):
+            try:
+                movie_url = f"http://192.168.254.205:32400/library/sections/{library_sections['movie']}/all"
+                movie_response = requests.get(movie_url, headers=plex_api.get_headers())
+                if movie_response.ok:
+                    movie_data = movie_response.json()
+                    library_stats["movies"] = movie_data.get("MediaContainer", {}).get("size", 0)
+                    print(f"Movie count: {library_stats['movies']}")
+            except Exception as e:
+                app.logger.error(f"Error getting movie count: {str(e)}")
+        
+        if library_sections.get("tv"):
+            try:
+                tv_url = f"http://192.168.254.205:32400/library/sections/{library_sections['tv']}/all"
+                tv_response = requests.get(tv_url, headers=plex_api.get_headers())
+                if tv_response.ok:
+                    tv_data = tv_response.json()
+                    library_stats["tv_shows"] = tv_data.get("MediaContainer", {}).get("size", 0)
+                    print(f"TV count: {library_stats['tv_shows']}")
+            except Exception as e:
+                app.logger.error(f"Error getting TV show count: {str(e)}")
+        
+        # Count watchlist items by type
+        watchlist_stats = {
+            "movies": len([item for item in all_items if item.get("type") == "movie"]),
+            "tv_shows": len([item for item in all_items if item.get("type") == "tv"])
+        }
+        
+        print(f"Watchlist stats: {watchlist_stats}")
+       
+        # Prepare response
+        response_data = {
+            'success': True,
+            'watchlist': {
+                'categories': watchlist_categories,
+                'last_updated': watchlist_data.get('last_updated'),
+                'count': len(all_items),
+                'stats': {
+                    'library_stats': library_stats,
+                    'watchlist_stats': watchlist_stats
+                }
+            }
+        }
+        
+        # Debug - print category counts
+        for category, items in watchlist_categories.items():
+            print(f"Category {category}: {len(items)} items")
+       
+        return jsonify(response_data)
+   
+    except Exception as e:
+        app.logger.error(f"Error fetching Plex watchlist: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/plex/recommendations', methods=['GET'])
+def get_plex_recommendations():
+    try:
+        config = load_config()
+        plex_token = config.get('plex', {}).get('token', '')
+        
+        if not plex_token:
+            return jsonify({"success": False, "message": "Plex not connected"}), 400
+        
+        plex_api = plex_utils.PlexWatchlistAPI(plex_token)
+        recommendations = plex_api.get_recommendations()
+        
+        # If we couldn't get recommendations from Plex, log it
+        if not recommendations:
+            app.logger.warning("No recommendations found from Plex")
+        
+        return jsonify({
+            'success': True,
+            'recommendations': recommendations
+        })
+    except Exception as e:
+        app.logger.error(f"Error getting recommendations: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f"Error: {str(e)}"
+        })
+def cleanup_config_rules():
+    """Remove series from rules that no longer exist in Sonarr."""
+    try:
+        # Load the current configuration
+        config = load_config()
+        
+        # Load Sonarr preferences
+        sonarr_preferences = sonarr_utils.load_preferences()
+        headers = {
+            'X-Api-Key': sonarr_preferences['SONARR_API_KEY'],
+            'Content-Type': 'application/json'
+        }
+        sonarr_url = sonarr_preferences['SONARR_URL']
+        
+        # Fetch all series from Sonarr
+        series_response = requests.get(f"{sonarr_url}/api/v3/series", headers=headers)
+        
+        if not series_response.ok:
+            app.logger.error("Failed to fetch series from Sonarr during config cleanup")
+            return
+        
+        # Get set of existing series IDs as strings
+        existing_series_ids = set(str(series['id']) for series in series_response.json())
+        
+        # Track removed series for logging
+        removed_series = {}
+        
+        # Iterate through all rules
+        for rule_name, rule_details in config['rules'].items():
+            # Filter out series IDs that no longer exist in Sonarr
+            original_series = rule_details.get('series', [])
+            updated_series = [
+                series_id for series_id in original_series 
+                if series_id in existing_series_ids
+            ]
+            
+            # Track removed series
+            if len(updated_series) != len(original_series):
+                removed_series[rule_name] = [
+                    sid for sid in original_series 
+                    if sid not in updated_series
+                ]
+            
+            # Update the rule's series list
+            rule_details['series'] = updated_series
+        
+        # Remove empty rules
+        config['rules'] = {
+            rule: details for rule, details in config['rules'].items() 
+            if details.get('series')
+        }
+        
+        # Save the updated configuration
+        save_config(config)
+        
+        # Log removed series
+        for rule, series_list in removed_series.items():
+            app.logger.info(f"Cleaned up rule '{rule}': Removed series IDs {series_list}")
+        
+        app.logger.info("Completed configuration rules cleanup")
+    
+    except Exception as e:
+        app.logger.error(f"Error during config rules cleanup: {str(e)}", exc_info=True)
+    
+
+
+
+@app.route('/api/plex/sync', methods=['POST'])
+def sync_plex_watchlist():
+    """Force a refresh of the Plex watchlist data."""
+    try:
+        config = load_config()
+        plex_token = config.get('plex', {}).get('token', '')
+        
+        if not plex_token:
+            return jsonify({"success": False, "message": "Plex not connected"}), 400
+            
+        plex_api = plex_utils.PlexWatchlistAPI(plex_token)
+        success = plex_api.save_watchlist_data()
+        
+        if success:
+            # Update last sync time in config
+            config['plex']['last_sync'] = datetime.now().isoformat()
+            save_config(config)
+            
+            return jsonify({
+                "success": True, 
+                "message": "Plex watchlist refreshed successfully"
+            })
+        else:
+            return jsonify({"success": False, "message": "Failed to refresh watchlist"}), 500
+            
+    except Exception as e:
+        app.logger.error(f"Error refreshing Plex watchlist: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500
+    
 @app.route('/api/tmdb/filtered/tv')
 def tmdb_filtered_tv():
     """Get filtered TV shows using TMDB API directly."""
@@ -337,6 +623,7 @@ def radarr_request():
     except Exception as e:
         app.logger.error(f"Error requesting movie: {str(e)}", exc_info=True)
         return jsonify({"success": False, "message": str(e)}), 500
+    
 @app.route('/api/process-selected-episodes', methods=['POST'])
 def process_selected_episodes_api():
     """Process selected episodes without creating a new request."""
@@ -479,6 +766,7 @@ def process_selected_episodes_api():
     except Exception as e:
         app.logger.error(f"Error processing selected episodes: {str(e)}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
+    
 @app.route('/select-episodes/<tmdb_id>')
 def select_episodes(tmdb_id):
     """Show episode selection UI for a TV show."""
@@ -565,7 +853,7 @@ def process_episode_selection():
                     app.logger.error(f"Error removing request file: {str(e)}")
             
             # Redirect to the home page with appropriate message
-            return redirect(url_for('home', section='settings', subsection='requests_section', 
+            return redirect(url_for('home', section='requests', 
                           message=f"Request for {series_title} cancelled"))
         
         # Convert episode numbers to integers
@@ -634,15 +922,15 @@ def process_episode_selection():
             modified_episeerr.check_and_cancel_unmonitored_downloads()
             
             # Redirect to the home page instead of returning JSON
-            return redirect(url_for('home', section='settings', subsection='requests_section', 
+            return redirect(url_for('home', section='requests', 
                            message=f"Processing {len(episode_numbers)} episodes for {series_title}"))
         else:
-            return redirect(url_for('home', section='settings', subsection='requests_section', 
+            return redirect(url_for('home', section='requests', 
                           message=f"Failed to process episodes for {series_title}"))
         
     except Exception as e:
         app.logger.error(f"Error processing episode selection: {str(e)}", exc_info=True)
-        return redirect(url_for('home', section='settings', subsection='requests_section', 
+        return redirect(url_for('home', section='requests', 
                       message="An error occurred while processing episodes"))
     
 @app.route('/')
@@ -730,8 +1018,6 @@ def home():
     for series in all_series:
         series['assigned_rule'] = rules_mapping.get(str(series['id']), 'None')
     
-    
-    
     # Add the API keys to the config object so they can be used in templates
     config['sonarr_api_key'] = SONARR_API_KEY
     config['radarr_api_key'] = RADARR_API_KEY
@@ -767,14 +1053,27 @@ def home():
                         all_series=all_series,
                         sonarr_url=SONARR_URL,
                         radarr_url=RADARR_URL,
-                        jellyseerr_url=JELLYSEERR_URL,  # Add this line
+                        jellyseerr_url=JELLYSEERR_URL,
                         rule=request.args.get('rule', 'full_seasons'),
                         pending_requests=pending_requests,
                         has_pending_requests=has_pending_requests,
                         radarr_profiles=radarr_profiles,
                         sonarr_profiles=sonarr_profiles,
                         last_processed_show=last_processed_show)
-
+                     
+@app.route('/api/pending-requests/count')
+def pending_requests_count():
+    """Get the count of pending requests."""
+    try:
+        count = 0
+        for filename in os.listdir(REQUESTS_DIR):
+            if filename.endswith('.json'):
+                count += 1
+                
+        return jsonify({"count": count})
+    except Exception as e:
+        app.logger.error(f"Error counting pending requests: {str(e)}")
+        return jsonify({"count": 0})
 @app.route('/api/request/tv', methods=['POST'])
 def request_tv_show():
     """Handle TV show requests directly to Sonarr."""
@@ -849,10 +1148,14 @@ def process_direct_request():
     try:
         request_input = request.form.get('request_input', '').strip()
         media_type = request.form.get('media_type', 'auto')
-       
+
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
         if not request_input:
-            return redirect(url_for('home', section='settings', subsection='requests_section', 
-                          message="Error: Request input is required"))
+            if is_ajax:
+                return jsonify({"success": False, "message": "Request input is required"}), 400
+            else:
+                return redirect(url_for('home', section='requests', message="Error: Request input is required"))
        
         # Simplified pattern for TV show season: "Show Name S01" or "Show Name Season 1"
         season_pattern = re.compile(r'(.+?)\s+[sS](\d{1,2})$|(.+?)\s+[sS]eason\s*(\d{1,2})$')
@@ -870,7 +1173,7 @@ def process_direct_request():
             results = search_results.get('results', [])
             
             if not results:
-                return redirect(url_for('home', section='settings', subsection='requests_section', 
+                return redirect(url_for('home', section='requests', 
                               message=f"Error: No TV show found with title: {show_title}"))
             
             # Use the first result
@@ -890,7 +1193,7 @@ def process_direct_request():
             root_folder_response = requests.get(f"{sonarr_url}/api/v3/rootfolder", headers=headers)
             root_folders = root_folder_response.json()
             if not root_folders:
-                return redirect(url_for('home', section='settings', subsection='requests_section', 
+                return redirect(url_for('home', section='requests', 
                               message="Error: No root folders configured in Sonarr"))
             root_folder = root_folders[0]['path']
             
@@ -898,7 +1201,7 @@ def process_direct_request():
             profile_response = requests.get(f"{sonarr_url}/api/v3/qualityprofile", headers=headers)
             profiles = profile_response.json()
             if not profiles:
-                return redirect(url_for('home', section='settings', subsection='requests_section', 
+                return redirect(url_for('home', section='requests', 
                               message="Error: No quality profiles configured in Sonarr"))
             quality_profile_id = profiles[0]['id']
             
@@ -911,7 +1214,7 @@ def process_direct_request():
             series_results = lookup_response.json()
             
             if not series_results:
-                return redirect(url_for('home', section='settings', subsection='requests_section', 
+                return redirect(url_for('home', section='requests', 
                               message=f"Error: Failed to find series in Sonarr lookup"))
             
             series = series_results[0]
@@ -935,20 +1238,23 @@ def process_direct_request():
             add_response = requests.post(f"{sonarr_url}/api/v3/series", headers=headers, json=series_to_add)
             
             if not add_response.ok:
-                return redirect(url_for('home', section='settings', subsection='requests_section', 
+                return redirect(url_for('home', section='requests', 
                               message=f"Error: Failed to add series to Sonarr: {add_response.text}"))
             
-            return redirect(url_for('home', section='settings', subsection='requests_section', 
+            return redirect(url_for('home', section='requests', 
                           message=f"Added '{show_title}' to Sonarr"))
         
+        if is_ajax:
+            return jsonify({"success": True, "message": f"Added '{show_title}' to Sonarr"})
         else:
-            return redirect(url_for('home', section='settings', subsection='requests_section', 
-                          message="Error: Could not determine media type from request input."))
-            
+            return redirect(url_for('home', section='requests', message=f"Added '{show_title}' to Sonarr"))
+           
     except Exception as e:
         app.logger.error(f"Error processing direct request: {str(e)}", exc_info=True)
-        return redirect(url_for('home', section='settings', subsection='requests_section', 
-                      message=f"Error: {str(e)}"))
+        if is_ajax:
+            return jsonify({"success": False, "message": str(e)}), 500
+        else:
+            return redirect(url_for('home', section='requests', message=f"Error: {str(e)}"))
 
 def cleanup_config_rules():
     """Remove series from rules that no longer exist in Sonarr."""
@@ -1194,6 +1500,33 @@ def process_sonarr_webhook():
         app.logger.error(f"Error processing Sonarr webhook: {str(e)}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
     
+@app.route('/api/new-requests-since', methods=['GET'])
+def check_new_requests_since():
+    # Get the timestamp from the query parameter
+    since_timestamp = request.args.get('since', 0, type=int)
+    
+    new_requests = []
+    for filename in os.listdir(REQUESTS_DIR):
+        if filename.endswith('.json'):
+            try:
+                with open(os.path.join(REQUESTS_DIR, filename), 'r') as f:
+                    request_data = json.load(f)
+                    created_at = request_data.get('created_at', 0)
+                    
+                    if created_at > since_timestamp:
+                        new_requests.append({
+                            'id': request_data.get('id'),
+                            'title': request_data.get('title'),
+                            'created_at': created_at
+                        })
+            except Exception as e:
+                app.logger.error(f"Error reading request file {filename}: {str(e)}")
+    
+    return jsonify({
+        "hasNewRequests": len(new_requests) > 0,
+        "newRequests": new_requests,
+        "latestTimestamp": int(time.time()) if new_requests else since_timestamp
+    })    
 @app.route('/seerr-webhook', methods=['POST'])
 def process_seerr_webhook():
     """Handle incoming Jellyseerr webhooks - cancel requests with episodes tag."""
@@ -1444,7 +1777,8 @@ def initialize_episeerr():
 if __name__ == '__main__':
     # Clean up invalid requests
     cleanup_invalid_requests()
-    
+    # Call config rules cleanup at startup
+    cleanup_config_rules()
     # Call initialization function before running the app
     initialize_episeerr()
     

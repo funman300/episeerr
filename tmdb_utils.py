@@ -34,7 +34,21 @@ def get_tmdb_endpoint(endpoint, params=None):
     except Exception as e:
         print(f"Exception during API request: {str(e)}")
         return {'results': []}
+def get_movie_details(tmdb_id):
+    """
+    Get detailed movie information from TMDB by its ID
+    :param tmdb_id: TMDB movie ID
+    :return: Dictionary of movie details
+    """
+    return get_tmdb_endpoint(f"movie/{tmdb_id}")
 
+def get_tv_show_details(tmdb_id):
+    """
+    Get detailed TV show information from TMDB by its ID
+    :param tmdb_id: TMDB TV show ID
+    :return: Dictionary of TV show details
+    """
+    return get_tmdb_endpoint(f"tv/{tmdb_id}")
 def is_talk_show(title):
     """Check if a show title appears to be a talk show or similar format."""
     keywords = [
@@ -207,6 +221,29 @@ def get_quality_tv_shows():
     
     # Return more shows for better display (up to 40)
     return {'results': filtered_results[:14]}
+    
+def get_recommendations_by_genre(genre_ids, media_type='movie'):
+    """Get recommendations based on genres."""
+    try:
+        params = {
+            'api_key': TMDB_API_KEY,
+            'language': 'en-US',
+            'sort_by': 'popularity.desc',
+            'with_genres': ','.join(str(g) for g in genre_ids),
+            'page': 1
+        }
+        
+        endpoint = 'discover/movie' if media_type == 'movie' else 'discover/tv'
+        
+        response = requests.get(f"{TMDB_BASE_URL}/{endpoint}", params=params)
+        if response.ok:
+            return response.json()
+        else:
+            logger.error(f"Failed to get {media_type} recommendations: {response.status_code}")
+            return {'results': []}
+    except Exception as e:
+        logger.error(f"Error getting {media_type} recommendations: {str(e)}")
+        return {'results': []}
 def search_tv_shows(query):
     """Search for TV shows using TMDB API."""
     return get_tmdb_endpoint("search/tv", {

@@ -4,6 +4,32 @@ import logging
 import json
 from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
+
+# Define log paths
+LOG_PATH = os.getenv('LOG_PATH', '/app/logs/app.log')
+MISSING_LOG_PATH = os.getenv('MISSING_LOG_PATH', '/app/logs/missing.log')
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_PATH),
+        logging.StreamHandler()  # Optional: adds console logging
+    ]
+)
+
+# Create loggers
+logger = logging.getLogger(__name__)
+missing_logger = logging.getLogger('missing')
+
+# Add file handler for missing logger
+missing_handler = logging.FileHandler(MISSING_LOG_PATH)
+missing_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+missing_logger.addHandler(missing_handler)
+
 # Load settings from a JSON configuration file
 def load_config():
     config_path = os.getenv('CONFIG_PATH', '/app/config/config.json')
@@ -15,9 +41,6 @@ def load_config():
     return config
 
 config = load_config()
-
-# Load environment variables
-load_dotenv()
 
 # Define global variables based on environment settings
 SONARR_URL = os.getenv('SONARR_URL')
@@ -36,17 +59,7 @@ missing_handler = logging.FileHandler(MISSING_LOG_PATH)
 missing_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 missing_logger.addHandler(missing_handler)
 
-def send_webhook():
-    """Send a webhook request."""
-    url = "http://192.168.254.64:8123/api/webhook/wakeoffice"
-    try:
-        response = requests.post(url)
-        if response.status_code == 200:
-            logging.info("Webhook request sent successfully.")
-        else:
-            logging.error(f"Failed to send webhook request. Status code: {response.status_code}")
-    except Exception as e:
-        logging.error(f"Failed to send webhook request: {str(e)}")
+
 
 def get_server_activity():
     """Read current viewing details from Tautulli webhook stored data."""
@@ -239,6 +252,42 @@ def process_episodes_based_on_rules(series_id, season_number, episode_number, ru
     if rule['keep_watched'] != "all":
         keep_episode_ids = next_episode_ids + [last_watched_id]
         delete_old_episodes(series_id, keep_episode_ids, rule)
+def process_new_series_from_watchlist(series_id, rule):
+    """
+    Process a newly added series from watchlist based on rule parameters.
+    """
+    # Fetch all episodes for the series
+    all_episodes = fetch_all_episodes(series_id)
+    
+    # Sort first season episodes by episode number
+    first_season_episodes = sorted(
+        [ep for ep in all_episodes if ep['seasonNumber'] == 1], 
+        key=lambda x: x['episodeNumber']
+    )
+    
+    # Select episodes based on get_option
+    if rule['get_option'] == 'all':
+        # All episodes in the first season
+        episode_ids = [ep['id'] for ep in first_season_episodes]
+    
+    elif rule['get_option'] == 'season':
+        # All episodes in the first season
+        episode_ids = [ep['id'] for ep in first_season_episodes]
+    
+    else:
+        try:
+            # Treat as number of episodes to get
+            num_episodes = int(rule['get_option'])
+            episode_ids = [ep['id'] for ep in first_season_episodes[:num_episodes]]
+        except ValueError:
+            # Fallback to first episode if invalid input
+            episode_ids = [first_season_episodes[0]['id']] if first_season_episodes else []
+    
+    # Monitor or search selected episodes
+    if episode_ids:
+        monitor_or_search_episodes(episode_ids, rule['action_option'])
+    
+    return episode_ids
 
 
 def main():

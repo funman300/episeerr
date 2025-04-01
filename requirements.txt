@@ -13,4 +13,5 @@ certifi==2024.2.2
 charset-normalizer==3.3.2
 idna==3.6
 packaging==24.0
-urllib3==2.2.1
+urllib3==2.2.
+plexapi==4.15.2
