@@ -4,9 +4,25 @@ Dev branch is developmental, consider it beta
 [![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/vansmak)
 
 
-🎯 Episode Management and arr consolidation
-OCDarr isn't just another media management tool—it's a precision instrument for curating your sonarr library with granularity.
-🔬 Rule-Based Episode Control, the heart of OCDarr
+## Navigation Features 
+
+📺 **Shows**  
+Browse your series collection with intuitive displays of recently added and upcoming episodes.
+
+🎬 **Movies**  
+Manage your movie library with easy access to recently added titles and missing content.
+
+⬇️ **Requests**  
+Streamlined interface for adding new content requests with season and episode-level precision.
+
+▶️ **Plex Watchlist**  
+Plex watchlist and stats, see whats missing
+
+⚙️ **Settings**  
+Choose default download profiles and rule configuration.
+
+🔬 **Rule-Based Episode Control**  
+The heart of OCDarr - create custom rules to determine exactly how many episodes to monitor, search for, and retain.
 Most media management tools operate on an all-or-nothing approach. OCDarr revolutionizes this with its dynamic, per-show rule system:
 
 > Granular Episode Selection: Choose exactly which episodes you want
