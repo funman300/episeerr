@@ -159,16 +159,15 @@ docker-compose up -d --build
 Environment Variables
 Create a .env file:
 ```
-SONARR_URL=http://sonarraddress
-SONARR_API_KEY=your_sonarr_api_key
-
-JELLYSEERR_URL=http://jellyoroverseeraddress #LEAVE LABEL AS JELLYSEER BUT USE YOU OVERSEER URL AND API
-JELLYSEERR_API_KEY=jellyseeorOrOverseerkey
-
-RADARR_URL=http://radarraddress
-RADARR_API_KEY=radarrkey
-
-TMDB_API_KEY=reallylongkey
+SONARR_URL=url:port
+SONARR_API_KEY=YOUR_SONARR_API_KEY_HERE 
+JELLYSEERR_URL=url:port #LEAVE LABEL AS JELLYSEER BUT USE YOU OVERSEER URL AND API#LEAVE LABEL AS JELLYSEER BUT USE YOU OVERSEER URL AND API
+JELLYSEERR_API_KEY=api_key
+RADARR_URL=url:port
+RADARR_API_KEY=api_key
+TMDB_API_KEY=reallylongtmdbkey
+PLEX_URL=plex_url:port
+PLEX_TOKEN=plex_token
 
 ```
 Docker Compose
@@ -186,6 +185,8 @@ services:
       - RADARR_API_KEY=${RADARR_API_KEY}
       - TMDB_API_KEY=${TMDB_API_KEYL}
       - CONFIG_PATH=/app/config/config.json
+      - PLEX_URL=plex_url:port
+      - PLEX_TOKEN=plex_token
     env_file:
       - .env
     volumes:
