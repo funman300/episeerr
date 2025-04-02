@@ -163,6 +163,10 @@ Create a .env file:
   TMDB_API_KEY=reallylongtmdbkey
   PLEX_URL=plex_url:port
   PLEX_TOKEN=plex_token
+  MAX_TMDB_ITEMS=24
+  MAX_SHOWS_ITEMS=24
+  MAX_MOVIES_ITEMS=24
+  
 ```
 Docker Compose
 ```
@@ -171,16 +175,19 @@ services:
   ocdarr:
     image: vansmak/ocdarr:amd64_dev
     environment:
-      - SONARR_URL=${SONARR_URL}
-      - SONARR_API_KEY=${SONARR_API_KEY}
-      - JELLYSEERR_URL=${JELLYSEERR_URL}
-      - JELLYSEERR_API_KEY=${JELLYSEERR_API_KEY}
-      - RADARR_URL=${RADARR_URL}
-      - RADARR_API_KEY=${RADARR_API_KEY}
-      - TMDB_API_KEY=${TMDB_API_KEYL}
-      - CONFIG_PATH=/app/config/config.json
-      - PLEX_URL=plex_url:port
-      - PLEX_TOKEN=plex_token
+      - SONARR_URL: ${SONARR_URL}
+      - SONARR_API_KEY: ${SONARR_API_KEY}
+      - JELLYSEERR_URL: ${JELLYSEERR_URL}
+      - JELLYSEERR_API_KEY: ${JELLYSEERR_API_KEY}
+      - RADARR_URL: ${RADARR_URL}
+      - RADARR_API_KEY: ${RADARR_API_KEY}
+      - TMDB_API_KEY: ${TMDB_API_KEYL}
+      - CONFIG_PATH: /app/config/config.json
+      - PLEX_URL: plex_url:port
+      - PLEX_TOKEN: plex_token
+      - MAX_TMDB_ITEMS: 24
+      - MAX_SHOWS_ITEMS: 24
+      - MAX_MOVIES_ITEMS: 24
     env_file:
       - .env
     volumes:
