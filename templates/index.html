@@ -65,9 +65,21 @@
             justify-content: space-between;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
         
         .logo-image {
             height: 30px;
+            width: auto;
+            
+        }
+        .logo-title {
+            color: var(--text-color);
+            font-weight: 600;
+            font-size: 18px;
         }
         
         .sidebar-toggle {
@@ -77,7 +89,32 @@
             cursor: pointer;
             font-size: 20px;
         }
-        
+
+        .sidebar.collapsed .sidebar-logo {
+            justify-content: center;
+            padding: 20px 0px;
+        }
+
+        .sidebar.collapsed .logo-container {
+            display: none;
+        }
+
+        .sidebar.collapsed .sidebar-toggle {
+            margin: 0;
+            font-size: 22px;
+        }
+        .sidebar.collapsed .logo-image {
+            display: none;
+        }
+
+        /* Ensure the toggle button is visible in expanded mode */
+        .sidebar .sidebar-toggle {
+            background: transparent;
+            border: none;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 20px;
+        }
         /* Navigation Section */
         .sidebar-nav {
             flex: 1;
@@ -216,13 +253,16 @@
 </head>
 <body>
 
-<div class="sidebar" id="sidebar">
-    <div class="sidebar-logo">
-        <img src="{{ url_for('static', filename='logo_icon.png') }}" alt="OCDarr" class="logo-image">
-        <button class="sidebar-toggle" id="sidebar-toggle">
-            <i class="fas fa-bars"></i>
-        </button>
-    </div>
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-container">
+                <img src="{{ url_for('static', filename='logo_icon.png') }}" alt="OCDarr" class="logo-image">
+                <span class="logo-title">OCDarr</span>
+            </div>
+            <button class="sidebar-toggle" id="sidebar-toggle">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
     
     <nav class="sidebar-nav">
              
