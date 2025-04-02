@@ -2,7 +2,7 @@
 import os
 import requests
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -11,6 +11,8 @@ load_dotenv()
 # Configuration settings from environment variables
 RADARR_URL = os.getenv('RADARR_URL')
 RADARR_API_KEY = os.getenv('RADARR_API_KEY')
+
+MAX_MOVIES_ITEMS = int(os.getenv('MAX_MOVIES_ITEMS', 24))
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -41,16 +43,17 @@ def get_movie_list(preferences):
         logger.error(f"Error fetching movie list: {str(e)}")
         return []
 
-def fetch_recent_movies(preferences, tautulli_url=None, tautulli_api_key=None, limit=12):
+def fetch_recent_movies(preferences, limit=None):
     """
-    Fetch recently added movies from Radarr.
+    Fetch recently downloaded movies from Radarr.
     Returns a list of dictionaries with movie details.
     """
+    # Use environment variable if no specific limit is provided
+    if limit is None:
+        limit = MAX_MOVIES_ITEMS
+        
     RADARR_URL = preferences['RADARR_URL']
     RADARR_API_KEY = preferences['RADARR_API_KEY']
-    
-    # Get watched movies if Tautulli is configured
-    watched_movies = get_watched_movies(tautulli_url, tautulli_api_key) if tautulli_url and tautulli_api_key else set()
     
     movie_url = f"{RADARR_URL}/api/v3/movie"
     headers = {'X-Api-Key': RADARR_API_KEY}
@@ -61,16 +64,15 @@ def fetch_recent_movies(preferences, tautulli_url=None, tautulli_api_key=None, l
         if movie_response.ok:
             movies = movie_response.json()
             
-            # Filter for movies that have files and sort by dateAdded
-            available_movies = [
+            # Filter for movies that have files (downloaded)
+            downloaded_movies = [
                 movie for movie in movies 
                 if movie.get('hasFile', False) and 
-                movie.get('movieFile', {}).get('dateAdded') and
-                str(movie.get('tmdbId', '')) not in watched_movies  # Skip watched movies
+                movie.get('movieFile', {}).get('dateAdded')
             ]
             
             # Sort by dateAdded, newest first
-            available_movies.sort(
+            downloaded_movies.sort(
                 key=lambda x: datetime.fromisoformat(
                     x.get('movieFile', {}).get('dateAdded', '').replace('Z', '+00:00')
                 ), 
@@ -78,26 +80,26 @@ def fetch_recent_movies(preferences, tautulli_url=None, tautulli_api_key=None, l
             )
             
             # Take the most recent movies up to the limit
-            for movie in available_movies[:limit]:
+            for movie in downloaded_movies[:limit]:
                 recent_movies.append({
                     'name': movie['title'],
                     'year': movie['year'],
-                    'type': 'movie',  # Add type to distinguish from TV shows
+                    'type': 'movie',
                     'artwork_url': f"{RADARR_URL}/api/v3/mediacover/{movie['id']}/poster-500.jpg?apikey={RADARR_API_KEY}",
                     'radarr_movie_url': f"{RADARR_URL}/movie/{movie['titleSlug']}",
-                    'dateAdded': datetime.fromisoformat(
+                    'releaseDate': datetime.fromisoformat(
                         movie.get('movieFile', {}).get('dateAdded', '').replace('Z', '+00:00')
-                    )
+                    ).strftime('%Y-%m-%d')
                 })
             
         return recent_movies
     except Exception as e:
-        logger.error(f"Error fetching recent movies: {str(e)}")
+        logger.error(f"Error fetching downloaded movies: {str(e)}")
         return []
 
 def fetch_upcoming_movies(preferences):
     """
-    Fetch upcoming movie releases from Radarr.
+    Fetch upcoming movies that are not yet downloaded.
     Returns a list of dictionaries with upcoming movie details.
     """
     RADARR_URL = preferences['RADARR_URL']
@@ -111,68 +113,80 @@ def fetch_upcoming_movies(preferences):
         movie_response = requests.get(movie_url, headers=headers)
         if movie_response.ok:
             movies = movie_response.json()
+            now = datetime.now(timezone.utc)  # Make now timezone-aware
             
-            # Get current date for comparison
-            now = datetime.now()
-            
-            # Add debug logging
-            logger.info(f"Found {len(movies)} total movies in Radarr")
-            
-            # Filter for movies with future release dates OR not downloaded yet
+            # Include all movies that aren't downloaded yet
+            # or have future release dates (even if downloaded)
             for movie in movies:
-                # First check if the movie is already downloaded
-                has_file = movie.get('hasFile', False)
+                # Set a default flag for if we should include this movie
+                include_movie = False
+                release_type = "Unknown"
+                release_date = None
                 
-                # Only include movies that don't have files yet
-                if not has_file:
-                    # Try to get a release date
-                    digital_release = movie.get('digitalRelease')
-                    physical_release = movie.get('physicalRelease')
-                    in_cinemas = movie.get('inCinemas')
+                # If the movie isn't downloaded, we want to include it
+                if not movie.get('hasFile', False):
+                    include_movie = True
+                    release_type = "Missing"
+                
+                # Check various release dates
+                release_dates = []
+                
+                # Process digital release
+                if movie.get('digitalRelease'):
+                    try:
+                        date = datetime.fromisoformat(movie.get('digitalRelease').replace('Z', '+00:00'))
+                        release_dates.append(('Digital', date))
+                    except (ValueError, AttributeError):
+                        pass
+                
+                # Process physical release
+                if movie.get('physicalRelease'):
+                    try:
+                        date = datetime.fromisoformat(movie.get('physicalRelease').replace('Z', '+00:00'))
+                        release_dates.append(('Physical', date))
+                    except (ValueError, AttributeError):
+                        pass
+                
+                # Process cinema release
+                if movie.get('inCinemas'):
+                    try:
+                        date = datetime.fromisoformat(movie.get('inCinemas').replace('Z', '+00:00'))
+                        release_dates.append(('In Cinemas', date))
+                    except (ValueError, AttributeError):
+                        pass
+                
+                # Sort release dates and find the future one to display
+                if release_dates:
+                    # Sort by date, earliest first
+                    release_dates.sort(key=lambda x: x[1])
                     
-                    # Get the most relevant date
-                    if digital_release:
-                        release_date = datetime.fromisoformat(digital_release.replace('Z', '+00:00'))
-                        release_type = "Digital"
-                    elif physical_release:
-                        release_date = datetime.fromisoformat(physical_release.replace('Z', '+00:00'))
-                        release_type = "Physical"
-                    elif in_cinemas:
-                        release_date = datetime.fromisoformat(in_cinemas.replace('Z', '+00:00'))
-                        release_type = "In Cinemas"
+                    # Find the earliest future date if any
+                    future_releases = [(t, d) for t, d in release_dates if d > now]
+                    if future_releases:
+                        release_type, release_date = future_releases[0]
+                        include_movie = True
                     else:
-                        # If no date, use status and monitored state
-                        status = movie.get('status', 'unknown')
-                        monitored = movie.get('monitored', False)
-                        
-                        # For movies with no date but are monitored and announced/released
-                        if monitored and status in ['announced', 'released']:
-                            release_date = datetime.now()  # Just use current date for sorting
-                            release_type = status.capitalize()
-                        else:
-                            continue  # Skip if no release info and not monitored
-                    
-                    # Format for UI
-                    if hasattr(release_date, 'strftime'):
-                        formatted_date = release_date.strftime('%Y-%m-%d')
-                    else:
-                        formatted_date = "Unknown"
+                        # If no future dates but we have dates, use the latest one
+                        release_type, release_date = release_dates[-1]
+                
+                # If we determined this movie should be included
+                if include_movie:
+                    # If no release date was found but we want to include it
+                    if not release_date:
+                        release_date = now + timedelta(days=30)
                     
                     upcoming_movies.append({
                         'name': movie['title'],
                         'year': movie['year'],
                         'type': 'movie',
-                        'releaseDate': formatted_date,
+                        'releaseDate': release_date.strftime('%Y-%m-%d'),
                         'releaseType': release_type,
                         'artwork_url': f"{RADARR_URL}/api/v3/mediacover/{movie['id']}/poster-500.jpg?apikey={RADARR_API_KEY}",
                         'radarr_movie_url': f"{RADARR_URL}/movie/{movie['titleSlug']}"
                     })
             
-            # Log count of upcoming movies found
-            logger.info(f"Found {len(upcoming_movies)} upcoming movies")
-            
             # Sort by release date
-            upcoming_movies.sort(key=lambda x: x['releaseDate'])
+            upcoming_movies.sort(key=lambda x: x.get('releaseDate', ''))
             
         return upcoming_movies
     except Exception as e:

@@ -15,6 +15,8 @@ SONARR_URL = os.getenv('SONARR_URL')
 SONARR_API_KEY = os.getenv('SONARR_API_KEY')
 HA_WWW_PATH = '/app/backgrounds' 
 
+MAX_SHOWS_ITEMS = int(os.getenv('MAX_SHOWS_ITEMS', 24))
+
 # Setup logging
 logger = logging.getLogger()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -115,7 +117,7 @@ def fetch_series_and_episodes(preferences):
                     break
 
     active_series.sort(key=lambda series: series['dateAdded'], reverse=True)
-    return active_series[:12]
+    return active_series[:MAX_SHOWS_ITEMS]
 
 def fetch_upcoming_premieres(preferences):
     SONARR_URL = preferences['SONARR_URL']

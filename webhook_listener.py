@@ -33,6 +33,11 @@ RADARR_API_KEY = os.getenv('RADARR_API_KEY')
 # Jellyseerr variables
 JELLYSEERR_URL = os.getenv('JELLYSEERR_URL', '')
 
+# Import the environment variable limits
+MAX_SHOWS_ITEMS = int(os.getenv('MAX_SHOWS_ITEMS', 24))
+MAX_MOVIES_ITEMS = int(os.getenv('MAX_MOVIES_ITEMS', 24))
+MAX_COMBINED_ITEMS = int(os.getenv('MAX_COMBINED_ITEMS', 24))
+
 # Other settings
 REQUESTS_DIR = os.path.join(os.getcwd(), 'data', 'requests')
 os.makedirs(REQUESTS_DIR, exist_ok=True)
@@ -906,7 +911,7 @@ def home():
     # Combine and sort watching items by date added
     combined_watching = current_series + recent_movies
     combined_watching.sort(key=safe_datetime_sort, reverse=True) # Limit to reasonable number
-    combined_watching = combined_watching[:12]
+    combined_watching = combined_watching[:MAX_COMBINED_ITEMS]
     
     # Add type to TV premieres for consistent handling
     for premiere in upcoming_premieres:
@@ -927,7 +932,7 @@ def home():
     combined_upcoming.sort(key=lambda x: x.get('nextAiring', '') or '')
 
     # Limit to reasonable number
-    combined_upcoming = combined_upcoming[:12]
+    combined_upcoming = combined_upcoming[:MAX_COMBINED_ITEMS]
     
     # Get pending requests
     pending_requests = []

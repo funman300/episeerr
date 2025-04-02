@@ -228,7 +228,7 @@ class PlexWatchlistAPI:
             # Get library counts
             if library_sections.get("movie"):
                 try:
-                    movie_url = f"http://192.168.254.205:32400/library/sections/{library_sections['movie']}/all"
+                    movie_url = f"{self.plex_url}/library/sections/{library_sections['movie']}/all"
                     movie_response = requests.get(movie_url, headers=self.get_headers())
                     if movie_response.ok:
                         movie_data = movie_response.json()
@@ -238,7 +238,7 @@ class PlexWatchlistAPI:
             
             if library_sections.get("tv"):
                 try:
-                    tv_url = f"http://192.168.254.205:32400/library/sections/{library_sections['tv']}/all"
+                    tv_url = f"{self.plex_url}/library/sections/{library_sections['tv']}/all"
                     tv_response = requests.get(tv_url, headers=self.get_headers())
                     if tv_response.ok:
                         tv_data = tv_response.json()

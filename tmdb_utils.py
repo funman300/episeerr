@@ -5,6 +5,8 @@ import sonarr_utils  # Import your existing sonarr_utils module
 
 load_dotenv()
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
+MAX_TMDB_MOVIES = int(os.getenv('MAX_TMDB_MOVIES', 24))
+MAX_TMDB_SHOWS = int(os.getenv('MAX_TMDB_SHOWS', 24))
 
 def get_tmdb_endpoint(endpoint, params=None):
     """Make a request to any TMDB endpoint with the given parameters."""
@@ -126,8 +128,8 @@ def get_quality_movies():
     
     print(f"After filtering, returning {len(filtered_results)} movies")
     
-    # Return up to 40 movies
-    return {'results': filtered_results[:14]}
+    
+    return {'results': filtered_results[:MAX_TMDB_MOVIES]}
 
 def get_quality_tv_shows():
     """Get quality TV shows avoiding duplicates with your Sonarr library."""
@@ -219,8 +221,8 @@ def get_quality_tv_shows():
     
     print(f"After filtering, returning {len(filtered_results)} shows")
     
-    # Return more shows for better display (up to 40)
-    return {'results': filtered_results[:14]}
+    # Return more shows for better display 
+    return {'results': filtered_results[:MAX_TMDB_SHOWS]}
     
 def get_recommendations_by_genre(genre_ids, media_type='movie'):
     """Get recommendations based on genres."""
