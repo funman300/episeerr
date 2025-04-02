@@ -141,7 +141,7 @@ docker run -d \
   --name ocdarr \
   --env-file .env \
   --env CONFIG_PATH=/app/config/config.json \
-  -p 5001:5001 \
+  -p 5002:5002 \
   -v ${PWD}/logs:/app/logs \
   -v ${PWD}/config:/app/config \
   -v ${PWD}/temp:/app/temp \
@@ -194,7 +194,7 @@ services:
       - ./config:/app/config
       - ./temp:/app/temp
     ports:
-      - "5001:5001"
+      - "5002:5002"
     restart: unless-stopped
 ```
 📝 Rules System
@@ -254,7 +254,7 @@ Automatic via Tags: When requesting shows through Overseerr/Jellyseerr if you do
 1. In Tautulli, go to Settings > Notification Agents
 2. Click "Add a new notification agent" and select "Webhook"
 3. Configure the webhook:
-   - **Webhook URL**: `http://your-ocdarr-ip:5001/webhook`
+   - **Webhook URL**: `http://your-ocdarr-ip:5002/webhook`
    - **Trigger**: Episode Watched
    - **JSON Data**: Use exactly this template:
 
