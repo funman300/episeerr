@@ -42,9 +42,6 @@ Most media management tools operate on an all-or-nothing approach. OCDarr revolu
 
 ## How It Works
 
-![OCDarr Flow](https://your-image-url.com/flow-diagram.png)
-*A flowchart showing how episodes are processed through OCDarr's rules system*
-
 ### Rule Components: Your Media, Your Rules
 
 **Get Option**: Control how many upcoming episodes to prepare
