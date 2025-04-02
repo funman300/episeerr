@@ -7,12 +7,12 @@ import logging
 import json
 import sonarr_utils
 import radarr_utils
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 import requests
 import modified_episeerr
 import threading
-from datetime import datetime, timedelta
+
 from logging.handlers import RotatingFileHandler
 from api.jellyseerr_api import JellyseerrAPI
 import tmdb_utils
@@ -905,8 +905,7 @@ def home():
     
     # Combine and sort watching items by date added
     combined_watching = current_series + recent_movies
-    combined_watching.sort(key=lambda x: x.get('dateAdded', datetime.now()), reverse=True)
-    # Limit to reasonable number
+    combined_watching.sort(key=safe_datetime_sort, reverse=True) # Limit to reasonable number
     combined_watching = combined_watching[:12]
     
     # Add type to TV premieres for consistent handling
@@ -914,13 +913,19 @@ def home():
         premiere['type'] = 'tv'
     
     # Combine upcoming premieres and sort by date
+    # In the home route of webhook_listener.py:
+
+    # Make sure this logic works properly:
     combined_upcoming = upcoming_premieres + upcoming_movies
-    # Ensure we have a common sortable date field
+
+    # Ensure consistent date field for sorting
     for item in combined_upcoming:
         if 'nextAiring' not in item and 'releaseDate' in item:
             item['nextAiring'] = item['releaseDate']
-    
-    combined_upcoming.sort(key=lambda x: x.get('nextAiring', ''))
+
+    # Sort by nextAiring - make sure we handle empty strings properly
+    combined_upcoming.sort(key=lambda x: x.get('nextAiring', '') or '')
+
     # Limit to reasonable number
     combined_upcoming = combined_upcoming[:12]
     
@@ -1206,7 +1211,25 @@ def process_direct_request():
             return jsonify({"success": False, "message": str(e)}), 500
         else:
             return redirect(url_for('home', section='requests', message=f"Error: {str(e)}"))
-
+def safe_datetime_sort(item):
+    date_added = item.get('dateAdded')
+    if isinstance(date_added, str):
+        try:
+            # Convert string to offset-aware datetime
+            date_added = datetime.fromisoformat(date_added.replace('Z', '+00:00'))
+        except:
+            # If conversion fails, use current time
+            date_added = datetime.now(timezone.utc)
+    
+    # If still naive, make it offset-aware
+    elif isinstance(date_added, datetime) and date_added.tzinfo is None:
+        date_added = date_added.replace(tzinfo=timezone.utc)
+    
+    # If date_added is None or another unexpected type
+    if not isinstance(date_added, datetime):
+        date_added = datetime.now(timezone.utc)
+    
+    return date_added
 def cleanup_config_rules():
     """Remove series from rules that no longer exist in Sonarr."""
     try:
