@@ -3,7 +3,7 @@ Dev branch is developmental, consider it beta
 
 [![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/vansmak)
 
-## OCDarr: Precision Episode Management for Sonarr & Radarr
+## OCDarr: Precision Episode Management for Sonarr 
 
 OCDarr is a smart media assistant that gives you episode-by-episode control over your library, automatically preparing what you want to watch next while cleaning up what you've already seen.
 
