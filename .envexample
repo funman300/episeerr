@@ -7,3 +7,6 @@ RADARR_API_KEY=api_key
 TMDB_API_KEY=reallylongtmdbkey
 PLEX_URL=plex_url:port
 PLEX_TOKEN=plex_token
+MAX_TMDB_ITEMS=24
+MAX_SHOWS_ITEMS=24
+MAX_MOVIES_ITEMS=24
