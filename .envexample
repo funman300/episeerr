@@ -1,3 +1,9 @@
-SONARR_URL=http://localhost:8989
+SONARR_URL=url:port
 SONARR_API_KEY=YOUR_SONARR_API_KEY_HERE 
-
+JELLYSEERR_URL=url:port
+JELLYSEERR_API_KEY=api_key
+RADARR_URL=url:port
+RADARR_API_KEY=api_key
+TMDB_API_KEY=reallylongtmdbkey
+PLEX_URL=plex_url:port
+PLEX_TOKEN=plex_token
