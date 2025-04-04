@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 import requests
 import modified_episeerr
 import threading
-
+import feedparser
+from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from api.jellyseerr_api import JellyseerrAPI
 import tmdb_utils
@@ -129,7 +130,27 @@ def check_service_status(url):
         pass
     
     return "Offline"
-
+@app.route('/api/plex/sync', methods=['POST'])
+def sync_plex_watchlist():
+    """Force a sync of the Plex watchlist."""
+    try:
+        # Read Plex token directly from .env
+        plex_token = os.getenv('PLEX_TOKEN', '')
+        
+        if not plex_token:
+            return jsonify({"success": False, "message": "Plex not connected"}), 400
+            
+        plex_api = plex_utils.PlexWatchlistAPI(plex_token)
+        success = plex_api.save_watchlist_data()
+        
+        if success:
+            return jsonify({"success": True, "message": "Watchlist synced successfully"})
+        else:
+            return jsonify({"success": False, "message": "Failed to sync watchlist"}), 500
+            
+    except Exception as e:
+        app.logger.error(f"Error syncing Plex watchlist: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500
 @app.route('/api/plex/connect', methods=['POST'])
 def connect_to_plex():
     try:
@@ -171,15 +192,22 @@ def connect_to_plex():
 @app.route('/api/plex/watchlist')
 def get_plex_watchlist():
     try:
-        # Read Plex token directly from .env
         plex_token = os.getenv('PLEX_TOKEN', '')
        
         if not plex_token:
             return jsonify({"success": False, "message": "Plex not connected"}), 400
            
         plex_api = plex_utils.PlexWatchlistAPI(plex_token)
-        watchlist_data = plex_api.load_watchlist_data()
+        watchlist_data = plex_api.get_watchlist()
        
+        # Prepare categories and stats
+        categories = {
+            'tv_in_watchlist': [],
+            'tv_not_in_arr': [],
+            'movie_in_watchlist': [],
+            'movie_not_in_arr': []
+        }
+        
         # Get existing Sonarr/Radarr series
         sonarr_preferences = sonarr_utils.load_preferences()
         sonarr_series = sonarr_utils.get_series_list(sonarr_preferences)
@@ -188,107 +216,90 @@ def get_plex_watchlist():
         radarr_preferences = radarr_utils.load_preferences()
         radarr_movies = radarr_utils.get_movie_list(radarr_preferences)
         radarr_tmdb_ids = set(str(movie.get('tmdbId')) for movie in radarr_movies if movie.get('tmdbId'))
-       
-        # Get all items
-        all_items = watchlist_data.get('items', [])
         
-        # Debug
-        print(f"Watchlist items: {len(all_items)}")
-        for item in all_items:
-            print(f"Item: {item.get('title')}, Type: {item.get('type')}, TMDB ID: {item.get('tmdb_id')}")
-        
-        # Categorize items
-        watchlist_categories = {
-            'tv_in_watchlist': [],
-            'tv_not_in_arr': [],
-            'movie_in_watchlist': [],
-            'movie_not_in_arr': []
-        }
-       
-        for item in all_items:
-            tmdb_id = str(item.get('tmdb_id', ''))
-            item_type = item.get('type')
+        # Check the correct structure from the API
+        if 'MediaContainer' in watchlist_data and 'Metadata' in watchlist_data['MediaContainer']:
+            items = watchlist_data['MediaContainer']['Metadata']
             
-            if not tmdb_id or not item_type:
-                print(f"Skipping item with missing data: {item}")
-                continue
-            
-            if item_type == 'tv':
-                # Add to tv_in_watchlist if it's in Sonarr
-                if tmdb_id in sonarr_tmdb_ids:
-                    watchlist_categories['tv_in_watchlist'].append(item)
+            for item in items:
+                media_type = 'movie' if item.get('type') == 'movie' else 'tv'
+                processed_item = {
+                    'title': item.get('title', ''),
+                    'type': media_type,
+                    'year': item.get('year'),
+                    'plex_guid': item.get('guid', ''),
+                    'thumb': item.get('thumb', '')
+                }
+                
+                # Attempt to get TMDB ID
+                try:
+                    if media_type == 'movie':
+                        search_results = tmdb_utils.search_movies(processed_item['title'])
+                        if search_results.get('results'):
+                            processed_item['tmdb_id'] = search_results['results'][0]['id']
+                    else:
+                        search_results = tmdb_utils.search_tv_shows(processed_item['title'])
+                        if search_results.get('results'):
+                            processed_item['tmdb_id'] = search_results['results'][0]['id']
+                except Exception as e:
+                    app.logger.error(f"Error getting TMDB ID for {processed_item['title']}: {str(e)}")
+                
+                # Categorize items
+                tmdb_id = str(processed_item.get('tmdb_id', ''))
+                if media_type == 'tv':
+                    categories['tv_in_watchlist'].append(processed_item)
+                    if not tmdb_id or tmdb_id not in sonarr_tmdb_ids:
+                        categories['tv_not_in_arr'].append(processed_item)
                 else:
-                    watchlist_categories['tv_not_in_arr'].append(item)
-                    
-                # For testing: Add all TV items to not_in_arr to ensure UI works
-                watchlist_categories['tv_not_in_arr'].append(item)
-            elif item_type == 'movie':
-                # Add to movie_in_watchlist if it's in Radarr
-                if tmdb_id in radarr_tmdb_ids:
-                    watchlist_categories['movie_in_watchlist'].append(item)
-                else:
-                    watchlist_categories['movie_not_in_arr'].append(item)
-                    
-                # For testing: Add all movie items to not_in_arr to ensure UI works
-                watchlist_categories['movie_not_in_arr'].append(item)
+                    categories['movie_in_watchlist'].append(processed_item)
+                    if not tmdb_id or tmdb_id not in radarr_tmdb_ids:
+                        categories['movie_not_in_arr'].append(processed_item)
         
-        # Get library stats
+        # Get library counts
         library_sections = plex_api.get_library_sections()
         library_stats = {
             "movies": 0,
             "tv_shows": 0
         }
         
-        print(f"Library sections: {library_sections}")
-        
-        # Get library counts
         if library_sections.get("movie"):
             try:
-                movie_url = f"http://192.168.254.205:32400/library/sections/{library_sections['movie']}/all"
+                movie_url = f"{plex_api.plex_url}/library/sections/{library_sections['movie']}/all"
                 movie_response = requests.get(movie_url, headers=plex_api.get_headers())
                 if movie_response.ok:
                     movie_data = movie_response.json()
                     library_stats["movies"] = movie_data.get("MediaContainer", {}).get("size", 0)
-                    print(f"Movie count: {library_stats['movies']}")
             except Exception as e:
                 app.logger.error(f"Error getting movie count: {str(e)}")
         
         if library_sections.get("tv"):
             try:
-                tv_url = f"http://192.168.254.205:32400/library/sections/{library_sections['tv']}/all"
+                tv_url = f"{plex_api.plex_url}/library/sections/{library_sections['tv']}/all"
                 tv_response = requests.get(tv_url, headers=plex_api.get_headers())
                 if tv_response.ok:
                     tv_data = tv_response.json()
                     library_stats["tv_shows"] = tv_data.get("MediaContainer", {}).get("size", 0)
-                    print(f"TV count: {library_stats['tv_shows']}")
             except Exception as e:
                 app.logger.error(f"Error getting TV show count: {str(e)}")
         
-        # Count watchlist items by type
+        # Prepare watchlist stats
         watchlist_stats = {
-            "movies": len([item for item in all_items if item.get("type") == "movie"]),
-            "tv_shows": len([item for item in all_items if item.get("type") == "tv"])
+            "movies": len(categories['movie_in_watchlist']),
+            "tv_shows": len(categories['tv_in_watchlist'])
         }
         
-        print(f"Watchlist stats: {watchlist_stats}")
-       
-        # Prepare response
         response_data = {
             'success': True,
             'watchlist': {
-                'categories': watchlist_categories,
-                'last_updated': watchlist_data.get('last_updated'),
-                'count': len(all_items),
+                'categories': categories,
+                'last_updated': datetime.now().isoformat(),
+                'count': len(categories['tv_in_watchlist']) + len(categories['movie_in_watchlist']),
                 'stats': {
                     'library_stats': library_stats,
                     'watchlist_stats': watchlist_stats
                 }
             }
         }
-        
-        # Debug - print category counts
-        for category, items in watchlist_categories.items():
-            print(f"Category {category}: {len(items)} items")
        
         return jsonify(response_data)
    
@@ -1021,7 +1032,234 @@ def home():
                         radarr_profiles=radarr_profiles,
                         sonarr_profiles=sonarr_profiles,
                         last_processed_show=last_processed_show)
-                     
+
+# File to store feed preferences
+FEED_PREFS_FILE = "feed_preferences.json"
+
+# Default feeds
+DEFAULT_FEEDS = {
+    'movies': {
+        'url': "https://www.filmjabber.com/rss/rss-trailers.php",
+        'name': "FilmJabber Movie Trailers"
+    },
+    'shows': {
+        'url': "https://tvline.com/feed/",
+        'name': "TVLine News"
+    },
+    'plex': {
+        'url': "https://www.comingsoon.net/feed",
+        'name': "ComingSoon.net Updates"
+    }
+}
+
+# Cache the feed for 15 minutes
+@lru_cache(maxsize=8)
+def get_cached_feed(feed_url, timestamp):
+    try:
+        return feedparser.parse(feed_url)
+    except Exception as e:
+        print(f"Error parsing feed {feed_url}: {e}")
+        return None
+
+# Load feed preferences from file
+def load_feed_preferences():
+    try:
+        if os.path.exists(FEED_PREFS_FILE):
+            with open(FEED_PREFS_FILE, 'r') as f:
+                return json.load(f)
+        return {}
+    except Exception as e:
+        print(f"Error loading feed preferences: {e}")
+        return {}
+
+# Save feed preferences to file
+def save_feed_preferences(prefs):
+    try:
+        with open(FEED_PREFS_FILE, 'w') as f:
+            json.dump(prefs, f)
+        return True
+    except Exception as e:
+        print(f"Error saving feed preferences: {e}")
+        return False
+
+@app.route('/api/ticker/feed')
+def get_ticker_feed():
+    # Get feed URL from query parameters, with default fallbacks
+    feed_url = request.args.get('feed_url')
+    feed_type = request.args.get('type', 'generic')
+    
+    # Current timestamp rounded to nearest 15 minutes for caching
+    cache_timestamp = int(time.time() / 900)
+    
+    # If no feed URL provided, use default based on type
+    if not feed_url:
+        feed_url = DEFAULT_FEEDS.get(feed_type, DEFAULT_FEEDS['movies'])['url']
+    
+    try:
+        # Parse the feed
+        feed_data = get_cached_feed(feed_url, cache_timestamp)
+        
+        if not feed_data:
+            raise Exception("Failed to parse feed")
+        
+        # Process entries
+        entries = []
+        
+        for entry in feed_data.entries[:15]:  # Limit to 15 entries
+            # Extract relevant data, handle different feed formats
+            title = entry.get('title', 'No Title')
+            link = entry.get('link', '#')
+            published = entry.get('published', entry.get('pubDate', ''))
+            
+            # Try to determine content type from categories if present
+            content_type = feed_type
+            if hasattr(entry, 'category'):
+                category = entry.category.lower() if hasattr(entry, 'category') else ''
+                if 'movie' in category:
+                    content_type = 'movie'
+                elif 'tv' in category or 'show' in category:
+                    content_type = 'show'
+            
+            entries.append({
+                'title': title,
+                'link': link,
+                'published': published,
+                'type': content_type
+            })
+        
+        return jsonify(entries)
+        
+    except Exception as e:
+        print(f"Error fetching feed: {e}")
+        
+        # Return sample data if there's an error
+        sample_data = [
+            {'title': 'The Mandalorian Season 3', 'type': feed_type, 'link': '#'},
+            {'title': 'Dune: Part Two', 'type': feed_type, 'link': '#'},
+            {'title': 'House of the Dragon Season 2', 'type': feed_type, 'link': '#'},
+            {'title': 'Challengers', 'type': feed_type, 'link': '#'},
+            {'title': 'Fallout', 'type': feed_type, 'link': '#'}
+        ]
+        return jsonify(sample_data)
+
+@app.route('/api/ticker/save-feed', methods=['POST'])
+def save_feed_preferences_api():
+    try:
+        # Get data from request
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided'})
+        
+        user_id = data.get('user_id', 'default')
+        section = data.get('section', 'movies')
+        feed_url = data.get('feed_url', '')
+        feed_name = data.get('feed_name', '')
+        
+        if not feed_url:
+            return jsonify({'success': False, 'message': 'No feed URL provided'})
+        
+        # Load existing preferences
+        prefs = load_feed_preferences()
+        
+        # Initialize user preferences if not exists
+        if user_id not in prefs:
+            prefs[user_id] = {}
+        
+        # Save preference
+        prefs[user_id][section] = {
+            'url': feed_url,
+            'name': feed_name
+        }
+        
+        # Save to file
+        if save_feed_preferences(prefs):
+            return jsonify({
+                'success': True, 
+                'message': 'Feed preferences saved',
+                'data': {
+                    'section': section,
+                    'feed_url': feed_url,
+                    'feed_name': feed_name
+                }
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Error saving preferences'})
+    
+    except Exception as e:
+        print(f"Error saving feed preferences: {e}")
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+@app.route('/api/ticker/get-feeds')
+def get_feed_preferences_api():
+    try:
+        user_id = request.args.get('user_id', 'default')
+        
+        # Load preferences
+        prefs = load_feed_preferences()
+        
+        # Return user preferences or defaults
+        if user_id in prefs:
+            return jsonify(prefs[user_id])
+        else:
+            return jsonify(DEFAULT_FEEDS)
+    
+    except Exception as e:
+        print(f"Error getting feed preferences: {e}")
+        return jsonify(DEFAULT_FEEDS)
+    
+@app.route('/api/recent-additions')
+def get_recent_additions():
+    """Get recently added content from both Sonarr and Radarr."""
+    try:
+        # Load Sonarr data
+        sonarr_preferences = sonarr_utils.load_preferences()
+        recent_series = sonarr_utils.fetch_series_and_episodes(sonarr_preferences) or []
+        
+        # Load Radarr data
+        radarr_preferences = radarr_utils.load_preferences()
+        recent_movies = radarr_utils.fetch_recent_movies(radarr_preferences) or []
+        
+        # Add type identifier to each item for consistent handling
+        for series in recent_series:
+            series['type'] = 'tv'
+        
+        # Combine TV and movies
+        all_recent_items = recent_series + recent_movies
+        
+        # Robust sorting with fallback
+        def safe_date_sort(item):
+            date_added = item.get('dateAdded')
+            if not date_added:
+                return datetime.min
+            try:
+                return datetime.fromisoformat(date_added.replace('Z', '+00:00'))
+            except:
+                return datetime.min
+        
+        # Sort by dateAdded, newest first
+        all_recent_items.sort(key=safe_date_sort, reverse=True)
+        
+        # Limit to prevent overwhelming the UI
+        max_items = int(os.getenv('MAX_COMBINED_ITEMS', 24))
+        all_recent_items = all_recent_items[:max_items]
+        
+        # Format response
+        response_data = {
+            'success': True,
+            'items': all_recent_items,
+            'count': len(all_recent_items)
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        app.logger.error(f"Error fetching recent additions: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': str(e),
+            'items': []
+        }), 500
+                        
 @app.route('/api/pending-requests/count')
 def pending_requests_count():
     """Get the count of pending requests."""

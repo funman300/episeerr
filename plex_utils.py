@@ -43,59 +43,67 @@ class PlexWatchlistAPI:
             watchlist_data = self.get_watchlist()
             processed_items = []
             
+            # Check the correct structure from the API
             if 'MediaContainer' in watchlist_data and 'Metadata' in watchlist_data['MediaContainer']:
                 items = watchlist_data['MediaContainer']['Metadata']
                 
                 for item in items:
+                    media_type = 'movie' if item.get('type') == 'movie' else 'tv'
                     processed_item = {
                         'title': item.get('title', ''),
-                        'type': 'movie' if item.get('type') == 'movie' else 'tv',
+                        'type': media_type,
                         'year': item.get('year'),
                         'plex_guid': item.get('guid', ''),
                         'thumb': item.get('thumb', '')
                     }
                     
-                    # Get TMDB ID using title and year
-                    if processed_item['type'] == 'movie':
-                        search_results = tmdb_utils.search_movies(processed_item['title'])
-                        if search_results.get('results'):
-                            # Try to match year if available
-                            if processed_item['year']:
+                    # Add to processed items even if we can't get TMDB ID
+                    processed_items.append(processed_item)
+                    
+                    # Try to get TMDB ID as a best effort
+                    try:
+                        if media_type == 'movie':
+                            search_results = tmdb_utils.search_movies(processed_item['title'])
+                            if search_results.get('results'):
                                 for result in search_results['results']:
                                     if result.get('release_date', '').startswith(str(processed_item['year'])):
                                         processed_item['tmdb_id'] = result['id']
                                         processed_item['poster_path'] = result.get('poster_path')
                                         break
-                            
-                            # If no match with year or no year, use first result
-                            if 'tmdb_id' not in processed_item and search_results['results']:
-                                processed_item['tmdb_id'] = search_results['results'][0]['id']
-                                processed_item['poster_path'] = search_results['results'][0].get('poster_path')
-                    else:
-                        search_results = tmdb_utils.search_tv_shows(processed_item['title'])
-                        if search_results.get('results'):
-                            # Try to match year if available
-                            if processed_item['year']:
+                                
+                                # If no match with year, use first result
+                                if 'tmdb_id' not in processed_item and search_results['results']:
+                                    processed_item['tmdb_id'] = search_results['results'][0]['id']
+                                    processed_item['poster_path'] = search_results['results'][0].get('poster_path')
+                        
+                        else:  # TV show
+                            search_results = tmdb_utils.search_tv_shows(processed_item['title'])
+                            if search_results.get('results'):
                                 for result in search_results['results']:
                                     if result.get('first_air_date', '').startswith(str(processed_item['year'])):
                                         processed_item['tmdb_id'] = result['id']
                                         processed_item['poster_path'] = result.get('poster_path')
+                                        
+                                        # Get TVDB ID for TV shows
+                                        external_ids = tmdb_utils.get_external_ids(processed_item['tmdb_id'], 'tv')
+                                        if external_ids and 'tvdb_id' in external_ids:
+                                            processed_item['tvdb_id'] = external_ids['tvdb_id']
                                         break
-                            
-                            # If no match with year or no year, use first result
-                            if 'tmdb_id' not in processed_item and search_results['results']:
-                                processed_item['tmdb_id'] = search_results['results'][0]['id']
-                                processed_item['poster_path'] = search_results['results'][0].get('poster_path')
                                 
-                                # Get TVDB ID for TV shows
-                                external_ids = tmdb_utils.get_external_ids(processed_item['tmdb_id'], 'tv')
-                                if external_ids and 'tvdb_id' in external_ids:
-                                    processed_item['tvdb_id'] = external_ids['tvdb_id']
+                                # If no match with year, use first result
+                                if 'tmdb_id' not in processed_item and search_results['results']:
+                                    first_result = search_results['results'][0]
+                                    processed_item['tmdb_id'] = first_result['id']
+                                    processed_item['poster_path'] = first_result.get('poster_path')
+                                    
+                                    # Get TVDB ID for TV shows
+                                    external_ids = tmdb_utils.get_external_ids(processed_item['tmdb_id'], 'tv')
+                                    if external_ids and 'tvdb_id' in external_ids:
+                                        processed_item['tvdb_id'] = external_ids['tvdb_id']
                     
-                    # Only add items we could find a TMDB ID for
-                    if 'tmdb_id' in processed_item:
-                        processed_items.append(processed_item)
-            
+                    except Exception as e:
+                        logger.error(f"Error getting TMDB data for {processed_item['title']}: {str(e)}")
+                
             return processed_items
         except Exception as e:
             logger.error(f"Error processing watchlist items: {str(e)}")
