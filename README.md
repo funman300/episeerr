@@ -24,6 +24,7 @@ Plex watchlist and stats, see what's missing from your collection.
 ⚙️ **Settings**  
 Choose default download profiles and rule configuration.
 
+
 🔬 **Rule-Based Episode Control**  
 The heart of OCDarr - create custom rules to determine exactly how many episodes to monitor, search for, and retain.
 
@@ -107,8 +108,27 @@ OCDarr Solution: Intelligent, automated, personalized management
 🧹 Automatic library management  
 🔧 Highly configurable rules  
 🚀 Proactive episode preparation  
+📰 RSS News Tickers
 
 OCDarr isn't just a tool—it's your personal media librarian.
+## 📰 RSS News Tickers
+
+OCDarr includes customizable RSS tickers in each main section that display relevant media news and updates:
+
+- **Shows Tab**: Displays TV industry news via TVLine's feed
+- **Movies Tab**: Shows movie trailer updates from FilmJabber
+- **Plex Tab**: Displays upcoming media releases from ComingSoon.net
+
+### Features:
+- Auto-scrolling text tickers present the latest entertainment headlines
+- Each section has its own topic-focused feed
+- Configurable via settings icon (desktop only)
+- Hidden on mobile devices to maximize screen space
+- Preset feed options or custom RSS URL support
+
+Tickers automatically refresh every 30 minutes to ensure you always see the latest entertainment news without leaving OCDarr.
+
+> 💡 **Tip**: The Plex section ticker would be a great place to add a friends' watchlist feed if you're using a service that provides RSS feeds of user activity.
 
 ### Interface Preview
 ![ocd](https://github.com/user-attachments/assets/cd7b5c0f-275f-4222-99e6-40fd76c6f495)
