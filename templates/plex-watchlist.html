@@ -1,84 +1,88 @@
-<!-- View Watchlist Section -->
+<!-- Improved Plex Watchlist/Dashboard View -->
 <div id="watchlist-view-section" class="watchlist-subsection">
-    <div class="section-header d-flex justify-content-between align-items-center mb-3">
-        <h4>Plex Watchlist</h4>
-        <div class="watchlist-controls">
-            
+    <div class="row mb-3">
+    <div class="col-12">
+        <div class="card bg-dark">
+            <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+                <!-- Ticker container -->
+                <div class="ticker-container d-none d-md-block">
+                    <div class="ticker-wrapper">
+                        <div class="ticker-content" id="plex-ticker">
+                            <!-- Content populated via JavaScript -->
+                        </div>
+                    </div>
+                </div>
+                <!-- Stats container -->
+                <div class="small text-right" style="white-space: nowrap">
+                    <span class="text-muted mr-1"><i class="fas fa-archive"></i></span>
+                    <span id="library-movies">0</span>
+                    <span class="text-muted ml-2 mr-1">|</span>
+                    <span class="text-muted mr-1"><i class="fas fa-desktop"></i></span>
+                    <span id="library-tv">0</span>
+                    <span class="text-muted ml-2 mr-1">|</span>
+                    <span class="text-muted mr-1"><i class="fas fa-eye"></i></span>
+                    <span id="watchlist-movies">0</span>
+                    <span class="text-muted ml-2 mr-1">|</span>
+                    <span class="text-muted mr-1"><i class="fas fa-bookmark"></i></span>
+                    <span id="watchlist-tv">0</span>
+                </div>
+                <!-- Settings icon separate from stats -->
+                <span class="ml-2">
+                    <i class="fas fa-cog ticker-settings" 
+                       data-toggle="modal"
+                       data-target="#tickerSettingsModal"
+                       data-section="plex"
+                       title="Configure ticker feed"></i>
+                </span>
+            </div>
+            </div>
+        </div>
+    </div>
+   
+
+    
+    <!-- Recently Added Content Row -->
+    <div class="content-row">
+        <header class="row-header">
+            <h4>Recently Added to Library</h4>
+            <div class="row-controls">
+                <button class="scroll-btn scroll-start" onclick="scrollRowToStart(this)">⏮️</button>
+                <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+                <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
+            </div>
+        </header>
+        <div class="scrollable-row" id="recent-additions-row">
+            <div class="loading-indicator">Loading recent additions...</div>
         </div>
     </div>
     
-    <!-- Watchlist Status Card -->
-    <div class="card bg-dark mb-4">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <div>
-                    <span id="connection-status">
-                        <i class="fas fa-circle-notch fa-spin mr-2"></i> Checking connection...
-                    </span>
-                    
-                </div>
-            </div>
-            
-            <!-- Plex Stats -->
-            <div class="row mt-3">
-                <div class="col-md-6">
-                    <div class="stat-card">
-                        <h6 class="text-muted">Library</h6>
-                        <div class="d-flex justify-content-between">
-                            <span>Movies:</span>
-                            <span id="library-movies">0</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>TV Shows:</span>
-                            <span id="library-tv">0</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="stat-card">
-                        <h6 class="text-muted">Watchlist</h6>
-                        <div class="d-flex justify-content-between">
-                            <span>Movies:</span>
-                            <span id="watchlist-movies">0</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>TV Shows:</span>
-                            <span id="watchlist-tv">0</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-   
-
-    <!-- Unassigned TV Shows Row -->
+    <!-- Recommendations Row -->
     <div class="content-row">
         <header class="row-header">
-            <h4>Missing TV Shows</h4>
+            <h4>Recommended For You</h4>
             <div class="row-controls">
+                <button class="scroll-btn scroll-start" onclick="scrollRowToStart(this)">⏮️</button>
                 <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
                 <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
             </div>
         </header>
-        <div class="scrollable-row" id="watchlist-tv-unassigned-row">
-            <div class="loading-indicator">Loading missing TV shows...</div>
+        <div class="scrollable-row" id="plex-recommendations-row">
+            <div class="loading-indicator">Loading recommendations...</div>
         </div>
     </div>
-
-    <!-- Unassigned Movies Row -->
-    <div class="content-row">
-        <header class="row-header">
-            <h4>Missing Movies</h4>
-            <div class="row-controls">
-                <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
-                <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
-            </div>
-        </header>
-        <div class="scrollable-row" id="watchlist-movies-unassigned-row">
-            <div class="loading-indicator">Loading unassigned movies...</div>
+</div>
+<!-- Missing Content Row -->
+<div class="content-row">
+    <header class="row-header">
+        <h4>Missing From Your Library</h4>
+        <div class="row-controls">
+            <button class="scroll-btn scroll-start" onclick="scrollRowToStart(this)">⏮️</button>
+            <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
+            <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
         </div>
+    </header>
+    <div class="scrollable-row" id="watchlist-missing-row">
+        <div class="loading-indicator">Loading watchlist items...</div>
     </div>
 </div>
     <script src="{{ url_for('static', filename='plex-watchlist.js') }}"></script>
