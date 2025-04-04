@@ -24,7 +24,7 @@ body {
     color: var(--text-color);
     line-height: 1.6;
     overflow-x: hidden;
-    background-image: url('https://hass.lan/local/backgrounds/background.jpg');
+    #background-image: url('https://hass.lan/local/backgrounds/background.jpg');
     background-size: 175%;
     background-position: calc(100% + 220px) -135px;
     background-repeat: no-repeat;
@@ -210,6 +210,7 @@ body {
         text-align: right;
         width: 100%;
         padding-right: 10px;
+        margin-top: 0;
     }
     
     /* Adjust poster sizes to fit more on screen */
@@ -221,7 +222,7 @@ body {
 
     .content-row {
         height: calc((100vw / 3) * 1.5 + var(--spacing-md) * 2); /* Poster height + header space */
-        margin-bottom: var(--spacing-sm); /* Keep tight spacing */
+        margin-bottom: 2px; /* Keep tight spacing */
     }
 
     .row-controls {
@@ -234,7 +235,35 @@ body {
         overflow-y: auto;
     }
 }
-
+/* Hide all tickers on mobile - more specific selector */
+@media (max-width: 767px) {
+    /* Hide ticker container in all tabs */
+    #shows-tab .ticker-container,
+    #movies-tab .ticker-container,
+    #plex-tab .ticker-container {
+        display: none !important;
+    }
+   
+    /* Hide settings icon */
+    .fa-cog.ticker-settings {
+        display: none !important;
+    }
+   
+    /* Hide stats card in shows and movies sections */
+    #shows-tab .row.mb-3 .card.bg-dark .card-body,
+    #movies-tab .row.mb-3 .card.bg-dark .card-body {
+        display: none !important;
+    }
+    
+    /* Keep Plex stats but hide ticker */
+    #plex-tab .ticker-container {
+        display: none !important;
+    }
+    
+    #plex-tab .card-body {
+        justify-content: center !important;
+    }
+}
 /* Desktop (768px and up) - 7 posters across */
 @media (min-width: 768px) {
     .media-item {
@@ -253,4 +282,100 @@ body {
         margin-bottom: 15px;
         max-height: 290px; /* Limit height to fit 3 rows on screen */
     }
+    .sidebar.collapsed {
+        width: var(--sidebar-width); /* Always use full width */
+    }
+    
+    .sidebar.collapsed + .content-wrapper {
+        margin-left: var(--sidebar-width); /* Always use full margin */
+        width: calc(100% - var(--sidebar-width));
+    }
+    
+    /* Hide toggle button on desktop since we're always expanded */
+    .sidebar-toggle {
+        display: none;
+    }
+    
+    /* Always show these elements on desktop, even when "collapsed" class is present */
+    .sidebar.collapsed .logo-container,
+    .sidebar.collapsed .logo-image,
+    .sidebar.collapsed .nav-text {
+        display: block;
+    }
+    
+    /* Keep sidebar menu text visible */
+    .collapsed .nav-text {
+        display: block;
+    }
+}
+/* Ticker styling */
+.ticker-container {
+    overflow: hidden;
+    height: 30px; /* Slightly taller to accommodate larger text */
+    position: relative;
+    background-color: rgba(52, 152, 219, 0.1);
+    border-radius: 3px;
+    display: flex;
+    align-items: center; /* Vertically center the content */
+}
+
+.ticker-wrapper {
+    width: 100%;
+    height: 100%;
+}
+
+.ticker-content {
+    white-space: nowrap;
+    display: inline-block;
+    padding-right: 100%;
+    animation: ticker-scroll 120s linear infinite;
+    font-size: 14px; /* Larger font size */
+    line-height: 30px; /* Match container height */
+    color: var(--text-color); /* Use theme text color */
+}
+
+.ticker-item {
+    display: inline-block;
+    padding: 0 15px;
+    color: var(--text-secondary);
+}
+
+.ticker-item:not(:last-child):after {
+    content: "•";
+    margin-left: 15px;
+    color: var(--primary-color);
+}
+
+.ticker-item .type-tag {
+    display: inline-block;
+    padding: 0 5px;
+    border-radius: 3px;
+    margin-right: 5px;
+    font-size: 12px;
+    text-transform: uppercase;
+    vertical-align: middle; /* Align with text */
+}
+
+.ticker-item .type-movie {
+    background-color: #f03a2d;
+    color: #fff;
+}
+
+.ticker-item .type-show {
+    background-color: #329af0;
+    color: #fff;
+}
+
+@keyframes ticker-scroll {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-100%);
+    }
+}
+
+/* Pause animation on hover */
+.ticker-content:hover {
+    animation-play-state: paused;
 }

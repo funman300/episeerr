@@ -2,6 +2,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize - load content
     loadPopularShows();
     loadPopularMovies();
+
+    // Add ticker initialization
+    updateTicker('movies');
+    updateTicker('shows');
+    
+    // Set up refresh interval for tickers (30 minutes)
+    setInterval(() => {
+        updateTicker('movies');
+        updateTicker('shows');
+    }, 1800000);
     
     // Add event listeners for episode selection in requests section
     const selectAllButtons = document.querySelectorAll('.select-all');
@@ -130,10 +140,82 @@ document.addEventListener('DOMContentLoaded', function() {
             window.open(`${jellyseerrUrl}${discoverPath}`, '_blank');
         });
     }
+    // Try to match to a preset
+    const presetMap = {
+        "https://www.filmjabber.com/rss/rss-trailers.php": "filmjabber-movies",
+        "https://tvline.com/feed/": "tvline-shows",
+        "https://www.comingsoon.net/feed": "comingsoon"
+    };
+
+    // Update preset selection handler
+    $('#feedPresets').on('change', function() {
+        const value = $(this).val();
+        
+        const presetUrls = {
+            'filmjabber-movies': "https://www.filmjabber.com/rss/rss-trailers.php",
+            'tvline-shows': "https://tvline.com/feed/",
+            'comingsoon': "https://www.comingsoon.net/feed"
+        };
+        
+        const presetNames = {
+            'filmjabber-movies': "FilmJabber Movie Trailers",
+            'tvline-shows': "TVLine News",
+            'comingsoon': "ComingSoon.net Updates"
+        };
+        
+        if (value !== 'custom') {
+            $('#feedUrl').val(presetUrls[value]);
+            $('#feedName').val(presetNames[value]);
+        }
+    });
+    
+    // Add save settings handler
+    $('#saveFeedSettings').on('click', function() {
+        const section = $('#tickerSection').val();
+        const feedUrl = $('#feedUrl').val();
+        const feedName = $('#feedName').val();
+        
+        // Validate URL
+        if (!feedUrl) {
+            alert('Please enter a valid feed URL');
+            return;
+        }
+        
+        // Save preferences
+        fetch('/api/ticker/save-feed', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_id: 'default',
+                section: section,
+                feed_url: feedUrl,
+                feed_name: feedName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Close modal and update ticker
+                $('#tickerSettingsModal').modal('hide');
+                updateTicker(section);
+            } else {
+                alert('Error saving feed settings');
+            }
+        })
+        .catch(error => {
+            console.error('Error saving feed settings:', error);
+            alert('Error saving feed settings');
+        });
+    });
+    
     // NEW CODE: Check for pending requests every 30 seconds
     setInterval(checkForNewRequests, 30000);
+    
     // Show the determined tab
     showMainTab(tabToShow);
+    
     // If we're on the settings tab, restore the last active subsection
     if (tabToShow === 'settings-tab') {
         const lastSubsection = subsectionParam || localStorage.getItem('lastSettingsSubsection') || 'service_status';
@@ -149,11 +231,101 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     }
-
    
     // After adding content, check if we need to adjust the rows
     adjustScrollableRows();
 });
+// Add this to your index.js file
+function scrollRowToStart(button) {
+    const row = button.closest('.row-header').nextElementSibling;
+    row.scrollTo({
+        left: 0,
+        behavior: 'smooth'
+    });
+}
+// Function to update the ticker for a specific section
+function updateTicker(section) {
+    console.log(`Attempting to update ticker for: ${section}`);
+    
+    const tickerId = `${section}-ticker`;
+    console.log(`Looking for ticker element with ID: ${tickerId}`);
+    
+    const ticker = document.getElementById(tickerId);
+    
+    if (!ticker) {
+        console.error(`NO TICKER FOUND for section: ${section}`);
+        console.error(`Available elements with 'ticker' in ID:`);
+        document.querySelectorAll('[id*="ticker"]').forEach(el => {
+            console.error(el.id);
+        });
+        return;
+    }
+    
+    // Get user preferences for this section
+    getUserFeedPreference(section)
+        .then(feedInfo => {
+            const feedUrl = feedInfo.url;
+            const feedType = section;
+            
+            // Fetch the feed content
+            return fetch(`/api/ticker/feed?feed_url=${encodeURIComponent(feedUrl)}&type=${feedType}`);
+        })
+        .then(response => response.json())
+        .then(data => {
+            let tickerHTML = '';
+            
+            // Create ticker items
+            data.forEach(item => {
+                tickerHTML += `
+                    <div class="ticker-item">
+                        <span class="type-tag type-${item.type}">${item.type}</span>
+                        <a href="${item.link}" target="_blank">${item.title}</a>
+                    </div>
+                `;
+            });
+            
+            // Add duplicate items for seamless loop
+            ticker.innerHTML = tickerHTML + tickerHTML;
+        })
+        .catch(error => {
+            console.error(`Error fetching ${section} feed:`, error);
+            // Fallback ticker content
+            ticker.innerHTML = `
+                <div class="ticker-item">Feed unavailable. Check settings.</div>
+                <div class="ticker-item">Feed unavailable. Check settings.</div>
+            `;
+        });
+}
+
+// Get user's feed preference for a section
+function getUserFeedPreference(section) {
+    return fetch(`/api/ticker/get-feeds?user_id=default`)
+        .then(response => response.json())
+        .then(data => {
+            if (data[section]) {
+                return data[section];
+            } else {
+                // Default feeds if none found
+                const defaults = {
+                    'movies': {
+                        url: "https://www.filmjabber.com/rss/rss-trailers.php",
+                        name: "FilmJabber Movie Trailers"
+                    },
+                    'shows': {
+                        url: "https://tvline.com/feed/",
+                        name: "TVLine News"
+                    },
+                    'plex': {
+                        url: "https://www.comingsoon.net/feed",
+                        name: "ComingSoon.net Updates"
+                    }
+                };
+                return defaults[section] || defaults['movies'];
+            }
+        });
+}
+// Then update your HTML to include a new button in each row-controls div:
+// <button class="scroll-btn scroll-start" onclick="scrollRowToStart(this)">⏮️</button>
 // NEW FUNCTION: Check for pending requests
 function checkForNewRequests() {
     // Fetch the current number of pending requests

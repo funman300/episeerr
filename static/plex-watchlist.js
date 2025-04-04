@@ -8,7 +8,7 @@ function updateConnectionStatus(connected, lastUpdated) {
     
     if (connectionStatus) {
         connectionStatus.innerHTML = connected 
-            ? '<i class="fas fa-check-circle text-success mr-2"></i> Connected to Plex'
+            ? '<i class="fas fa-check-circle text-success mr-2"></i> Connected'
             : '<i class="fas fa-times-circle text-danger mr-2"></i> Failed to connect to Plex';
     }
     
@@ -98,72 +98,92 @@ function loadWatchlistContent() {
     
     const tvNotInArrRow = document.getElementById('watchlist-tv-unassigned-row');
     const moviesNotInArrRow = document.getElementById('watchlist-movies-unassigned-row');
-   
+    const missingContentRow = document.getElementById('watchlist-missing-row');
+    const recentAdditionsRow = document.getElementById('recent-additions-row');
+    
     // Set loading indicators
     if (tvNotInArrRow) tvNotInArrRow.innerHTML = '<div class="loading-indicator">Loading missing TV shows...</div>';
     if (moviesNotInArrRow) moviesNotInArrRow.innerHTML = '<div class="loading-indicator">Loading missing movies...</div>';
    
     fetch('/api/plex/watchlist')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.watchlist && data.watchlist.categories) {
+            const categories = data.watchlist.categories;
+           
+            // Update library stats
+            updateLibraryStats(data);
+           
+            // Combine missing TV shows and movies
+            const missingContent = [
+                ...(categories.tv_not_in_arr || []),
+                ...(categories.movie_not_in_arr || [])
+            ];
+           
+            // Render combined missing content
+            renderMediaItems(missingContentRow, missingContent, 'missing');
+           
+            // Load recent additions in a separate API call
+            loadRecentAdditions();
+           
+            updateConnectionStatus(true, data.watchlist.last_updated);
+            updateWatchlistNotificationBadge(data.watchlist.count || 0);
+           
+            // Load recommendations separately
+            loadRecommendations();
+       
+        } else {
+            // Error handling - update for the new combined row
+            if (missingContentRow) {
+                missingContentRow.innerHTML = '<div class="alert alert-warning">Failed to load watchlist</div>';
+            }
+           
+            updateConnectionStatus(false);
+        }
+    })
+    .catch(error => {
+        console.error('Error loading watchlist:', error);
+       
+        // Error handling - update for the new combined row
+        if (missingContentRow) {
+            missingContentRow.innerHTML = '<div class="alert alert-danger">Error loading watchlist</div>';
+        }
+       
+        updateConnectionStatus(false);
+    });
+}
+// New function to load recent additions
+function loadRecentAdditions() {
+    const recentAdditionsRow = document.getElementById('recent-additions-row');
+    if (!recentAdditionsRow) return;
+    
+    recentAdditionsRow.innerHTML = '<div class="loading-indicator">Loading recent additions...</div>';
+    
+    fetch('/api/recent-additions')
         .then(response => {
-            console.log("Watchlist API response received:", response.status);
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
             return response.json();
         })
         .then(data => {
-            console.log("Watchlist data:", data);
-            if (data.success && data.watchlist && data.watchlist.categories) {
-                const categories = data.watchlist.categories;
-                for (const [key, items] of Object.entries(categories)) {
-                    console.log(`Category: ${key}, Items: ${items.length}`);
-                    console.log(items);
-                }
-            
-                // Update library stats
-                updateLibraryStats(data);
-                
-                // Render unassigned TV shows
-                renderMediaItems(tvNotInArrRow, categories.tv_not_in_arr || [], 'tv_not_in_arr');
-                
-                // Render unassigned movies
-                renderMediaItems(moviesNotInArrRow, categories.movie_not_in_arr || [], 'movie_not_in_arr');
-                
-                updateConnectionStatus(true, data.watchlist.last_updated);
-                updateWatchlistNotificationBadge(data.watchlist.count || 0);
-                
-                // Load recommendations separately
-                loadRecommendations();
+            if (data.success && data.items && data.items.length > 0) {
+                renderMediaItems(recentAdditionsRow, data.items, 'recent');
             } else {
-                // Error handling
-                const rows = [tvNotInArrRow, moviesNotInArrRow];
-                
-                rows.forEach(row => {
-                    if (row) row.innerHTML = '<div class="alert alert-warning">Failed to load watchlist</div>';
-                });
-                
-                updateConnectionStatus(false);
+                recentAdditionsRow.innerHTML = '<div class="alert alert-info">No recent additions found</div>';
             }
         })
         .catch(error => {
-            console.error('Error loading watchlist:', error);
-            
-            const rows = [tvNotInArrRow, moviesNotInArrRow];
-            
-            rows.forEach(row => {
-                if (row) row.innerHTML = '<div class="alert alert-danger">Error loading watchlist</div>';
-            });
-            
-            updateConnectionStatus(false);
+            console.error('Error loading recent additions:', error);
+            recentAdditionsRow.innerHTML = `<div class="alert alert-danger">Failed to load recent additions: ${error.message}</div>`;
         });
 }
-
 function renderMediaItems(container, items, category) {
     console.log(`Rendering media items for ${category}, Items count: ${items ? items.length : 0}`);
     if (!container) {
         console.error(`Container for ${category} not found`);
         return;
     }
-    
-    // Debug - log the container
-    console.log("Container:", container);
     
     if (!items || items.length === 0) {
         container.innerHTML = `<div class="alert alert-info">No items found</div>`;
@@ -173,23 +193,39 @@ function renderMediaItems(container, items, category) {
     container.innerHTML = '';
     
     items.forEach(item => {
-        console.log(`Processing item: ${item.title}, Type: ${item.type}, TMDB ID: ${item.tmdb_id}`);
+        console.log(`Processing item:`, item); // Log the entire item for debugging
         
         const mediaItem = document.createElement('article');
         mediaItem.className = 'media-item';
-        mediaItem.dataset.id = item.tmdb_id;
+        mediaItem.dataset.id = item.id || item.tmdb_id;
         mediaItem.dataset.type = item.type;
         
-        const posterUrl = item.poster_path 
-            ? `https://image.tmdb.org/t/p/w185${item.poster_path}` 
-            : (item.thumb || '/static/placeholder-poster.png');
+        // Handle different possible image property names
+        let posterUrl = '/static/placeholder-banner.png';
+        if (item.posterUrl) {
+            posterUrl = item.posterUrl;
+        } else if (item.poster_path) {
+            posterUrl = `https://image.tmdb.org/t/p/w185${item.poster_path}`;
+        } else if (item.artwork_url) {
+            posterUrl = item.artwork_url;
+        } else if (item.thumb) {
+            posterUrl = item.thumb;
+        }
+        
+        // Handle different possible title property names
+        const title = item.title || item.name || 'Unknown';
+        
+        // Handle different possible subtitle/year property names
+        const subtitle = item.subtitle || item.year || item.releaseYear || 
+                         (item.release_date ? item.release_date.split('-')[0] : '') ||
+                         (item.first_air_date ? item.first_air_date.split('-')[0] : '') || '';
         
         mediaItem.innerHTML = `
             <div class="poster-wrapper">
-                <img src="${posterUrl}" alt="${item.title}" class="poster">
+                <img src="${posterUrl}" alt="${title}" class="poster">
                 <div class="media-info">
-                    <h4 class="media-title">${item.title}</h4>
-                    <p class="media-subtitle">${item.year || ''}</p>
+                    <p class="media-subtitle">${title}</p>
+                    <p class="media-subtitle">${subtitle}</p>
                 </div>
             </div>
         `;
@@ -203,15 +239,34 @@ function renderMediaItems(container, items, category) {
 }
 
 function showWatchlistItemDetails(item, category) {
-    // Set modal content
-    document.getElementById('detailsTitle').textContent = item.title;
-    document.getElementById('detailsYear').textContent = item.year || '';
-    document.getElementById('detailsOverview').textContent = item.overview || 'No description available';
+    // Handle different possible title property names
+    const title = item.title || item.name || 'Unknown';
     
-    // Set poster
-    const posterUrl = item.poster_path 
-        ? `https://image.tmdb.org/t/p/w300${item.poster_path}` 
-        : (item.thumb || '/static/placeholder-poster.png');
+    // Handle different possible subtitle/year property names
+    const subtitle = item.subtitle || item.year || item.releaseYear || 
+                    (item.release_date ? item.release_date.split('-')[0] : '') ||
+                    (item.first_air_date ? item.first_air_date.split('-')[0] : '') || '';
+    
+    // Handle different possible overview property names
+    const overview = item.overview || 'No description available';
+    
+    // Set modal content
+    document.getElementById('detailsTitle').textContent = title;
+    document.getElementById('detailsYear').textContent = subtitle;
+    document.getElementById('detailsOverview').textContent = overview;
+    
+    // Handle different possible image property names
+    let posterUrl = '/static/placeholder-banner.png';
+    if (item.posterUrl) {
+        posterUrl = item.posterUrl;
+    } else if (item.poster_path) {
+        posterUrl = `https://image.tmdb.org/t/p/w300${item.poster_path}`;
+    } else if (item.artwork_url) {
+        posterUrl = item.artwork_url;
+    } else if (item.thumb) {
+        posterUrl = item.thumb;
+    }
+    
     document.getElementById('detailsPoster').src = posterUrl;
     
     // Clear previous footer buttons
@@ -219,7 +274,7 @@ function showWatchlistItemDetails(item, category) {
     modalFooter.innerHTML = '';
     
     // Determine actions based on category
-    if (category === 'recommendations' || category.includes('not_in_arr')) {
+    if (category === 'recommendations' || category === 'tmdb' || category === 'missing') {
         // Request button for recommendations or items not in Sonarr/Radarr
         const requestBtn = document.createElement('button');
         requestBtn.className = 'btn btn-primary me-2';
@@ -227,9 +282,9 @@ function showWatchlistItemDetails(item, category) {
         requestBtn.addEventListener('click', function() {
             $('#detailsModal').modal('hide');
             if (item.type === 'tv') {
-                requestShow(item.id || item.tmdb_id, item.title);
+                requestShow(item.id || item.tmdb_id, title);
             } else {
-                requestMovie(item.id || item.tmdb_id, item.title);
+                requestMovie(item.id || item.tmdb_id, title);
             }
         });
         modalFooter.appendChild(requestBtn);
@@ -238,6 +293,8 @@ function showWatchlistItemDetails(item, category) {
     // Show the modal
     $('#detailsModal').modal('show');
 }
+    
+   
 
 // Event Setup Functions
 function setupPlexSubmenuListeners() {
@@ -373,6 +430,9 @@ function initPlexWatchlist() {
     }
     
     setupPlexSubmenuListeners();
+
+    // Initialize the Plex ticker
+    updateTicker('plex');
     
     // Initial load of content
     loadWatchlistContent();
@@ -465,25 +525,51 @@ function syncPlexWatchlist() {
         }
     });
 }
+// Modified to use existing TMDB popular content
 function loadRecommendations() {
-    console.log("Loading recommendations");
-    
     const recommendationsRow = document.getElementById('plex-recommendations-row');
     if (!recommendationsRow) return;
     
     recommendationsRow.innerHTML = '<div class="loading-indicator">Loading recommendations...</div>';
     
-    // In loadRecommendations() function in plex-watchlist.js
-    fetch('/api/plex/recommendations')
-        .then(response => response.json())
-        .then(data => {
-            console.log("Recommendations data:", data); // Add this line
-            if (data.success) {
-                renderMediaItems(recommendationsRow, data.recommendations, 'recommendations');
-            } else {
-                recommendationsRow.innerHTML = '<div class="alert alert-warning">Failed to load recommendations</div>';
-            }
-        })
+    // Fetch both popular movies and TV shows from TMDB
+    Promise.all([
+        fetch('/api/tmdb/filtered/movies').then(res => res.json()),
+        fetch('/api/tmdb/filtered/tv').then(res => res.json())
+    ])
+    .then(([moviesData, tvData]) => {
+        // Combine the results
+        const combinedResults = [
+            ...(moviesData.results || []), 
+            ...(tvData.results || [])
+        ];
+        
+        // Shuffle the array to mix movies and TV shows
+        const shuffledResults = shuffleArray(combinedResults);
+        
+        // Take a limited number to display
+        const displayResults = shuffledResults.slice(0, 24);
+        
+        if (displayResults.length > 0) {
+            renderMediaItems(recommendationsRow, displayResults, 'tmdb');
+        } else {
+            recommendationsRow.innerHTML = '<div class="alert alert-warning">No recommendations available</div>';
+        }
+    })
+    .catch(error => {
+        console.error('Error loading recommendations:', error);
+        recommendationsRow.innerHTML = '<div class="alert alert-danger">Error loading recommendations</div>';
+    });
+}
+
+// Helper function to shuffle an array
+function shuffleArray(array) {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
 }
 
 function toggleAutoDownload() {
