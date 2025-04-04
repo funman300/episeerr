@@ -130,7 +130,10 @@ Tickers automatically refresh every 30 minutes to ensure you always see the late
 
 > 💡 **Tip**: The Plex section ticker would be a great place to add a friends' watchlist feed if you're using a service that provides RSS feeds of user activity.
 
-### Interface Preview
+### Interface Preview!
+[ocdarr](https://github.com/user-attachments/assets/5b97f9f3-bd2a-4df7-8fc5-1e9873e7d4fa)
+
+
 ![ocd](https://github.com/user-attachments/assets/cd7b5c0f-275f-4222-99e6-40fd76c6f495)
 
 ## 📋 Requirements
