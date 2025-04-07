@@ -29,12 +29,12 @@ Choose default download profiles and rule configuration.
 The heart of OCDarr - create custom rules to determine exactly how many episodes to monitor, search for, and retain.
 
 ## Perfect For Users Who:
-- Don't rewatch or keep 
+- Don't rewatch or keep, yet its ok if you do
 - Want the next episode ready when they finish the current one
-- Prefer to keep their media library tidy and organized
-- Don't need to keep entire seasons after watching
+- Prefer to keep their media library tidy and organized, not as vauluable for hoarders
+- Don't need to keep entire seasons after watching, but you can
 - Want different management rules for different shows
-- Use Overseerr or Jellyseerr but want to  manage at the episode level
+- Use Overseerr or Jellyseerr but want to  manage at the episode level, nzb360, lunasea (use tag)
 
 Most media management tools operate on an all-or-nothing approach. OCDarr revolutionizes this with its dynamic, per-show rule system:
 
