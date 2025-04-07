@@ -293,15 +293,42 @@ JSON Data: Use exactly this template:
 
 Important: Adjust your "Watched Percentage" in Tautulli's general settings to control when webhooks trigger.
 
-### Jellyfin Setup # not ready yet
+## Setting Up Jellyfin Webhook for OCDarr
 
-In Jellyfin:
-1. Go to Dashboard > Webhooks
-2. Add a new webhook:
-   - URL: `http://your-ocdarr-ip:5002/jellyfin-webhook`
-   - Notification Type: Select "Playback Progress"
+To configure Jellyfin to send playback information to OCDarr, follow these steps:
 
-No template needed - Jellyfin sends structured data automatically. OCDarr processes events when playback reaches 45-55% of the episode.
+1. In Jellyfin, navigate to **Dashboard** → **Plugins** → **Webhooks**
+  - If the Webhooks plugin is not installed, you'll need to install it first from the Plugin Catalog
+
+2. Once in the Webhooks section, click **+ Add New Webhook** and configure with these settings:
+
+  - **Webhook Name**: OCDarr Episode Tracking (or any name you prefer)
+  - **Server URL**: Your Jellyfin base URL (for linking to content)
+  - **Webhook URL**: `http://your-ocdarr-ip:5002/jellyfin-webhook`
+  - **Status**: Enabled
+  - **Notification Type**: Select only "Playback Progress"
+  - **User Filter** (Optional): Specific username(s) to track
+  - **Item Type**: Episodes
+  - **Send All Properties**: Enabled
+  - **Content Type**: application/json
+
+3. Under **Request Headers**, add:
+  - **Key**: `Content-Type`
+  - **Value**: `application/json`
+
+4. Click **Save**
+
+### Important Notes:
+
+- OCDarr processes playback events when progress is between 45-55% of the episode (mid-point)
+- Make sure your server can reach your OCDarr instance on port 5002
+- OCDarr will automatically manage episodes according to your configured rules when playback events are received
+
+### Troubleshooting:
+
+- If webhooks aren't being received, check your servers logs for any webhook delivery errors
+- Verify the webhook URL is correctly pointing to your OCDarr instance
+- Ensure OCDarr logs show webhook events being received at `/app/logs/app.log`
 
 ### Jellyseerr/Overseerr Webhook Setup
 
@@ -314,8 +341,6 @@ No template needed - Jellyfin sends structured data automatically. OCDarr proces
 5. Save the webhook configuration
 
 ### Sonarr Webhook Setup
-
-*To enable more control of requests, like episodes*
 
 1. In Sonarr, go to Settings > Connect
 2. Click the + button to add a new connection
