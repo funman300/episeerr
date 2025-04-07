@@ -1794,26 +1794,101 @@ def process_seerr_webhook():
    
 @app.route('/webhook', methods=['POST'])
 def handle_server_webhook():
-    app.logger.info("Received POST request from Tautulli")
+    """Handle webhooks from Plex/Tautulli"""
+    app.logger.info("Received webhook from Tautulli")
     data = request.json
     if data:
-        app.logger.info(f"Webhook received with data: {data}")
         try:
             temp_dir = os.path.join(os.getcwd(), 'temp')
             os.makedirs(temp_dir, exist_ok=True)
-            with open(os.path.join(temp_dir, 'data_from_tautulli.json'), 'w') as f:
-                json.dump(data, f)
-            app.logger.info("Data successfully written to data_from_tautulli.json")
+            
+            # Standardize field names for Plex/Tautulli data
+            plex_data = {
+                "server_title": data.get('plex_title'),
+                "server_season_num": data.get('plex_season_num'),
+                "server_ep_num": data.get('plex_ep_num')
+            }
+            
+            # Save to the standardized filename
+            with open(os.path.join(temp_dir, 'data_from_server.json'), 'w') as f:
+                json.dump(plex_data, f)
+            
             result = subprocess.run(["python3", os.path.join(os.getcwd(), "servertosonarr.py")], capture_output=True, text=True)
             if result.stderr:
-                app.logger.error("Errors from servertosonarr.py: " + result.stderr)
+                app.logger.error(f"Servertosonarr.py error: {result.stderr}")
+            return jsonify({'status': 'success'}), 200
         except Exception as e:
-            app.logger.error(f"Failed to handle data or run script: {e}")
+            app.logger.error(f"Failed to process Tautulli webhook: {str(e)}")
             return jsonify({'status': 'error', 'message': str(e)}), 500
-        return jsonify({'status': 'success', 'message': 'Script triggered successfully'}), 200
-    else:
+    return jsonify({'status': 'error', 'message': 'No data received'}), 400
+
+@app.route('/jellyfin-webhook', methods=['POST'])
+def handle_jellyfin_webhook():
+    """Handle webhooks from Jellyfin for playback progress."""
+    app.logger.info("Received webhook from Jellyfin")
+    data = request.json
+    if not data:
         return jsonify({'status': 'error', 'message': 'No data received'}), 400
 
+    try:
+        if data.get('NotificationType') == 'PlaybackProgress':
+            position_ticks = int(data.get('PlaybackPositionTicks', 0))
+            total_ticks = int(data.get('RunTimeTicks', 0))
+            
+            if total_ticks > 0:
+                progress_percent = (position_ticks / total_ticks) * 100
+                app.logger.info(f"Jellyfin playback progress: {progress_percent:.2f}%")
+                
+                # Only process when progress is between 45-55% (mid-episode)
+                if 45 <= progress_percent <= 55:
+                    item_type = data.get('ItemType')
+                    
+                    # Only process for TV episodes
+                    if item_type == 'Episode':
+                        series_name = data.get('SeriesName')
+                        season = data.get('SeasonNumber')
+                        episode = data.get('EpisodeNumber')
+                        
+                        if all([series_name, season is not None, episode is not None]):
+                            app.logger.info(f"Processing Jellyfin episode: {series_name} S{season}E{episode}")
+                            
+                            # Format data using server prefix instead of plex
+                            jellyfin_data = {
+                                "server_title": series_name,
+                                "server_season_num": str(season),
+                                "server_ep_num": str(episode)
+                            }
+                            
+                            # Save to the standardized file name
+                            temp_dir = os.path.join(os.getcwd(), 'temp')
+                            os.makedirs(temp_dir, exist_ok=True)
+                            with open(os.path.join(temp_dir, 'data_from_server.json'), 'w') as f:
+                                json.dump(jellyfin_data, f)
+                            
+                            # Call the processing script
+                            result = subprocess.run(["python3", os.path.join(os.getcwd(), "servertosonarr.py")], 
+                                                   capture_output=True, text=True)
+                            
+                            if result.stderr:
+                                app.logger.error(f"Errors from servertosonarr.py: {result.stderr}")
+                        else:
+                            app.logger.warning(f"Missing episode info: Series={series_name}, Season={season}, Episode={episode}")
+                    else:
+                        app.logger.info(f"Item type '{item_type}' is not an episode, ignoring")
+                else:
+                    app.logger.debug(f"Progress {progress_percent:.2f}% outside trigger range (45-55%), ignoring")
+            else:
+                app.logger.warning("Total ticks is zero, cannot calculate progress")
+        else:
+            notification_type = data.get('NotificationType', 'Unknown')
+            app.logger.info(f"Jellyfin notification type '{notification_type}' is not PlaybackProgress, ignoring")
+            
+        return jsonify({'status': 'success'}), 200
+            
+    except Exception as e:
+        app.logger.error(f"Failed to process Jellyfin webhook: {str(e)}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
 @app.route('/update-settings', methods=['POST'])
 def update_settings():
     config = load_config()

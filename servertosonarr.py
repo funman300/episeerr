@@ -62,16 +62,37 @@ missing_logger.addHandler(missing_handler)
 
 
 def get_server_activity():
-    """Read current viewing details from Tautulli webhook stored data."""
+    """Read current viewing details from server webhook stored data."""
     try:
-        with open('/app/temp/data_from_tautulli.json', 'r') as file:
+        # First try the standardized filename
+        filepath = '/app/temp/data_from_server.json'
+        if not os.path.exists(filepath):
+            # Fallback to the Tautulli-specific filename for backward compatibility
+            filepath = '/app/temp/data_from_tautulli.json'
+            
+        with open(filepath, 'r') as file:
             data = json.load(file)
-        series_title = data['plex_title']
-        season_number = int(data['plex_season_num'])
-        episode_number = int(data['plex_ep_num'])
-        return series_title, season_number, episode_number
+        
+        # Try server-prefix fields first (standardized format)
+        series_title = data.get('server_title')
+        season_number = data.get('server_season_num')
+        episode_number = data.get('server_ep_num')
+        
+        # If not found, try plex-prefix fields (backward compatibility)
+        if not all([series_title, season_number, episode_number]):
+            series_title = data.get('plex_title')
+            season_number = data.get('plex_season_num')
+            episode_number = data.get('plex_ep_num')
+        
+        if all([series_title, season_number, episode_number]):
+            return series_title, int(season_number), int(episode_number)
+            
+        logger.error(f"Required data fields not found in {filepath}")
+        logger.debug(f"Data contents: {data}")
+        
     except Exception as e:
-        logger.error(f"Failed to read or parse data from Tautulli webhook: {str(e)}")
+        logger.error(f"Failed to read or parse data from server webhook: {str(e)}")
+    
     return None, None, None
 
 def get_series_id(series_name):
