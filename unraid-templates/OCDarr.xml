@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <Name>OCDarr</Name>
+  <Repository>vansmak/ocdarr:amd64_dev</Repository>
+  <Registry>https://hub.docker.com/r/vansmak/ocdarr</Registry>
+  <Network>host</Network>
+  <Privileged>false</Privileged>
+  <WebUI>http://[IP]:[PORT:5002]</WebUI>
+  <Icon>https://raw.githubusercontent.com/your-username/ocdarr/main/icon.png</Icon>
+  <Overview>A Flask-based webhook listener for Sonarr integration. AMD64 architecture only.</Overview>
+  <Category>Tools: MediaServer</Category>
+  <Config Type="Path" Name="App directory" Target="/app" Default="/mnt/user/appdata/ocdarr" Mode="rw" Description="Application files location." Required="true"/>
+  <Config Type="Path" Name="Logs" Target="/app/logs" Default="/mnt/user/appdata/ocdarr/logs" Mode="rw" Description="Log files location." Required="true"/>
+  <Config Type="Path" Name="Config" Target="/app/config" Default="/mnt/user/appdata/ocdarr/config" Mode="rw" Description="Configuration files location." Required="true"/>
+  <Config Type="Path" Name="Temp" Target="/app/temp" Default="/mnt/user/appdata/ocdarr/temp" Mode="rw" Description="Temporary files location." Required="true"/>
+  <Config Type="Port" Name="WebUI Port" Target="5002" Default="5002" Mode="tcp" Description="WebUI port for accessing the application." Required="true"/>
+  <Config Type="Variable" Name="SONARR_URL" Target="SONARR_URL" Default="http://localhost:8989" Description="URL for your Sonarr instance." Required="true"/>
+  <Config Type="Variable" Name="SONARR_API_KEY" Target="SONARR_API_KEY" Default="" Description="API key for your Sonarr instance." Required="true"/>
+  <Config Type="Variable" Name="LOG_PATH" Target="LOG_PATH" Default="/app/logs/app.log" Description="Path to application log file." Required="false"/>
+</Container>
