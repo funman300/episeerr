@@ -18,14 +18,14 @@ Manage your movie library with easy access to recently added titles and missing 
 ⬇️ **Requests**  
 Streamlined interface for adding new content requests with season and episode-level precision.
 
-▶️ **Plex Watchlist**  
+▶️ **Plex Watchlist**  ///will look into adding jellyfin quivalent
 Plex watchlist and stats, see what's missing from your collection.
 
 ⚙️ **Settings**  
 Choose default download profiles and rule configuration.
 
 
-🔬 **Rule-Based Episode Control**  
+🔬 **Rule-Based Episode Control**  //works with jellyfin or plex
 The heart of OCDarr - create custom rules to determine exactly how many episodes to monitor, search for, and retain.
 
 ## Perfect For Users Who:
@@ -221,6 +221,54 @@ services:
       - "5002:5002"
     restart: unless-stopped
 ```
+# OcDarr for Unraid
+
+Flask application that provides integrated webhook functionality for Sonarr, Radarr, Jellyseerr, and Plex.
+
+## For Unraid Users
+
+To install this Docker container on Unraid:
+
+1. Navigate to the "Docker" tab in your Unraid web UI
+2. Click on the "Docker Repositories" sub-tab
+3. Add `https://github.com/vansmak/OCDarr` to your template repositories
+4. Click "Save"
+5. Go back to the "Docker" tab
+6. Click "Add Container"
+7. Find "OcDarr" in the template dropdown
+8. Configure the container settings as needed
+9. Click "Apply"
+
+## Architecture Support
+
+This container is designed for AMD64/x86_64 systems only. It will not work on ARM-based Unraid servers.
+
+## Configuration
+
+The following environment variables are required:
+
+### Media Servers
+- `SONARR_URL`: URL for your Sonarr instance
+- `SONARR_API_KEY`: API key for your Sonarr instance
+- `RADARR_URL`: URL for your Radarr instance
+- `RADARR_API_KEY`: API key for your Radarr instance
+- `JELLYSEERR_URL`: URL for your Jellyseerr instance
+- `JELLYSEERR_API_KEY`: API key for your Jellyseerr instance
+- `PLEX_URL`: URL for your Plex server
+- `PLEX_TOKEN`: Authentication token for your Plex server
+
+### External APIs
+- `TMDB_API_KEY`: API key for The Movie Database
+
+### Optional Settings
+- `MAX_TMDB_ITEMS`: Maximum number of TMDB items to display (default: 24)
+- `MAX_SHOWS_ITEMS`: Maximum number of shows to display (default: 24)
+- `MAX_MOVIES_ITEMS`: Maximum number of movies to display (default: 24)
+- `LOG_PATH`: Path to application log file (default: /app/logs/app.log)
+- `MISSING_LOG_PATH`: Path to missing items log file (default: /app/logs/missing.log)
+- `FLASK_DEBUG`: Enable Flask debug mode (default: false)
+
+Docker image: [vansmak/ocdarr:amd64_dev](https://hub.docker.com/r/vansmak/ocdarr)
 📝 Rules System
 Create rules using the OCDarr website (start with Default rule)
 
