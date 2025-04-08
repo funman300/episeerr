@@ -6,15 +6,40 @@
   <Network>host</Network>
   <Privileged>false</Privileged>
   <WebUI>http://[IP]:[PORT:5002]</WebUI>
-  <Icon>https://raw.githubusercontent.com/your-username/ocdarr/main/icon.png</Icon>
-  <Overview>A Flask-based webhook listener for Sonarr integration. AMD64 architecture only.</Overview>
+  <Icon>https://raw.githubusercontent.com/YOUR_USERNAME/ocdarr/main/icon.png</Icon>
+  <Overview>A Flask-based webhook listener that integrates Sonarr, Radarr, Jellyseerr and Plex for media management.</Overview>
   <Category>Tools: MediaServer</Category>
   <Config Type="Path" Name="App directory" Target="/app" Default="/mnt/user/appdata/ocdarr" Mode="rw" Description="Application files location." Required="true"/>
   <Config Type="Path" Name="Logs" Target="/app/logs" Default="/mnt/user/appdata/ocdarr/logs" Mode="rw" Description="Log files location." Required="true"/>
   <Config Type="Path" Name="Config" Target="/app/config" Default="/mnt/user/appdata/ocdarr/config" Mode="rw" Description="Configuration files location." Required="true"/>
   <Config Type="Path" Name="Temp" Target="/app/temp" Default="/mnt/user/appdata/ocdarr/temp" Mode="rw" Description="Temporary files location." Required="true"/>
+  <Config Type="Path" Name="Plex Backgrounds" Target="/app/backgrounds" Default="/mnt/user/appdata/plex_backgrounds" Mode="rw" Description="Path to store Plex background images." Required="true"/>
   <Config Type="Port" Name="WebUI Port" Target="5002" Default="5002" Mode="tcp" Description="WebUI port for accessing the application." Required="true"/>
+  
+  <!-- Sonarr Configuration -->
   <Config Type="Variable" Name="SONARR_URL" Target="SONARR_URL" Default="http://localhost:8989" Description="URL for your Sonarr instance." Required="true"/>
   <Config Type="Variable" Name="SONARR_API_KEY" Target="SONARR_API_KEY" Default="" Description="API key for your Sonarr instance." Required="true"/>
+  
+  <!-- Radarr Configuration -->
+  <Config Type="Variable" Name="RADARR_URL" Target="RADARR_URL" Default="http://localhost:7878" Description="URL for your Radarr instance." Required="true"/>
+  <Config Type="Variable" Name="RADARR_API_KEY" Target="RADARR_API_KEY" Default="" Description="API key for your Radarr instance." Required="true"/>
+  
+  <!-- Jellyseerr Configuration -->
+  <Config Type="Variable" Name="JELLYSEERR_URL" Target="JELLYSEERR_URL" Default="http://localhost:5055" Description="URL for your Jellyseerr instance." Required="true"/>
+  <Config Type="Variable" Name="JELLYSEERR_API_KEY" Target="JELLYSEERR_API_KEY" Default="" Description="API key for your Jellyseerr instance." Required="true"/>
+  
+  <!-- Plex Configuration -->
+  <Config Type="Variable" Name="PLEX_URL" Target="PLEX_URL" Default="http://localhost:32400" Description="URL for your Plex server." Required="true"/>
+  <Config Type="Variable" Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Description="Authentication token for your Plex server." Required="true"/>
+  
+  <!-- TMDB Configuration -->
+  <Config Type="Variable" Name="TMDB_API_KEY" Target="TMDB_API_KEY" Default="" Description="API key for TMDB integration." Required="true"/>
+  <Config Type="Variable" Name="MAX_TMDB_ITEMS" Target="MAX_TMDB_ITEMS" Default="24" Description="Maximum number of TMDB items to display." Required="false"/>
+  <Config Type="Variable" Name="MAX_SHOWS_ITEMS" Target="MAX_SHOWS_ITEMS" Default="24" Description="Maximum number of shows to display." Required="false"/>
+  <Config Type="Variable" Name="MAX_MOVIES_ITEMS" Target="MAX_MOVIES_ITEMS" Default="24" Description="Maximum number of movies to display." Required="false"/>
+  
+  <!-- Logging Configuration -->
   <Config Type="Variable" Name="LOG_PATH" Target="LOG_PATH" Default="/app/logs/app.log" Description="Path to application log file." Required="false"/>
+  <Config Type="Variable" Name="MISSING_LOG_PATH" Target="MISSING_LOG_PATH" Default="/app/logs/missing.log" Description="Path to missing items log file." Required="false"/>
+  <Config Type="Variable" Name="FLASK_DEBUG" Target="FLASK_DEBUG" Default="false" Description="Enable Flask debug mode." Required="false"/>
 </Container>
