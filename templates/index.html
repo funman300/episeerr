@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='plex-watchlist.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='jellyfin.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <title>OCDarr</title>
 
@@ -285,25 +286,19 @@
             {% endif %}
         </a>
         
-        <!-- Plex Watchlist Section -->
+        <!-- Server Dashboard Section -->
         <a href="#" class="nav-item" onclick="showMainTab('plex-tab')" data-section="plex">
             <span class="nav-icon"><i class="fas fa-play-circle"></i></span>
-            <span class="nav-text">Plex Watchlist</span>
+            <span class="nav-text">Servers</span>
         </a>
         
-        <!-- Settings Section -->
-        <div class="nav-item" data-toggle="submenu" data-target="settings-submenu" data-section="settings">
+        
+        <!-- Settings Section - now a single menu item without submenu -->
+        <a href="#" class="nav-item" onclick="showMainTab('settings-tab')" data-section="settings">
             <span class="nav-icon"><i class="fas fa-cog"></i></span>
             <span class="nav-text">Settings</span>
-        </div>
-        <div class="submenu" id="settings-submenu">
-            <a href="#" class="nav-item" onclick="showMainTab('settings-tab'); showSettingsSection('rule_management');">
-                <span class="nav-text">Rules</span>
-            </a>
-            <a href="#" class="nav-item" onclick="showMainTab('settings-tab'); showSettingsSection('profile_settings');">
-                <span class="nav-text">Profiles</span>
-            </a>
-        </div>
+        </a>
+</nav>
     </nav>
 </div>
    <input type="hidden" id="jellyseerr-url" value="{{ jellyseerr_url }}">
@@ -699,21 +694,76 @@
             </div>
         </section>
         <section id="plex-tab" class="main-tab" style="display: none;">
-            {% include 'plex-watchlist.html' %}
+            <!-- Media Server Selector -->
+            <div class="server-selector mb-3">
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-primary active" id="use-plex-btn" onclick="switchMediaServer('plex')">Plex</button>
+                    <button type="button" class="btn btn-secondary" id="use-jellyfin-btn" onclick="switchMediaServer('jellyfin')">Jellyfin</button>
+                </div>
+            </div>
+        
+            <!-- Container that will hold either Plex or Jellyfin content -->
+            <div id="media-server-content">
+                <!-- Plex content loaded by default -->
+                <div id="plex-content">
+                    {% include 'plex-watchlist.html' %}
+                </div>
+                
+                <!-- Jellyfin content (initially hidden) -->
+                <div id="jellyfin-content" style="display: none;">
+                    {% include 'jellyfin-dashboard.html' %}
+                </div>
+            </div>
         </section>
 
             <!-- Settings Tab -->
-            <section id="settings-tab" class="main-tab" style="display: none;">
-            <!-- Sub-menu for Settings -->
-            
-                
-            
-
-            
-            
-            <!-- Rule Management Subsection -->
-            <div id="rule_management" class="settings-subsection" style="display: none;">
-                <h4>Rules</h4>
+<section id="settings-tab" class="main-tab" style="display: none;">
+    
+    
+    <!-- Navigation buttons for rule assignment -->
+    <div class="mb-4">
+        <button type="button" class="btn btn-secondary mr-2" onclick="toggleSettingsView('main-settings')">Profile & Rules</button>
+        <button type="button" class="btn btn-secondary" onclick="toggleSettingsView('assign-rules')">Assign Rules</button>
+    </div>
+    
+    <!-- Main settings section (Profile + Rule Management) -->
+    <div id="main-settings" class="settings-view">
+        <!-- Profile Settings Section -->
+        <div class="card mb-4">
+            <div class="card-header bg-dark">
+                <h5 class="mb-0 text-light">Profile Settings</h5>
+            </div>
+            <div class="card-body bg-dark text-light">
+                <form id="profile-settings-form" method="POST" action="{{ url_for('update_profile_settings') }}">
+                    <div class="form-group">
+                        <label for="radarr_quality_profile">Radarr Quality Profile:</label>
+                        <select id="radarr_quality_profile" name="radarr_quality_profile" class="form-control">
+                            <option value="Any" {% if config.get('preferences', {}).get('radarr_quality_profile') == 'Any' %}selected{% endif %}>Any (Use First Available)</option>
+                            {% for profile in radarr_profiles %}
+                            <option value="{{ profile.name }}" {% if config.get('preferences', {}).get('radarr_quality_profile') == profile.name %}selected{% endif %}>{{ profile.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sonarr_quality_profile">Sonarr Quality Profile:</label>
+                        <select id="sonarr_quality_profile" name="sonarr_quality_profile" class="form-control">
+                            <option value="Any" {% if config.get('preferences', {}).get('sonarr_quality_profile') == 'Any' %}selected{% endif %}>Any (Use First Available)</option>
+                            {% for profile in sonarr_profiles %}
+                            <option value="{{ profile.name }}" {% if config.get('preferences', {}).get('sonarr_quality_profile') == profile.name %}selected{% endif %}>{{ profile.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Profile Settings</button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Rule Management Section -->
+        <div class="card mb-4">
+            <div class="card-header bg-dark">
+                <h5 class="mb-0 text-light">Rule Management</h5>
+            </div>
+            <div class="card-body bg-dark text-light">
                 <form id="settings-form" method="POST" action="{{ url_for('update_settings') }}">
                     <div class="form-group">
                         <label for="rule_name">Select Rule:</label>
@@ -750,44 +800,26 @@
                             <option value="false">false</option>
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary">Update Settings</button>
-                </form>
-                <form id="delete-rule-form" method="POST" action="{{ url_for('delete_rule') }}" onsubmit="return confirmDeleteRule()">
-                    <input type="hidden" name="rule_name" id="delete_rule_name">
-                    <button type="submit" class="btn btn-danger" id="delete_rule">Delete Rule</button>
-                </form>
-                <button class="btn btn-secondary mt-3 settings-button" onclick="showSection('assign_rules')">Assign Rules</button>
-            </div>
-
-            <!-- Profile Settings Subsection -->
-            <div id="profile_settings" class="settings-subsection" style="display: none;">
-                <h4>Profile Settings</h4>
-                <form id="profile-settings-form" method="POST" action="{{ url_for('update_profile_settings') }}">
-                    <div class="form-group">
-                        <label for="radarr_quality_profile">Radarr Quality Profile:</label>
-                        <select id="radarr_quality_profile" name="radarr_quality_profile" class="form-control">
-                            <option value="Any" {% if config.get('preferences', {}).get('radarr_quality_profile') == 'Any' %}selected{% endif %}>Any (Use First Available)</option>
-                            {% for profile in radarr_profiles %}
-                            <option value="{{ profile.name }}" {% if config.get('preferences', {}).get('radarr_quality_profile') == profile.name %}selected{% endif %}>{{ profile.name }}</option>
-                            {% endfor %}
-                        </select>
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-primary">Update Settings</button>
+                        <input type="hidden" name="rule_name" id="delete_rule_hidden" value="">
+                        <button type="button" class="btn btn-danger" id="delete_rule" onclick="confirmDeleteRule()">Delete Rule</button>
                     </div>
-                    <div class="form-group">
-                        <label for="sonarr_quality_profile">Sonarr Quality Profile:</label>
-                        <select id="sonarr_quality_profile" name="sonarr_quality_profile" class="form-control">
-                            <option value="Any" {% if config.get('preferences', {}).get('sonarr_quality_profile') == 'Any' %}selected{% endif %}>Any (Use First Available)</option>
-                            {% for profile in sonarr_profiles %}
-                            <option value="{{ profile.name }}" {% if config.get('preferences', {}).get('sonarr_quality_profile') == profile.name %}selected{% endif %}>{{ profile.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Save Settings</button>
-                </form>
+                    </form>
+                    <form id="delete-rule-form" method="POST" action="{{ url_for('delete_rule') }}" style="display: none;">
+                        <input type="hidden" name="rule_name" id="delete_rule_name">
+                    </form>
             </div>
-
-             <!-- Assign Rules Section -->
-             <div id="assign_rules" class="settings-subsection" style="display: none;">
-                <h3>Assign/Unassign Rules to Series</h3>
+        </div>
+    </div>
+    
+    <!-- Assign Rules Section (hidden by default) -->
+    <div id="assign-rules" class="settings-view" style="display: none;">
+        <div class="card">
+            <div class="card-header bg-dark">
+                <h5 class="mb-0 text-light">Assign/Unassign Rules to Series</h5>
+            </div>
+            <div class="card-body bg-dark text-light">
                 <form id="assign-rules-form" method="POST" action="{{ url_for('assign_rules') }}">
                     <div class="form-group">
                         <label for="assign_rule_name">Select Rule:</label>
@@ -813,7 +845,9 @@
                     <span class="disclaimer">(will override current assignments)</span>
                 </form>
             </div>
-        </section>
+        </div>
+    </div>
+</section>
     
 </div>
 
