@@ -18,8 +18,8 @@ Manage your movie library with easy access to recently added titles and missing 
 ⬇️ **Requests**  
 Streamlined interface for adding new content requests with season and episode-level precision.
 
-▶️ **Plex Watchlist**  ///will look into adding jellyfin quivalent
-Plex watchlist and stats, see what's missing from your collection.
+▶️ **Plex Watchlist**  **Jellyfin Favorites** (wip)
+watchlist, favorites and stats, see what's missing from your collection.
 
 ⚙️ **Settings**  
 Choose default download profiles and rule configuration.
