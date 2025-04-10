@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Response, send_file
 import subprocess
 import os
 import re
@@ -16,6 +17,7 @@ import feedparser
 from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from api.jellyseerr_api import JellyseerrAPI
+from jellyfin_utils import JellyfinAPI
 import tmdb_utils
 import plex_utils
 
@@ -48,6 +50,11 @@ os.makedirs(os.path.dirname(LAST_PROCESSED_FILE), exist_ok=True)
 
 # Initialize the Jellyseerr API client
 jellyseerr_api = JellyseerrAPI()
+
+jellyfin_api = JellyfinAPI(
+    jellyfin_token=os.getenv('JELLYFIN_TOKEN', ''),
+    jellyfin_user_id=os.getenv('JELLYFIN_USER_ID', '')
+)
 
 # Setup logging to capture all logs
 log_file = os.getenv('LOG_PATH', os.path.join(os.getcwd(), 'logs', 'app.log'))
@@ -94,7 +101,15 @@ def load_config():
         if 'rules' not in config:
             config['rules'] = {}
         if 'preferences' not in config:
-            config['preferences'] = {}
+            config['preferences'] = {
+                'radarr_quality_profile': 'Any',
+                'sonarr_quality_profile': 'Any',
+                'feed_preferences': DEFAULT_FEEDS  # Add default feed preferences
+            }
+        elif 'feed_preferences' not in config['preferences']:
+            # If preferences exist but feed_preferences doesn't
+            config['preferences']['feed_preferences'] = DEFAULT_FEEDS
+        
         return config
     except FileNotFoundError:
         default_config = {
@@ -109,14 +124,11 @@ def load_config():
             },
             'preferences': {
                 'radarr_quality_profile': 'Any',
-                'sonarr_quality_profile': 'Any'
+                'sonarr_quality_profile': 'Any',
+                'feed_preferences': DEFAULT_FEEDS
             }
         }
         return default_config
-
-def save_config(config):
-    with open(config_path, 'w') as file:
-        json.dump(config, file, indent=4)
 
 def check_service_status(url):
     try:
@@ -130,6 +142,355 @@ def check_service_status(url):
         pass
     
     return "Offline"
+# Jellyfin Routes
+@app.route('/api/jellyfin/connect', methods=['POST'])
+def connect_to_jellyfin():
+    try:
+        data = request.json
+        jellyfin_url = data.get('jellyfin_url', '')
+        jellyfin_token = data.get('jellyfin_token', '')
+        jellyfin_user_id = data.get('jellyfin_user_id', '')
+        
+        if not jellyfin_url or not jellyfin_token or not jellyfin_user_id:
+            return jsonify({"success": False, "message": "All Jellyfin connection parameters are required"}), 400
+        
+        # Create temp JellyfinAPI instance to test connection and resolve ID if needed
+        temp_api = JellyfinAPI()
+        temp_api.jellyfin_url = jellyfin_url
+        temp_api.jellyfin_token = jellyfin_token
+        
+        # Check if the provided user_id looks like a username (shorter than GUID)
+        if len(jellyfin_user_id) < 32:
+            # Treat as username and resolve
+            resolved_id = temp_api.get_user_id_by_name(jellyfin_user_id)
+            if resolved_id:
+                jellyfin_user_id = resolved_id
+                app.logger.info(f"Resolved username '{data.get('jellyfin_user_id')}' to ID: {jellyfin_user_id}")
+            else:
+                return jsonify({"success": False, "message": f"Could not find user with name: {jellyfin_user_id}"}), 400
+        
+        # Update the global API instance
+        global jellyfin_api
+        jellyfin_api = JellyfinAPI()
+        jellyfin_api.jellyfin_url = jellyfin_url
+        jellyfin_api.jellyfin_token = jellyfin_token
+        jellyfin_api.jellyfin_user_id = jellyfin_user_id
+        
+        # Test connection
+        stats = jellyfin_api.get_library_stats()
+        
+        # Save to .env file
+        with open('.env', 'r') as f:
+            env_content = f.read()
+        
+        # Update or add the variables
+        if 'JELLYFIN_URL=' in env_content:
+            env_content = re.sub(r'JELLYFIN_URL=.*', f'JELLYFIN_URL={jellyfin_url}', env_content)
+        else:
+            env_content += f'\nJELLYFIN_URL={jellyfin_url}'
+            
+        if 'JELLYFIN_TOKEN=' in env_content:
+            env_content = re.sub(r'JELLYFIN_TOKEN=.*', f'JELLYFIN_TOKEN={jellyfin_token}', env_content)
+        else:
+            env_content += f'\nJELLYFIN_TOKEN={jellyfin_token}'
+            
+        if 'JELLYFIN_USER_ID=' in env_content:
+            env_content = re.sub(r'JELLYFIN_USER_ID=.*', f'JELLYFIN_USER_ID={jellyfin_user_id}', env_content)
+        else:
+            env_content += f'\nJELLYFIN_USER_ID={jellyfin_user_id}'
+        
+        with open('.env', 'w') as f:
+            f.write(env_content)
+        
+        return jsonify({
+            "success": True, 
+            "message": "Connected to Jellyfin successfully",
+            "stats": stats
+        })
+            
+    except Exception as e:
+        app.logger.error(f"Error connecting to Jellyfin: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/jellyfin/sync', methods=['POST'])
+def sync_jellyfin_data():
+    """Force a refresh of Jellyfin data."""
+    try:
+        if not jellyfin_api.jellyfin_token:
+            return jsonify({"success": False, "message": "Jellyfin not connected"}), 400
+            
+        # We don't need to save data persistently like with Plex
+        # Just return success as we'll fetch fresh data on each page load
+        return jsonify({"success": True, "message": "Jellyfin data refreshed"})
+            
+    except Exception as e:
+        app.logger.error(f"Error syncing Jellyfin data: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/jellyfin/stats')
+def get_jellyfin_stats():
+    try:
+        # Debug logging
+        app.logger.info(f"JellyfinAPI config: URL={jellyfin_api.jellyfin_url}, UserID={jellyfin_api.jellyfin_user_id}")
+        app.logger.info(f"Token exists: {bool(jellyfin_api.jellyfin_token)}")
+        
+        if not jellyfin_api.jellyfin_token:
+            app.logger.error("No Jellyfin token configured")
+            return jsonify({"success": False, "message": "Jellyfin not connected - no token"}), 400
+            
+        if not jellyfin_api.jellyfin_user_id:
+            app.logger.error("No Jellyfin user ID configured")
+            return jsonify({"success": False, "message": "Jellyfin not connected - no user ID"}), 400
+            
+        # Test connection
+        try:
+            test_url = f"{jellyfin_api.jellyfin_url}/Users/{jellyfin_api.jellyfin_user_id}"
+            app.logger.info(f"Testing Jellyfin connection with URL: {test_url}")
+            
+            response = requests.get(
+                test_url,
+                headers=jellyfin_api.get_headers(),
+                timeout=5
+            )
+            
+            app.logger.info(f"Jellyfin test response: Status={response.status_code}")
+            
+            if not response.ok:
+                app.logger.error(f"Failed to connect to Jellyfin: {response.status_code} - {response.text[:100]}")
+                return jsonify({
+                    "success": False, 
+                    "message": f"Cannot connect to Jellyfin: {response.status_code}",
+                    "stats": {
+                        "library_stats": {"movies": 0, "tv_shows": 0},
+                        "favorites_stats": {"movies": 0, "tv_shows": 0}
+                    },
+                    "lastUpdated": datetime.now().isoformat()
+                }), 200  # Return 200 but with error info so frontend can display it
+                
+        except requests.exceptions.RequestException as e:
+            app.logger.error(f"Connection error to Jellyfin: {str(e)}")
+            return jsonify({
+                "success": False, 
+                "message": f"Cannot connect to Jellyfin: {str(e)}",
+                "stats": {
+                    "library_stats": {"movies": 0, "tv_shows": 0},
+                    "favorites_stats": {"movies": 0, "tv_shows": 0}
+                },
+                "lastUpdated": datetime.now().isoformat()
+            }), 200  # Return 200 but with error info
+            
+        # If we got here, connection is good - get stats
+        stats = jellyfin_api.get_formatted_stats()
+        
+        # Log the stats for debugging
+        app.logger.info(f"Jellyfin stats retrieved: {json.dumps(stats)}")
+        
+        return jsonify(stats)
+            
+    except Exception as e:
+        app.logger.error(f"Error getting Jellyfin stats: {str(e)}", exc_info=True)
+        return jsonify({
+            "success": False, 
+            "message": str(e),
+            "stats": {
+                "library_stats": {"movies": 0, "tv_shows": 0},
+                "favorites_stats": {"movies": 0, "tv_shows": 0}
+            },
+            "lastUpdated": datetime.now().isoformat()
+        }), 200  # Return 200 but with error info
+
+@app.route('/api/jellyfin/favorites')
+def get_jellyfin_favorites():
+    try:
+        app.logger.info("Jellyfin favorites API called")
+        
+        if not jellyfin_api.jellyfin_token:
+            return jsonify({"success": False, "message": "Jellyfin not connected", "items": []}), 200
+            
+        # Use this URL with specific parameters
+        url = f"{jellyfin_api.jellyfin_url}/Users/{jellyfin_api.jellyfin_user_id}/Items"
+        
+        params = {
+            'Recursive': 'true',
+            'IsFavorite': 'true',
+            'IncludeItemTypes': 'Movie,Series',  # Only include Movies and TV Series
+            'SortBy': 'DateCreated,SortName',
+            'SortOrder': 'Descending'
+        }
+        
+        app.logger.info(f"Getting favorites from: {url} with params: {params}")
+        
+        response = requests.get(
+            url,
+            headers=jellyfin_api.get_headers(),
+            params=params
+        )
+        
+        app.logger.info(f"Favorites response: {response.status_code}")
+        
+        if response.ok:
+            data = response.json()
+            items = data.get('Items', [])
+            app.logger.info(f"Found {len(items)} favorites")
+            
+            # Process items
+            processed_items = []
+            for item in items:
+                # Determine media type
+                media_type = 'movie' if item.get('Type') == 'Movie' else 'tv'
+                
+                processed_item = {
+                    'Id': item.get('Id'),
+                    'Name': item.get('Name', ''),
+                    'Type': item.get('Type', ''),
+                    'type': media_type,
+                    'ProductionYear': item.get('ProductionYear'),
+                    'Overview': item.get('Overview', ''),
+                    'ImageTags': item.get('ImageTags', {})
+                }
+                
+                processed_items.append(processed_item)
+            
+            return jsonify({"success": True, "items": processed_items, "count": len(processed_items)})
+        else:
+            app.logger.error(f"Failed to get favorites: {response.status_code} - {response.text[:100]}")
+            return jsonify({"success": False, "message": f"Failed to get favorites: {response.status_code}", "items": []}), 200
+            
+    except Exception as e:
+        app.logger.error(f"Error getting Jellyfin favorites: {str(e)}")
+        return jsonify({"success": False, "message": str(e), "items": []}), 200
+
+@app.route('/api/jellyfin/recommendations')
+def get_jellyfin_recommendations():
+    try:
+        app.logger.info("Jellyfin recommendations API called")
+        
+        # Use TMDB data for recommendations
+        movies_data = tmdb_utils.get_quality_movies()
+        tv_data = tmdb_utils.get_quality_tv_shows()
+        
+        # Format the results
+        movies = []
+        for movie in movies_data.get('results', [])[:12]:
+            movies.append({
+                'Id': movie.get('id'),
+                'Name': movie.get('title'),
+                'type': 'movie',
+                'ProductionYear': movie.get('release_date', '').split('-')[0] if movie.get('release_date') else '',
+                'Overview': movie.get('overview', ''),
+                'posterUrl': f"https://image.tmdb.org/t/p/w300{movie.get('poster_path')}" if movie.get('poster_path') else None
+            })
+        
+        shows = []
+        for show in tv_data.get('results', [])[:12]:
+            shows.append({
+                'Id': show.get('id'),
+                'Name': show.get('name'),
+                'type': 'tv',
+                'ProductionYear': show.get('first_air_date', '').split('-')[0] if show.get('first_air_date') else '',
+                'Overview': show.get('overview', ''),
+                'posterUrl': f"https://image.tmdb.org/t/p/w300{show.get('poster_path')}" if show.get('poster_path') else None
+            })
+        
+        # Combine and limit
+        recommendations = movies + shows
+        recommendations = recommendations[:24]
+        
+        return jsonify({"success": True, "items": recommendations, "count": len(recommendations)})
+            
+    except Exception as e:
+        app.logger.error(f"Error getting recommendations: {str(e)}")
+        return jsonify({"success": False, "message": str(e), "items": []}), 200
+    
+@app.route('/api/jellyfin/recent-additions')
+def get_jellyfin_recent_additions():
+    try:
+        app.logger.info("Jellyfin recent additions API called")
+       
+        if not jellyfin_api.jellyfin_token:
+            return jsonify({"success": False, "message": "Jellyfin not connected", "items": []}), 200
+           
+        # Use the Items/Latest endpoint
+        url = f"{jellyfin_api.jellyfin_url}/Users/{jellyfin_api.jellyfin_user_id}/Items/Latest"
+       
+        app.logger.info(f"Getting recent items from: {url}")
+       
+        response = requests.get(
+            url,
+            headers=jellyfin_api.get_headers(),
+            params={
+                'Limit': 24,
+                'Fields': 'Overview,ProductionYear',
+                'IncludeItemTypes': 'Movie,Series'  # Only get Movies and Series, exclude Episodes
+            }
+        )
+       
+        app.logger.info(f"Recent items response: {response.status_code}")
+       
+        if response.ok:
+            items = response.json()
+            app.logger.info(f"Found {len(items)} recent items")
+           
+            # Process items
+            processed_items = []
+            for item in items:
+                # Determine media type
+                media_type = 'movie' if item.get('Type') == 'Movie' else 'tv'
+               
+                processed_item = {
+                    'Id': item.get('Id'),
+                    'Name': item.get('Name', ''),
+                    'Type': item.get('Type', ''),
+                    'type': media_type,
+                    'ProductionYear': item.get('ProductionYear'),
+                    'Overview': item.get('Overview', ''),
+                    'ImageTags': item.get('ImageTags', {})
+                }
+               
+                processed_items.append(processed_item)
+           
+            return jsonify({"success": True, "items": processed_items, "count": len(processed_items)})
+        else:
+            app.logger.error(f"Failed to get recent items: {response.status_code} - {response.text[:100]}")
+            return jsonify({"success": False, "message": f"Failed to get recent items: {response.status_code}", "items": []}), 200
+           
+    except Exception as e:
+        app.logger.error(f"Error getting Jellyfin recent additions: {str(e)}")
+        return jsonify({"success": False, "message": str(e), "items": []}), 200
+
+@app.route('/api/jellyfin/image/<item_id>/<image_type>')
+def get_jellyfin_image(item_id, image_type):
+    try:
+        if not jellyfin_api.jellyfin_token:
+            return jsonify({"success": False, "message": "Jellyfin not connected"}), 400
+            
+        # Get parameters
+        width = request.args.get('width', '300')
+        tag = request.args.get('tag', '')
+        
+        # Build URL
+        image_url = f"{jellyfin_api.jellyfin_url}/Items/{item_id}/Images/{image_type}"
+        
+        if tag:
+            image_url += f"?tag={tag}&width={width}"
+        else:
+            image_url += f"?width={width}"
+        
+        # Proxy the image to avoid CORS issues
+        response = requests.get(image_url, headers=jellyfin_api.get_headers(), stream=True)
+        
+        if response.ok:
+            return Response(
+                response.iter_content(chunk_size=1024),
+                content_type=response.headers['Content-Type']
+            )
+        else:
+            return send_file('static/placeholder-banner.png', mimetype='image/png')
+            
+    except Exception as e:
+        app.logger.error(f"Error getting Jellyfin image: {str(e)}")
+        return send_file('static/placeholder-banner.png', mimetype='image/png')
+    
 @app.route('/api/plex/sync', methods=['POST'])
 def sync_plex_watchlist():
     """Force a sync of the Plex watchlist."""
@@ -1036,7 +1397,6 @@ def home():
 # File to store feed preferences
 FEED_PREFS_FILE = "feed_preferences.json"
 
-# Default feeds
 DEFAULT_FEEDS = {
     'movies': {
         'url': "https://www.filmjabber.com/rss/rss-trailers.php",
@@ -1047,6 +1407,10 @@ DEFAULT_FEEDS = {
         'name': "TVLine News"
     },
     'plex': {
+        'url': "https://www.comingsoon.net/feed",
+        'name': "ComingSoon.net Updates"
+    },
+    'jellyfin': {  # Add a specific Jellyfin feed
         'url': "https://www.comingsoon.net/feed",
         'name': "ComingSoon.net Updates"
     }
@@ -1066,124 +1430,89 @@ def load_feed_preferences():
     try:
         if os.path.exists(FEED_PREFS_FILE):
             with open(FEED_PREFS_FILE, 'r') as f:
-                return json.load(f)
-        return {}
+                prefs = json.load(f)
+                
+                # Ensure all default sections exist
+                if 'default' not in prefs:
+                    prefs['default'] = {}
+                
+                # Add missing default sections if not present
+                for section in ['movies', 'shows', 'plex', 'jellyfin']:
+                    if section not in prefs['default']:
+                        prefs['default'][section] = DEFAULT_FEEDS.get(section, {
+                            'url': '',
+                            'name': 'Custom Feed'
+                        })
+                
+                return prefs
+        
+        # If file doesn't exist, return default preferences
+        return {
+            'default': {
+                'movies': DEFAULT_FEEDS['movies'],
+                'shows': DEFAULT_FEEDS['shows'],
+                'plex': DEFAULT_FEEDS['plex'],
+                'jellyfin': DEFAULT_FEEDS['jellyfin']
+            }
+        }
     except Exception as e:
         print(f"Error loading feed preferences: {e}")
-        return {}
+        return {
+            'default': {
+                'movies': DEFAULT_FEEDS['movies'],
+                'shows': DEFAULT_FEEDS['shows'],
+                'plex': DEFAULT_FEEDS['plex'],
+                'jellyfin': DEFAULT_FEEDS['jellyfin']
+            }
+        }
 
-# Save feed preferences to file
 def save_feed_preferences(prefs):
     try:
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(FEED_PREFS_FILE), exist_ok=True)
+        
         with open(FEED_PREFS_FILE, 'w') as f:
-            json.dump(prefs, f)
+            json.dump(prefs, f, indent=2)
         return True
     except Exception as e:
         print(f"Error saving feed preferences: {e}")
         return False
 
-@app.route('/api/ticker/feed')
-def get_ticker_feed():
-    # Get feed URL from query parameters, with default fallbacks
-    feed_url = request.args.get('feed_url')
-    feed_type = request.args.get('type', 'generic')
-    
-    # Current timestamp rounded to nearest 15 minutes for caching
-    cache_timestamp = int(time.time() / 900)
-    
-    # If no feed URL provided, use default based on type
-    if not feed_url:
-        feed_url = DEFAULT_FEEDS.get(feed_type, DEFAULT_FEEDS['movies'])['url']
-    
-    try:
-        # Parse the feed
-        feed_data = get_cached_feed(feed_url, cache_timestamp)
-        
-        if not feed_data:
-            raise Exception("Failed to parse feed")
-        
-        # Process entries
-        entries = []
-        
-        for entry in feed_data.entries[:15]:  # Limit to 15 entries
-            # Extract relevant data, handle different feed formats
-            title = entry.get('title', 'No Title')
-            link = entry.get('link', '#')
-            published = entry.get('published', entry.get('pubDate', ''))
-            
-            # Try to determine content type from categories if present
-            content_type = feed_type
-            if hasattr(entry, 'category'):
-                category = entry.category.lower() if hasattr(entry, 'category') else ''
-                if 'movie' in category:
-                    content_type = 'movie'
-                elif 'tv' in category or 'show' in category:
-                    content_type = 'show'
-            
-            entries.append({
-                'title': title,
-                'link': link,
-                'published': published,
-                'type': content_type
-            })
-        
-        return jsonify(entries)
-        
-    except Exception as e:
-        print(f"Error fetching feed: {e}")
-        
-        # Return sample data if there's an error
-        sample_data = [
-            {'title': 'The Mandalorian Season 3', 'type': feed_type, 'link': '#'},
-            {'title': 'Dune: Part Two', 'type': feed_type, 'link': '#'},
-            {'title': 'House of the Dragon Season 2', 'type': feed_type, 'link': '#'},
-            {'title': 'Challengers', 'type': feed_type, 'link': '#'},
-            {'title': 'Fallout', 'type': feed_type, 'link': '#'}
-        ]
-        return jsonify(sample_data)
-
 @app.route('/api/ticker/save-feed', methods=['POST'])
 def save_feed_preferences_api():
     try:
-        # Get data from request
         data = request.json
         if not data:
             return jsonify({'success': False, 'message': 'No data provided'})
         
-        user_id = data.get('user_id', 'default')
         section = data.get('section', 'movies')
-        feed_url = data.get('feed_url', '')
-        feed_name = data.get('feed_name', '')
+        feed_url = data.get('feed_url', '').strip()
+        feed_name = data.get('feed_name', '').strip() or 'Custom Feed'
         
         if not feed_url:
             return jsonify({'success': False, 'message': 'No feed URL provided'})
         
-        # Load existing preferences
-        prefs = load_feed_preferences()
+        # Load config
+        config = load_config()
         
-        # Initialize user preferences if not exists
-        if user_id not in prefs:
-            prefs[user_id] = {}
-        
-        # Save preference
-        prefs[user_id][section] = {
+        # Update feed preferences
+        config['preferences']['feed_preferences'][section] = {
             'url': feed_url,
             'name': feed_name
         }
         
-        # Save to file
-        if save_feed_preferences(prefs):
-            return jsonify({
-                'success': True, 
-                'message': 'Feed preferences saved',
-                'data': {
-                    'section': section,
-                    'feed_url': feed_url,
-                    'feed_name': feed_name
-                }
-            })
-        else:
-            return jsonify({'success': False, 'message': 'Error saving preferences'})
+        # Save config
+        save_config(config)
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Feed preferences saved',
+            'data': {
+                'section': section,
+                'feed_url': feed_url,
+                'feed_name': feed_name
+            }
+        })
     
     except Exception as e:
         print(f"Error saving feed preferences: {e}")
@@ -1192,68 +1521,121 @@ def save_feed_preferences_api():
 @app.route('/api/ticker/get-feeds')
 def get_feed_preferences_api():
     try:
-        user_id = request.args.get('user_id', 'default')
+        # Load config
+        config = load_config()
         
-        # Load preferences
-        prefs = load_feed_preferences()
-        
-        # Return user preferences or defaults
-        if user_id in prefs:
-            return jsonify(prefs[user_id])
-        else:
-            return jsonify(DEFAULT_FEEDS)
+        # Return feed preferences
+        return jsonify(config['preferences']['feed_preferences'])
     
     except Exception as e:
         print(f"Error getting feed preferences: {e}")
         return jsonify(DEFAULT_FEEDS)
+
+
+
+@app.route('/api/ticker/feed')
+def get_ticker_feed():
+    # Get feed URL from query parameters
+    feed_url = request.args.get('feed_url')
+    feed_type = request.args.get('type', 'generic')
+    user_id = request.args.get('user_id', 'default')
+   
+    # Current timestamp rounded to nearest 15 minutes for caching
+    cache_timestamp = int(time.time() / 900)
+   
+    # Load preferences
+    prefs = load_feed_preferences()
+    
+    # Check for user-specific or default feed URL
+    if user_id in prefs and feed_type in prefs[user_id]:
+        feed_url = prefs[user_id][feed_type]['url']
+    elif 'default' in prefs and feed_type in prefs['default']:
+        feed_url = prefs['default'][feed_type]['url']
+    else:
+        # Absolute fallback
+        feed_url = DEFAULT_FEEDS.get(feed_type, DEFAULT_FEEDS['movies'])['url']
+   
+    try:
+        # Parse the feed
+        feed_data = get_cached_feed(feed_url, cache_timestamp)
+       
+        if not feed_data:
+            raise Exception("Failed to parse feed")
+       
+        # Process entries
+        entries = []
+       
+        for entry in feed_data.entries[:15]:  # Limit to 15 entries
+            # Extract relevant data, handle different feed formats
+            title = entry.get('title', 'No Title')
+            link = entry.get('link', '#')
+            published = entry.get('published', entry.get('pubDate', ''))
+           
+            # Try to determine content type from categories if present
+            content_type = feed_type
+            if hasattr(entry, 'category'):
+                category = entry.category.lower() if hasattr(entry, 'category') else ''
+                if 'movie' in category:
+                    content_type = 'movie'
+                elif 'tv' in category or 'show' in category:
+                    content_type = 'show'
+           
+            entries.append({
+                'title': title,
+                'link': link,
+                'published': published,
+                'type': content_type
+            })
+       
+        return jsonify(entries)
+       
+    except Exception as e:
+        print(f"Error fetching feed: {e}")
+       
+        # Return sample data if there's an error
+        sample_data = [
+            {'title': 'The Mandalorian Season 3', 'type': feed_type, 'link': '#'},
+            {'title': 'Dune: Part Two', 'type': feed_type, 'link': '#'},
+            {'title': 'House of the Dragon Season 2', 'type': feed_type, 'link': '#'},
+            {'title': 'Challengers', 'type': feed_type, 'link': '#'},
+            {'title': 'Fallback', 'type': feed_type, 'link': '#'}
+        ]
+        return jsonify(sample_data)
+
+
+
     
 @app.route('/api/recent-additions')
 def get_recent_additions():
-    """Get recently added content from both Sonarr and Radarr."""
+    """Get recently added content from Plex."""
     try:
-        # Load Sonarr data
-        sonarr_preferences = sonarr_utils.load_preferences()
-        recent_series = sonarr_utils.fetch_series_and_episodes(sonarr_preferences) or []
+        # Check for Plex token
+        plex_token = os.getenv('PLEX_TOKEN', '')
         
-        # Load Radarr data
-        radarr_preferences = radarr_utils.load_preferences()
-        recent_movies = radarr_utils.fetch_recent_movies(radarr_preferences) or []
+        if not plex_token:
+            return jsonify({
+                'success': False,
+                'message': 'Plex token not configured',
+                'items': []
+            }), 400
         
-        # Add type identifier to each item for consistent handling
-        for series in recent_series:
-            series['type'] = 'tv'
+        # Create Plex API instance
+        plex_api = plex_utils.PlexWatchlistAPI(plex_token)
         
-        # Combine TV and movies
-        all_recent_items = recent_series + recent_movies
-        
-        # Robust sorting with fallback
-        def safe_date_sort(item):
-            date_added = item.get('dateAdded')
-            if not date_added:
-                return datetime.min
-            try:
-                return datetime.fromisoformat(date_added.replace('Z', '+00:00'))
-            except:
-                return datetime.min
-        
-        # Sort by dateAdded, newest first
-        all_recent_items.sort(key=safe_date_sort, reverse=True)
-        
-        # Limit to prevent overwhelming the UI
-        max_items = int(os.getenv('MAX_COMBINED_ITEMS', 24))
-        all_recent_items = all_recent_items[:max_items]
+        # Get recent items
+        recent_items = plex_api.get_recent_items()
         
         # Format response
         response_data = {
             'success': True,
-            'items': all_recent_items,
-            'count': len(all_recent_items)
+            'items': recent_items,
+            'count': len(recent_items)
         }
         
         return jsonify(response_data)
-        
+    
     except Exception as e:
-        app.logger.error(f"Error fetching recent additions: {str(e)}")
+        app.logger.error(f"Error fetching recent Plex additions: {str(e)}")
         return jsonify({
             'success': False,
             'message': str(e),

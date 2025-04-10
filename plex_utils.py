@@ -318,7 +318,79 @@ class PlexWatchlistAPI:
         except Exception as e:
             self.logger.warning(f"Error fetching TMDB details for {tmdb_id}: {str(e)}")
             return None
-    
+        
+    def get_recent_items(self):
+        try:
+            # Use existing method to get library sections
+            sections = self.get_library_sections()
+            
+            recent_items = []
+            
+            # Fetch recent movies
+            if sections.get('movie'):
+                movies_url = f"{self.plex_url}/library/sections/{sections['movie']}/all"
+                movies_response = requests.get(
+                    movies_url,
+                    headers=self.get_headers(),
+                    params={
+                        'sort': 'addedAt:desc',
+                        'X-Plex-Container-Start': 0,
+                        'X-Plex-Container-Size': 12,
+                        'type': 1  # Explicitly request movies
+                    }
+                )
+                
+                if movies_response.ok:
+                    movies_data = movies_response.json()
+                    for movie in movies_data.get('MediaContainer', {}).get('Metadata', []):
+                        recent_items.append({
+                            'title': movie.get('title'),
+                            'type': 'movie',
+                            'year': movie.get('year'),
+                            'artwork_url': f"{self.plex_url}{movie.get('thumb')}" if movie.get('thumb') else '',
+                            'dateAdded': datetime.fromtimestamp(
+                                int(movie.get('addedAt', 0))
+                            ).isoformat()
+                        })
+            
+            # Fetch recent TV shows
+            if sections.get('tv'):
+                shows_url = f"{self.plex_url}/library/sections/{sections['tv']}/all"
+                shows_response = requests.get(
+                    shows_url,
+                    headers=self.get_headers(),
+                    params={
+                        'sort': 'addedAt:desc',
+                        'X-Plex-Container-Start': 0,
+                        'X-Plex-Container-Size': 12,
+                        'type': 2  # Explicitly request TV shows
+                    }
+                )
+                
+                if shows_response.ok:
+                    shows_data = shows_response.json()
+                    for show in shows_data.get('MediaContainer', {}).get('Metadata', []):
+                        recent_items.append({
+                            'title': show.get('title'),
+                            'type': 'tv',
+                            'year': show.get('year'),
+                            'artwork_url': f"{self.plex_url}{show.get('thumb')}" if show.get('thumb') else '',
+                            'dateAdded': datetime.fromtimestamp(
+                                int(show.get('addedAt', 0))
+                            ).isoformat()
+                        })
+            
+            # Sort by date added, newest first
+            recent_items.sort(
+                key=lambda x: x.get('dateAdded', ''), 
+                reverse=True
+            )
+            
+            return recent_items
+        
+        except Exception as e:
+            print(f"Error getting recent Plex items: {e}")
+            return []
     
     
     def get_library_sections(self):

@@ -7,3 +7,5 @@ node_modules/
 logs/
 # Ignore temp and config contents
 /temp/* /config/*
+templates/
+*.xml
