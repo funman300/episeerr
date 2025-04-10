@@ -149,11 +149,12 @@ Tickers automatically refresh every 30 minutes to ensure you always see the late
 
 ### Option 1: Docker Hub (Recommended)
 
-```bash
 # Pull the image
+```
 docker pull vansmak/ocdarr:amd64_dev
-
+```
 # Run the container
+```
 docker run -d \
   --name ocdarr \
   --env-file .env \
@@ -162,8 +163,10 @@ docker run -d \
   -v ${PWD}/logs:/app/logs \
   -v ${PWD}/config:/app/config \
   -v ${PWD}/temp:/app/temp \
+  -v ${PWD}/static:/app/static \
+  -v ${PWD}/templates:/app/templates \
   --restart unless-stopped \
-  vansmak/ocdarr:latest
+  vansmak/ocdarr:amd64_dev
 ```
 Option 2: Build from Source
 ```
@@ -171,6 +174,7 @@ Option 2: Build from Source
   cd OCDarr
   git checkout dev
   docker-compose up -d --build
+
 ```
 ⚙️ Configuration
 Environment Variables
@@ -214,9 +218,11 @@ services:
     env_file:
       - .env
     volumes:
-      - ./logs:/app/logs
-      - ./config:/app/config
-      - ./temp:/app/temp
+      - /mnt/media/OCDarr3/logs:/app/logs
+      - /mnt/media/OCDarr3/config:/app/config
+      - /mnt/media/OCDarr3/temp:/app/temp
+      - /mnt/media/OCDarr3/static:/app/static 
+      - /mnt/media/OCDarr3/templates:/app/templates
     ports:
       - "5002:5002"
     restart: unless-stopped
