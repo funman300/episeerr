@@ -218,14 +218,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // If we're on the settings tab, restore the last active subsection
     if (tabToShow === 'settings-tab') {
-        const lastSubsection = subsectionParam || localStorage.getItem('lastSettingsSubsection') || 'service_status';
-        showSettingsSection(lastSubsection);
-        
-        // Initialize rule form if it exists - must do this AFTER showing the settings tab
+        // Initialize rule form if it exists
         if (document.getElementById('rule_name') && document.getElementById('config-data')) {
-            const initialRule = document.getElementById('rule_name').value;
             try {
-                loadRule(initialRule);
+                loadRule();
             } catch (e) {
                 console.error("Error loading rule:", e);
             }
@@ -235,6 +231,56 @@ document.addEventListener('DOMContentLoaded', function() {
     // After adding content, check if we need to adjust the rows
     adjustScrollableRows();
 });
+// Function to switch between media servers
+function switchMediaServer(server) {
+    // Update button styling
+    if (server === 'plex') {
+        document.getElementById('use-plex-btn').classList.add('active', 'btn-primary');
+        document.getElementById('use-plex-btn').classList.remove('btn-secondary');
+        document.getElementById('use-jellyfin-btn').classList.remove('active', 'btn-primary');
+        document.getElementById('use-jellyfin-btn').classList.add('btn-secondary');
+        
+        // Show Plex content
+        document.getElementById('plex-content').style.display = 'block';
+        document.getElementById('jellyfin-content').style.display = 'none';
+        
+        // Update tab name if you want
+        document.querySelector('.nav-item[data-section="plex"] .nav-text').textContent = 'Plex Watchlist';
+        
+        // Initialize Plex content if needed
+        if (typeof initPlexWatchlist === 'function') {
+            initPlexWatchlist();
+        }
+    } else {
+        document.getElementById('use-jellyfin-btn').classList.add('active', 'btn-primary');
+        document.getElementById('use-jellyfin-btn').classList.remove('btn-secondary');
+        document.getElementById('use-plex-btn').classList.remove('active', 'btn-primary');
+        document.getElementById('use-plex-btn').classList.add('btn-secondary');
+        
+        // Show Jellyfin content
+        document.getElementById('plex-content').style.display = 'none';
+        document.getElementById('jellyfin-content').style.display = 'block';
+        
+        // Update tab name if you want
+        document.querySelector('.nav-item[data-section="plex"] .nav-text').textContent = 'Media Server';
+        
+        // Initialize Jellyfin content if needed
+        if (typeof initJellyfinDashboard === 'function') {
+            initJellyfinDashboard();
+        }
+    }
+    
+    // Save preference to localStorage
+    localStorage.setItem('preferredMediaServer', server);
+}
+
+// On page load, check for saved preference
+document.addEventListener('DOMContentLoaded', function() {
+    const savedServer = localStorage.getItem('preferredMediaServer');
+    if (savedServer) {
+        switchMediaServer(savedServer);
+    }
+});
 // Add this to your index.js file
 function scrollRowToStart(button) {
     const row = button.closest('.row-header').nextElementSibling;
@@ -243,6 +289,75 @@ function scrollRowToStart(button) {
         behavior: 'smooth'
     });
 }
+// Add this function to toggle between the main settings and assign rules views
+function toggleSettingsView(viewId) {
+    // Hide all settings views
+    document.querySelectorAll('.settings-view').forEach(view => {
+        view.style.display = 'none';
+    });
+    
+    // Show the selected view
+    document.getElementById(viewId).style.display = 'block';
+    
+    // Update button states
+    const mainButton = document.querySelector('button[onclick="toggleSettingsView(\'main-settings\')"]');
+    const assignButton = document.querySelector('button[onclick="toggleSettingsView(\'assign-rules\')"]');
+    
+    if (viewId === 'main-settings') {
+        mainButton.classList.add('btn-primary');
+        mainButton.classList.remove('btn-secondary');
+        assignButton.classList.add('btn-secondary');
+        assignButton.classList.remove('btn-primary');
+    } else {
+        assignButton.classList.add('btn-primary');
+        assignButton.classList.remove('btn-secondary');
+        mainButton.classList.add('btn-secondary');
+        mainButton.classList.remove('btn-primary');
+    }
+    
+    // Save the current view to localStorage
+    localStorage.setItem('lastSettingsView', viewId);
+}
+
+// Update the showMainTab function to restore the last settings view
+function showMainTab(tabId) {
+    // Hide all tabs
+    document.querySelectorAll('.main-tab').forEach(tab => {
+        tab.style.display = 'none';
+    });
+    
+    // Show selected tab
+    const selectedTab = document.getElementById(tabId);
+    if (selectedTab) {
+        selectedTab.style.display = 'block';
+    } else {
+        console.error("Tab not found:", tabId);
+        // Fallback to shows tab
+        const showsTab = document.getElementById('shows-tab');
+        if (showsTab) showsTab.style.display = 'block';
+    }
+    
+    // Save the current tab to localStorage
+    localStorage.setItem('lastActiveTab', tabId);
+    
+    // If we're showing the settings tab, restore the last view
+    if (tabId === 'settings-tab') {
+        const lastView = localStorage.getItem('lastSettingsView') || 'main-settings';
+        toggleSettingsView(lastView);
+    }
+    
+    // Dispatch custom event for sidebar to update active state
+    window.dispatchEvent(new CustomEvent('tabChanged', { 
+        detail: { tabId: tabId }
+    }));
+    
+    // On mobile, auto-close the sidebar after selection
+    const sidebar = document.getElementById('sidebar');
+    if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('expanded')) {
+        sidebar.classList.remove('expanded');
+    }
+}
+
 // Function to update the ticker for a specific section
 function updateTicker(section) {
     console.log(`Attempting to update ticker for: ${section}`);
@@ -361,28 +476,37 @@ function showMainTab(tabId) {
     });
     
     // Show selected tab
-    document.getElementById(tabId).style.display = 'block';
-    
-    // Update menu active states
-    document.querySelectorAll('.menu-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    
-    // Find the menu item that called this function
-    if (tabId === 'shows-tab') {
-        document.querySelector('.menu-item:nth-child(1)').classList.add('active');
-    } else if (tabId === 'settings-tab') {
-        document.querySelector('.menu-item:nth-child(2)').classList.add('active');
-        
-        // If we're showing the settings tab, also show the last active subsection
-        const lastSubsection = localStorage.getItem('lastSettingsSubsection') || 'service_status';
-        showSettingsSection(lastSubsection);
-    } else if (tabId === 'movies-tab') {
-        document.querySelector('.menu-item:nth-child(3)').classList.add('active');
+    const selectedTab = document.getElementById(tabId);
+    if (selectedTab) {
+        selectedTab.style.display = 'block';
+    } else {
+        console.error("Tab not found:", tabId);
+        // Fallback to shows tab
+        const showsTab = document.getElementById('shows-tab');
+        if (showsTab) showsTab.style.display = 'block';
     }
     
-    // Save the current tab to localStorage for persistence
+    // Save the current tab to localStorage
     localStorage.setItem('lastActiveTab', tabId);
+    
+    // If we're showing the settings tab, load the rule data
+    if (tabId === 'settings-tab') {
+        const ruleNameSelect = document.getElementById('rule_name');
+        if (ruleNameSelect) {
+            loadRule();
+        }
+    }
+    
+    // Dispatch custom event for sidebar to update active state
+    window.dispatchEvent(new CustomEvent('tabChanged', { 
+        detail: { tabId: tabId }
+    }));
+    
+    // On mobile, auto-close the sidebar after selection
+    const sidebar = document.getElementById('sidebar');
+    if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('expanded')) {
+        sidebar.classList.remove('expanded');
+    }
 }
 
 
@@ -549,26 +673,22 @@ function toggleNewRuleName() {
     }
 }
 
-function showSettingsSection(sectionId) {
-    // Hide all settings subsections
-    document.querySelectorAll('.settings-subsection').forEach(section => {
-        section.style.display = 'none';
-    });
-    
-    // Show selected section
-    document.getElementById(sectionId).style.display = 'block';
-    
-    // Save the current subsection to localStorage
-    localStorage.setItem('lastSettingsSubsection', sectionId);
-}
+
 
 function confirmDeleteRule() {
     const ruleSelect = document.getElementById('rule_name');
     const deleteRuleInput = document.getElementById('delete_rule_name');
     
+    if (ruleSelect.value === 'add_new') {
+        alert('Cannot delete a new rule that hasn\'t been created yet.');
+        return;
+    }
+    
     deleteRuleInput.value = ruleSelect.value;
     
-    return confirm(`Are you sure you want to delete the rule "${ruleSelect.value}"?`);
+    if (confirm(`Are you sure you want to delete the rule "${ruleSelect.value}"?`)) {
+        document.getElementById('delete-rule-form').submit();
+    }
 }
 
 function updateCheckboxes() {
