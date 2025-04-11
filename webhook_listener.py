@@ -129,7 +129,9 @@ def load_config():
             }
         }
         return default_config
-
+def save_config(config):
+    with open(config_path, 'w') as file:
+        json.dump(config, file, indent=4)
 def check_service_status(url):
     try:
         # Add a longer timeout and use a HEAD request which is lighter
