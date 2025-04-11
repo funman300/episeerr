@@ -13,7 +13,8 @@
   <Config Type="Path" Name="Logs" Target="/app/logs" Default="/mnt/user/appdata/ocdarr/logs" Mode="rw" Description="Log files location." Required="true"/>
   <Config Type="Path" Name="Config" Target="/app/config" Default="/mnt/user/appdata/ocdarr/config" Mode="rw" Description="Configuration files location." Required="true"/>
   <Config Type="Path" Name="Temp" Target="/app/temp" Default="/mnt/user/appdata/ocdarr/temp" Mode="rw" Description="Temporary files location." Required="true"/>
-  <Config Type="Path" Name="Plex Backgrounds" Target="/app/backgrounds" Default="/mnt/user/appdata/plex_backgrounds" Mode="rw" Description="Path to store Plex background images." Required="true"/>
+  <Config Type="Path" Name="Static" Target="/app/static" Default="/mnt/user/appdata/ocdarr/static" Mode="rw" Description="Static files location." Required="true"/>
+  <Config Type="Path" Name="Templates" Target="/app/templates" Default="/mnt/user/appdata/ocdarr/templates" Mode="rw" Description="HTML template files location." Required="true"/>
   <Config Type="Port" Name="WebUI Port" Target="5002" Default="5002" Mode="tcp" Description="WebUI port for accessing the application." Required="true"/>
   
   <!-- Sonarr Configuration -->
@@ -31,6 +32,11 @@
   <!-- Plex Configuration -->
   <Config Type="Variable" Name="PLEX_URL" Target="PLEX_URL" Default="http://localhost:32400" Description="URL for your Plex server." Required="true"/>
   <Config Type="Variable" Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Description="Authentication token for your Plex server." Required="true"/>
+
+  <!-- Jellyfin Configuration -->
+  <Config Type="Variable" Name="JELLYFIN_URL" Target="JELLYFIN_URL" Default="http://localhost:8096" Description="URL for your Jellyfin server." Required="true"/>
+  <Config Type="Variable" Name="JELLYFIN_TOKEN" Target="JELLYFIN_TOKEN" Default="" Description="Authentication token for your Jellyfin server." Required="true"/>
+  <Config Type="Variable" Name="JELLYFIN_USER_ID" Target="JELLYFIN_USER_ID" Default="" Description="User ID for Jellyfin authentication." Required="true"/>
   
   <!-- TMDB Configuration -->
   <Config Type="Variable" Name="TMDB_API_KEY" Target="TMDB_API_KEY" Default="" Description="API key for TMDB integration." Required="true"/>
