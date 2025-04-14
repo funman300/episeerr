@@ -71,18 +71,21 @@
         </div>
     </div>
 </div>
-<!-- Missing Content Row -->
+<!-- Requests Row (replaced Missing Content Row) -->
+<!-- Current Requests Row -->
+
+<!-- Requests & Watchlist Content Row -->
 <div class="content-row">
     <header class="row-header">
-        <h4>Missing From Your Library</h4>
+        <h4>Requests & Watchlist</h4>
         <div class="row-controls">
             <button class="scroll-btn scroll-start" onclick="scrollRowToStart(this)">⏮️</button>
             <button class="scroll-btn scroll-left" onclick="scrollRowLeft(this)">←</button>
             <button class="scroll-btn scroll-right" onclick="scrollRowRight(this)">→</button>
         </div>
     </header>
-    <div class="scrollable-row" id="watchlist-missing-row">
-        <div class="loading-indicator">Loading watchlist items...</div>
+    <div class="scrollable-row" id="requests-row">
+        <div class="loading-indicator">Loading requests and watchlist content...</div>
     </div>
 </div>
     <script src="{{ url_for('static', filename='plex-watchlist.js') }}"></script>
