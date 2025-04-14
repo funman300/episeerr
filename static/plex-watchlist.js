@@ -1,5 +1,6 @@
 // plex-watchlist.js - Dedicated file for Plex Watchlist functionality
 
+
 // Utility Functions
 function updateConnectionStatus(connected, lastUpdated) {
     console.log(`Updating connection status: ${connected}`);
@@ -600,6 +601,203 @@ function toggleAutoDownload() {
     });
 }
 
+// Function to load requests
+// Function to load requests and watchlist/favorites content
+function loadRequests() {
+    console.log("Loading requests and watchlist content...");
+    
+    fetch('/api/requests')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("Got content data:", data);
+            const requestsRow = document.getElementById('requests-row');
+            
+            if (!data.success || !data.requests || data.requests.length === 0) {
+                requestsRow.innerHTML = '<div class="empty-message">No requests or watchlist content</div>';
+                return;
+            }
+            
+            requestsRow.innerHTML = '';
+            
+            // Add each item to the row
+            data.requests.forEach(item => {
+                const itemCard = document.createElement('div');
+                itemCard.className = 'media-card';
+                
+                // Determine poster URL based on source
+                let posterUrl = '/static/placeholder-poster.png';
+                
+                if (item.poster_path) {
+                    // TMDB poster
+                    posterUrl = `https://image.tmdb.org/t/p/w300${item.poster_path}`;
+                } else if (item.thumb) {
+                    // Plex thumbnail
+                    posterUrl = item.thumb;
+                } else if (item.jellyfin_id && item.image_tags && item.image_tags.Primary) {
+                    // Jellyfin image
+                    posterUrl = `/api/jellyfin/image/${item.jellyfin_id}/Primary?tag=${item.image_tags.Primary}`;
+                } else if (item.tmdb_id) {
+                    // Fallback to TMDB if we have the ID
+                    posterUrl = `https://image.tmdb.org/t/p/w300${item.type === 'tv' ? '/tv/' : '/movie/'}${item.tmdb_id}/poster.jpg`;
+                }
+                
+                // Build status badge
+                let statusClass = '';
+                switch (item.status) {
+                    case 'Pending': statusClass = 'badge-warning'; break;
+                    case 'Pending Approval': statusClass = 'badge-info'; break;
+                    case 'Approved': statusClass = 'badge-success'; break;
+                    case 'Declined': statusClass = 'badge-danger'; break;
+                    case 'Downloading': statusClass = 'badge-primary'; break;
+                    case 'Watchlist': statusClass = 'badge-secondary'; break;
+                    case 'Favorite': statusClass = 'badge-success'; break;
+                    default: statusClass = 'badge-secondary';
+                }
+                
+                let statusBadge = `<span class="badge ${statusClass}">${item.status}</span>`;
+                
+                // Build source badge
+                let sourceBadge = '';
+                if (item.source) {
+                    sourceBadge = `<span class="badge badge-dark">${item.source}</span>`;
+                }
+                
+                // Add media type badge
+                let typeBadge = '';
+                if (item.type === 'tv') {
+                    typeBadge = `<span class="badge badge-info">TV</span>`;
+                } else if (item.type === 'movie') {
+                    typeBadge = `<span class="badge badge-danger">Movie</span>`;
+                }
+                
+                // Build the card HTML
+                itemCard.innerHTML = `
+                    <div class="media-poster">
+                        <img src="${posterUrl}" alt="${item.title}" onerror="this.src='/static/placeholder-poster.png'">
+                        <div class="media-badges">
+                            ${statusBadge}
+                            ${typeBadge}
+                            ${sourceBadge}
+                        </div>
+                    </div>
+                    <div class="media-title">${item.title}</div>
+                `;
+                
+                requestsRow.appendChild(itemCard);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading content:', error);
+            const requestsRow = document.getElementById('requests-row');
+            if (requestsRow) {
+                requestsRow.innerHTML = '<div class="error-message">Error loading content</div>';
+            }
+        });
+}
+function loadRequestsAndWatchlist() {
+    document.getElementById('requests-row').innerHTML = '<div class="loading-indicator">Loading requests and watchlist content...</div>';
+    
+    fetch('/api/requests')
+        .then(response => response.json())
+        .then(data => {
+            const requestsRow = document.getElementById('requests-row');
+            requestsRow.innerHTML = '';
+            
+            if (data.success && data.requests && data.requests.length > 0) {
+                data.requests.forEach(item => {
+                    // Create card element
+                    const card = document.createElement('div');
+                    card.className = 'content-card';
+                    
+                    // Determine status class and text
+                    let statusClass = 'status-watchlist';
+                    let statusText = 'Watchlist';
+                    
+                    if (item.source === 'jellyseerr') {
+                        // Handle different status formats
+                        let status = item.status;
+                        
+                        // Convert numeric strings to numbers
+                        if (typeof status === 'string' && !isNaN(parseInt(status))) {
+                            status = parseInt(status);
+                        }
+                        
+                        // Map status to appropriate display text and class
+                        if (status === 1 || status === 'pending' || status === 'Pending') {
+                            statusClass = 'status-pending';
+                            statusText = 'Pending';
+                        } else if (status === 2 || status === 'approved' || status === 'Approved') {
+                            statusClass = 'status-approved';
+                            statusText = 'Approved';
+                        } else if (status === 3 || status === 'declined' || status === 'Declined') {
+                            statusClass = 'status-declined';
+                            statusText = 'Declined';
+                        } else {
+                            statusClass = 'status-unknown';
+                            statusText = typeof status === 'string' ? status : 'Unknown';
+                        }
+                    }
+                    
+                    // Format the card based on the item type
+                    const typeIcon = item.type === 'movie' ? '🎬' : '📺';
+                    const sourceLabel = item.source_name || item.source;
+                    const userDisplay = item.requested_by ? 
+                                      `<div class="requested-by">👤 ${item.requested_by}</div>` : '';
+                    
+                    card.innerHTML = `
+                        <div class="card-header ${statusClass}">
+                            <span class="type-icon">${typeIcon}</span>
+                            <span class="status-label">${statusText}</span>
+                        </div>
+                        <div class="card-content">
+                            <h5 title="${item.title}">${item.title}</h5>
+                            <div class="source-label">${sourceLabel}</div>
+                            ${userDisplay}
+                        </div>
+                    `;
+                    
+                    requestsRow.appendChild(card);
+                });
+            } else {
+                requestsRow.innerHTML = '<div class="empty-message">No requests or watchlist items found</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading requests and watchlist:', error);
+            document.getElementById('requests-row').innerHTML = 
+                '<div class="error-message">Failed to load content. Please try again later.</div>';
+        });
+}
+
+
+// Function to update request status
+function updateRequestStatus(requestId, status) {
+    fetch(`/api/jellyseerr/request/${requestId}/status`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: status })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload requests to show updated status
+            loadRequests();
+        } else {
+            alert(`Error: ${data.message}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error updating request status:', error);
+        alert('Error updating request status');
+    });
+}
 
 
 // Document Ready Event
@@ -607,4 +805,9 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log("Document loaded, initializing Plex Watchlist");
     initPlexWatchlist();
     showPlexSection('watchlist-view');
+    
+    loadRequestsAndWatchlist();
+    
+    // Optionally refresh every minute
+    setInterval(loadRequestsAndWatchlist, 60000);
 });
