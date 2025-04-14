@@ -41,6 +41,10 @@ MAX_SHOWS_ITEMS = int(os.getenv('MAX_SHOWS_ITEMS', 24))
 MAX_MOVIES_ITEMS = int(os.getenv('MAX_MOVIES_ITEMS', 24))
 MAX_COMBINED_ITEMS = int(os.getenv('MAX_COMBINED_ITEMS', 24))
 
+# Global variable to track pending requests from Jellyseerr
+# Format: {tvdb_id: {request_id: "123", title: "Show Title"}}
+jellyseerr_pending_requests = {}
+
 # Other settings
 REQUESTS_DIR = os.path.join(os.getcwd(), 'data', 'requests')
 os.makedirs(REQUESTS_DIR, exist_ok=True)
@@ -128,10 +132,12 @@ def load_config():
                 'feed_preferences': DEFAULT_FEEDS
             }
         }
-        return default_config
+        return 
+    
 def save_config(config):
     with open(config_path, 'w') as file:
         json.dump(config, file, indent=4)
+
 def check_service_status(url):
     try:
         # Add a longer timeout and use a HEAD request which is lighter
@@ -1975,7 +1981,28 @@ def process_sonarr_webhook():
         
         # If it has episodes tag, proceed with full episode selection flow
         app.logger.info(f"Series {series_title} has episodes tag, proceeding with episode selection flow")
+        global jellyseerr_pending_requests
+        app.logger.info(f"Looking for TVDB ID {tvdb_id} in pending requests")
+
+        tvdb_id_str = str(tvdb_id)
+        if tvdb_id_str in jellyseerr_pending_requests:
+            jellyseerr_request = jellyseerr_pending_requests[tvdb_id_str]
+            app.logger.info(f"Found matching Jellyseerr request for {series_title}: {jellyseerr_request}")
         
+            # Delete the Jellyseerr request if it exists
+            if jellyseerr_request and 'request_id' in jellyseerr_request:
+                request_id = jellyseerr_request['request_id']
+                app.logger.info(f"Canceling Jellyseerr request {request_id} for {series_title}")
+            
+                # Direct cancellation
+                result = modified_episeerr.delete_overseerr_request(request_id)
+                app.logger.info(f"Jellyseerr cancellation result: {result}")
+            
+                # Remove from pending requests
+                del jellyseerr_pending_requests[tvdb_id_str]
+                app.logger.info(f"Removed request {request_id} from pending requests dictionary")
+        else:
+            app.logger.info(f"No matching Jellyseerr request found for TVDB ID: {tvdb_id_str}")
         # Check if a request already exists for this series
         existing_request = None
         for filename in os.listdir(REQUESTS_DIR):
@@ -2101,6 +2128,8 @@ def process_sonarr_webhook():
         app.logger.error(f"Error processing Sonarr webhook: {str(e)}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
     
+
+  
 @app.route('/api/new-requests-since', methods=['GET'])
 def check_new_requests_since():
     # Get the timestamp from the query parameter
@@ -2127,10 +2156,104 @@ def check_new_requests_since():
         "hasNewRequests": len(new_requests) > 0,
         "newRequests": new_requests,
         "latestTimestamp": int(time.time()) if new_requests else since_timestamp
-    })    
+    })
+@app.route('/api/requests')
+def get_requests():
+    """Get all Jellyseerr requests and watchlist content."""
+    try:
+        items_list = []
+        
+        # 1. Get Jellyseerr requests from REQUESTS_DIR
+        for filename in os.listdir(REQUESTS_DIR):
+            if filename.endswith('.json'):
+                try:
+                    filepath = os.path.join(REQUESTS_DIR, filename)
+                    with open(filepath, 'r') as f:
+                        request_data = json.load(f)
+                        # Only include Jellyseerr requests that have the specific flag
+                        if request_data.get('is_seerr_request', False):
+                            items_list.append(request_data)
+                except Exception as e:
+                    app.logger.error(f"Error reading request file {filename}: {str(e)}")
+        
+        # 2. Add content from Plex watchlist if available
+        try:
+            plex_token = os.getenv('PLEX_TOKEN', '')
+            if plex_token:
+                plex_api = plex_utils.PlexWatchlistAPI(plex_token)
+                watchlist_data = plex_api.get_watchlist()
+                
+                if 'MediaContainer' in watchlist_data and 'Metadata' in watchlist_data['MediaContainer']:
+                    items = watchlist_data['MediaContainer']['Metadata']
+                    
+                    for item in items:  # Include all watchlist items
+                        media_type = 'movie' if item.get('type') == 'movie' else 'tv'
+                        items_list.append({
+                            'id': f"plex-watchlist-{item.get('ratingKey', '')}",
+                            'title': item.get('title', 'Unknown Title'),
+                            'type': media_type,
+                            'status': 'Watchlist',
+                            'source': 'Plex',
+                            'source_name': 'Plex Watchlist',
+                            'tmdb_id': None,  # We might not have this
+                            'thumb': item.get('thumb', ''),
+                            'created_at': int(time.time()) - 86400  # 1 day ago
+                        })
+        except Exception as e:
+            app.logger.error(f"Error fetching Plex watchlist: {str(e)}")
+            
+        # Sort combined list by creation date (newest first)
+        items_list.sort(key=lambda x: x.get('created_at', 0), reverse=True)
+        
+        return jsonify({
+            "success": True,
+            "requests": items_list,
+            "count": len(items_list)
+        })
+            
+    except Exception as e:
+        app.logger.error(f"Error getting combined content: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": str(e),
+            "requests": []
+        }), 500
+    
+@app.route('/api/jellyseerr/request/<request_id>/status', methods=['POST'])
+def update_jellyseerr_request_status():
+    """Update the status of a Jellyseerr request."""
+    try:
+        request_id = request.view_args.get('request_id')
+        new_status = request.json.get('status')
+        
+        if not request_id or not new_status:
+            return jsonify({"success": False, "message": "Request ID and status are required"}), 400
+            
+        # Map status text to Jellyseerr status codes
+        status_map = {
+            "approve": 2,
+            "decline": 3
+        }
+        
+        status_code = status_map.get(new_status.lower())
+        if not status_code:
+            return jsonify({"success": False, "message": f"Invalid status: {new_status}"}), 400
+            
+        # Update the request status in Jellyseerr
+        success = jellyseerr_api.update_request_status(request_id, status_code)
+        
+        if success:
+            return jsonify({"success": True, "message": f"Request status updated to {new_status}"})
+        else:
+            return jsonify({"success": False, "message": "Failed to update request status"}), 500
+            
+    except Exception as e:
+        app.logger.error(f"Error updating Jellyseerr request status: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500  
+    
 @app.route('/seerr-webhook', methods=['POST'])
 def process_seerr_webhook():
-    """Handle incoming Jellyseerr webhooks - cancel requests with episodes tag."""
+    """Handle incoming Jellyseerr webhooks - store request info for later."""
     try:
         app.logger.info("Received webhook from Jellyseerr")
         json_data = request.json
@@ -2138,43 +2261,48 @@ def process_seerr_webhook():
         # Debug log the webhook data
         app.logger.info(f"Jellyseerr webhook data: {json.dumps(json_data)}")
         
-        # Get the request ID if available
+        # Get the request ID
         request_id = json_data.get('request', {}).get('request_id') or json_data.get('request', {}).get('id')
         
-        # Check if it's a TV show request - we only want to cancel TV show requests
+        # Check if it's a TV show request
         media_type = json_data.get('media', {}).get('media_type')
         if media_type != 'tv':
-            app.logger.info(f"Request is not a TV show request. Skipping cancellation.")
+            app.logger.info(f"Request is not a TV show request. Skipping.")
             return jsonify({"status": "success"}), 200
         
-        # Look ONLY for an exact 'episodes' tag
-        has_episodes_tag = any(
-            extra.get('name', '').lower() == 'episodes' 
-            for extra in json_data.get('extra', [])
-        )
+        # Store the TVDB ID, request ID, and title in the global dictionary
+        tvdb_id = json_data.get('media', {}).get('tvdbId')
+        title = json_data.get('subject', 'Unknown Show')
         
-        # Only proceed if explicitly tagged with 'episodes'
-        if has_episodes_tag and request_id:
-            app.logger.info(f"Request {request_id} has episodes tag")
+        if tvdb_id and request_id:
+            # Store the request info for later use by the Sonarr webhook
+            global jellyseerr_pending_requests
+            jellyseerr_pending_requests[str(tvdb_id)] = {
+                'request_id': request_id,
+                'title': title,
+                'timestamp': int(time.time())
+            }
             
-            def delayed_cancel():
-                # Add a delay to ensure Sonarr has time to process the request
-                time.sleep(5)  # 5-second delay
-                app.logger.info(f"Canceling Jellyseerr request {request_id} with episodes tag")
-                result = modified_episeerr.delete_overseerr_request(request_id)
-                app.logger.info(f"Cancellation result: {result}")
+            app.logger.info(f"Stored Jellyseerr request {request_id} for TVDB ID {tvdb_id} ({title})")
             
-            # Use threading to run the cancellation in the background
-            threading.Thread(target=delayed_cancel, daemon=True).start()
+            # Clean up old requests (older than 10 minutes)
+            current_time = int(time.time())
+            expired_tvdb_ids = []
             
-            app.logger.info(f"Request {request_id} has episodes tag. Cancellation queued.")
-        else:
-            app.logger.info("Webhook received without explicit episodes tag. Skipping cancellation.")
+            for tid, info in jellyseerr_pending_requests.items():
+                if current_time - info.get('timestamp', 0) > 600:  # 10 minutes
+                    expired_tvdb_ids.append(tid)
+            
+            for tid in expired_tvdb_ids:
+                del jellyseerr_pending_requests[tid]
+                app.logger.info(f"Cleaned up expired request for TVDB ID {tid}")
         
         return jsonify({"status": "success"}), 200
+        
     except Exception as e:
         app.logger.error(f"Error processing Jellyseerr webhook: {str(e)}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
+
    
 @app.route('/webhook', methods=['POST'])
 def handle_server_webhook():
@@ -2403,6 +2531,8 @@ def cleanup_requests_route():
     """Route to manually clean up invalid requests"""
     count = cleanup_invalid_requests()
     return jsonify({"message": f"Cleaned up {count} invalid requests"}), 200
+
+  
 
 def cleanup_invalid_requests():
     """Remove invalid or corrupted request files"""
