@@ -132,7 +132,7 @@ def load_config():
                 'feed_preferences': DEFAULT_FEEDS
             }
         }
-        return 
+        return default_config
     
 def save_config(config):
     with open(config_path, 'w') as file:
