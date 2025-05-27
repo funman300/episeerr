@@ -1,11 +1,14 @@
-*.pyc
 __pycache__/
+venv/
+
+README.md
 .env
 # Ignore node_modules
 node_modules/
 # Ignore log files
 logs/
 # Ignore temp and config contents
-/temp/* /config/*
-templates/
-*.xml
+/temp/* 
+/config/*
+*.pyc
+

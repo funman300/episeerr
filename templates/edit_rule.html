@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Rule - Sonarr Rules Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-edit me-2"></i>Edit Rule: {{ rule_name.replace('_', ' ').title() }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="get_option" class="form-label">How many episodes to get?</label>
+                        <input type="text" class="form-control" id="get_option" name="get_option" 
+                               value="{{ rule.get_option }}" placeholder="season, all, or a number" required>
+                        <div class="form-text">Examples: "season", "all", "5"</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="action_option" class="form-label">Action for Episodes</label>
+                        <select class="form-select" id="action_option" name="action_option" required>
+                            <option value="monitor" {% if rule.action_option == 'monitor' %}selected{% endif %}>Monitor</option>
+                            <option value="search" {% if rule.action_option == 'search' %}selected{% endif %}>Search</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="keep_watched" class="form-label">How many episodes to keep?</label>
+                        <input type="text" class="form-control" id="keep_watched" name="keep_watched" 
+                               value="{{ rule.keep_watched }}" placeholder="season, all, or a number">
+                        <div class="form-text">Examples: "season", "all", "3"</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="monitor_watched" name="monitor_watched" 
+                                   {% if rule.monitor_watched %}checked{% endif %}>
+                            <label class="form-check-label" for="monitor_watched">
+                                Keep monitored if watched
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <strong>Currently assigned to {{ rule.series|length }} series</strong>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Back to Rules
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Update Rule
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -4,8 +4,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    #environment:
-      #- REQUESTS_CA_BUNDLE=/usr/local/share/ca-certificates/caddy-root.crt
     env_file:
       - .env
     volumes:
@@ -15,8 +13,6 @@ services:
       - ./temp:/app/temp
       - ./static:/app/static 
       - ./templates:/app/templates
-    
     ports:
-      - "5002:5002"
+      - "5005:5005"
     restart: unless-stopped
-    network_mode: host
