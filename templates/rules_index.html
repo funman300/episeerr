@@ -1,41 +1,33 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card stats-card text-white">
-            <div class="card-body">
-                <h5><i class="fas fa-tv me-2"></i>Total Series</h5>
-                <h2 id="total-series">{{ all_series|length }}</h2>
-            </div>
+<!-- Stats Cards with CSS Grid -->
+<div class="stats-row">
+    <div class="card stats-card text-white">
+        <div class="card-body">
+            <h5><i class="fas fa-tv me-2"></i>Total Series</h5>
+            <h2 id="total-series">{{ all_series|length }}</h2>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card stats-card text-white">
-            <div class="card-body">
-                <h5><i class="fas fa-cogs me-2"></i>Total Rules</h5>
-                <h2>{{ config.rules|length }}</h2>
-            </div>
+    <div class="card stats-card text-white">
+        <div class="card-body">
+            <h5><i class="fas fa-cogs me-2"></i>Total Rules</h5>
+            <h2>{{ config.rules|length }}</h2>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card stats-card text-white">
-            <div class="card-body">
-                <h5><i class="fas fa-check me-2"></i>Assigned</h5>
-                <h2 id="assigned-series">0</h2>
-            </div>
+    <div class="card stats-card text-white">
+        <div class="card-body">
+            <h5><i class="fas fa-check me-2"></i>Assigned</h5>
+            <h2 id="assigned-series">0</h2>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card stats-card text-white">
-            <div class="card-body">
-                <h5><i class="fas fa-question me-2"></i>Unassigned</h5>
-                <h2 id="unassigned-series">0</h2>
-            </div>
+    <div class="card stats-card text-white">
+        <div class="card-body">
+            <h5><i class="fas fa-question me-2"></i>Unassigned</h5>
+            <h2 id="unassigned-series">0</h2>
         </div>
     </div>
 </div>
-
 <!-- Rules Management -->
 <div class="row">
     <div class="col-md-4">
