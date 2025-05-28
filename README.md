@@ -1,258 +1,483 @@
-# OCDarr Lite: Smart Episode Management for Sonarr
+Dev branch is developmental, consider it beta
+#  <img src="https://github.com/Vansmak/OCDarr/assets/16037573/f802fece-e884-4282-8eb5-8c07aac1fd16" alt="logo" width="200"/>
 
-<img src="static/logo_icon.png" alt="OCDarr Lite" width="120" align="right"/>
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/vansmak)
 
-**The essential OCDarr experience** - focused on what matters most: intelligent, rule-based episode management that responds to your viewing habits.
+## OCDarr: Precision Episode Management for Sonarr 
 
-## What OCDarr Lite Does
+OCDarr is a smart media assistant that gives you episode-by-episode control over your library, automatically preparing what you want to watch next while cleaning up what you've already seen.
 
-OCDarr Lite automatically manages your TV episodes based on **your viewing activity**. Watch an episode, and OCDarr intelligently prepares what you want to watch next while cleaning up what you've already seen.
+## Navigation Features 
 
-### 🎯 **Perfect For:**
-- Users who **don't rewatch** episodes but want the next one ready
-- People who prefer a **curated, organized** library over massive collections
-- Anyone wanting **different management strategies** for different shows
-- Users who value **automation that actually helps**
+📺 **Shows**  
+Browse your series collection with intuitive displays of recently added and upcoming episodes.
 
-### 🚫 **Not For:**
-- Digital hoarders who want to keep everything forever
-- Users who rewatch content frequently
-- Large household servers with multiple users at different points in series
+🎬 **Movies**  
+Manage your movie library with easy access to recently added titles and missing content.
 
----
+⬇️ **Requests**  
+Streamlined interface for adding new content requests with season and episode-level precision.
 
-## 🔧 How It Works
+▶️ **Plex Watchlist**  **Jellyfin Favorites** (wip)
+watchlist, favorites and stats, see what's missing from your collection.
 
-### **Simple Three-Step Process:**
+⚙️ **Settings**  
+Choose default download profiles and rule configuration.
 
-1. **Create Rules** → Define how episodes should be managed
-2. **Assign Series** → Link your shows to specific rules  
-3. **Watch & Enjoy** → OCDarr handles everything automatically
 
-### **Rule Components:**
+🔬 **Rule-Based Episode Control**  //works with jellyfin or plex
+The heart of OCDarr - create custom rules to determine exactly how many episodes to monitor, search for, and retain.
 
-Each rule defines exactly how episodes are handled:
+## Perfect For Users Who:
+- Don't rewatch or keep, yet its ok if you do
+- Want the next episode ready when they finish the current one
+- Prefer to keep their media library tidy and organized, not as vauluable for hoarders
+- Don't need to keep entire seasons after watching, but you can
+- Want different management rules for different shows
+- Use Overseerr or Jellyseerr but want to  manage at the episode level, nzb360, lunasea (use tag)
 
-| Component | Purpose | Examples |
-|-----------|---------|----------|
-| **Get Option** | How many upcoming episodes to prepare | `1` (next episode), `season` (full season), `all` (everything) |
-| **Action Option** | How episodes are handled | `monitor` (passive), `search` (active download) |
-| **Keep Watched** | What to retain after viewing | `1` (last episode), `season` (current season), `all` (everything) |
-| **Monitor Watched** | Track episodes after watching | `true` (keep monitoring), `false` (auto-unmonitor) |
+Most media management tools operate on an all-or-nothing approach. OCDarr revolutionizes this with its dynamic, per-show rule system:
 
-### **Example Rule - "Next Episode Only":**
-```
-Get Option: 1          → Prepare just the next episode
-Action Option: search  → Actively download it  
-Keep Watched: 1        → Keep only the last watched episode
-Monitor Watched: false → Stop tracking after watching
-```
+> Granular Episode Selection: Choose exactly which episodes you want  
+> Intelligent Cleanup: Automatically manage your library based on your viewing habits  
+> Flexible Rules: Create custom management strategies for different shows  
 
-**Result:** Watch S1E5 → Keeps E5, gets E6, deletes E4 and earlier
+## How It Works
 
----
+### Rule Components: Your Media, Your Rules
+
+**Get Option**: Control how many upcoming episodes to prepare
+- 1: Just the next episode
+- 3: Next three episodes
+- season: Full season
+- all: Everything upcoming                                                  
+
+**Action Option**: Define how episodes are handled
+- monitor: Passive tracking
+- search: Active download and monitoring
+
+**Keep Watched**: Manage post-viewing library
+- 1: Keep only the last watched episode
+- 2: Keep last two episodes
+- season: Retain current season
+- all: Keep everything
+
+**Monitor Watched**: Tracking behavior after watching
+- true: Keep watched episodes monitored
+- false: Automatically unmonitor after viewing
+                                    
+### 🎬 Adaptive Episode Request Workflows
+
+OCDarr supports multiple request scenarios with intelligent handling:
+
+**External Requests (Jellyseerr/Overseerr)**
+
+*Use "episodes" tag when requesting something from Jellyseerr/Overseerr if you want to control down to individual episodes*
+
+With "episodes" tag:
+- Precise episode selection
+- Unmonitor all initial episodes
+- Cancel automatic downloads
+- User-guided episode monitoring
+
+Without "episodes" tag:
+- Instant addition to default rule
+- Automatic management based on predefined preferences
+
+**Internal Requests (OCDarr Interface)**
+- Identical powerful selection mechanism
+- Pilot episode handling
+- Granular episode monitoring
+
+### 🌟 Real-World Scenario
+
+Example: You're watching "Breaking Bad"
+  
+You want:
+- Only the next episode ready
+- Automatically clean up watched episodes
+- Keep the current season
+- Stop tracking after you've finished
+
+Traditional Solution: Download entire seasons, manual cleanup  
+OCDarr Solution: Intelligent, automated, personalized management
+
+### 🔑 Key Differentiators
+
+🎯 Episode-level control  
+🧹 Automatic library management  
+🔧 Highly configurable rules  
+🚀 Proactive episode preparation  
+📰 RSS News Tickers
+
+OCDarr isn't just a tool—it's your personal media librarian.
+## 📰 RSS News Tickers
+
+OCDarr includes customizable RSS tickers in each main section that display relevant media news and updates:
+
+- **Shows Tab**: Displays TV industry news via TVLine's feed
+- **Movies Tab**: Shows movie trailer updates from FilmJabber
+- **Plex Tab**: Displays upcoming media releases from ComingSoon.net
+
+### Features:
+- Auto-scrolling text tickers present the latest entertainment headlines
+- Each section has its own topic-focused feed
+- Configurable via settings icon (desktop only)
+- Hidden on mobile devices to maximize screen space
+- Preset feed options or custom RSS URL support
+
+Tickers automatically refresh every 30 minutes to ensure you always see the latest entertainment news without leaving OCDarr.
+
+> 💡 **Tip**: The Plex section ticker would be a great place to add a friends' watchlist feed if you're using a service that provides RSS feeds of user activity.
+
+### Interface Preview!
+[ocdarr](https://github.com/user-attachments/assets/5b97f9f3-bd2a-4df7-8fc5-1e9873e7d4fa)
+
+
+![ocd](https://github.com/user-attachments/assets/cd7b5c0f-275f-4222-99e6-40fd76c6f495)
+
+## 📋 Requirements
+
+- Sonarr v3
+- Either:
+  - Plex + Tautulli
+  - OR Jellyfin #not yet
+- Docker environment
+- Overseerr/Jellyseerr (optional, for automatic rule assignment)
 
 ## 🚀 Installation
 
-### **Requirements:**
-- Sonarr v3
-- Media server with webhook support:
-  - **Plex** + Tautulli (webhook required)
-  - **Jellyfin** (built-in webhooks)
-- Docker environment
+### Option 1: Docker Hub (Recommended)
 
-### **Quick Start:**
-```bash
-# Clone OCDarr Lite
-git clone -b lite https://github.com/your-repo/ocdarr.git ocdarr-lite
-cd ocdarr-lite
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your Sonarr details
-
-# Run with Docker
-docker-compose up -d
+# Pull the image
 ```
-
-### **Environment Configuration:**
-```env
-# Required
-SONARR_URL=http://your-sonarr:8989
-SONARR_API_KEY=your_sonarr_api_key
-
-# Optional (for Jellyseerr integration)
-JELLYSEERR_URL=http://your-jellyseerr:5055
-JELLYSEERR_API_KEY=your_jellyseerr_api_key
-
-# Logging
-LOG_PATH=/app/logs/app.log
-FLASK_DEBUG=false
-PORT=5003
+docker pull vansmak/ocdarr:amd64_dev
 ```
+# Run the container
+```
+docker run -d \
+  --name ocdarr \
+  --env-file .env \
+  --env CONFIG_PATH=/app/config/config.json \
+  -p 5002:5002 \
+  -v ${PWD}/logs:/app/logs \
+  -v ${PWD}/config:/app/config \
+  -v ${PWD}/temp:/app/temp \
+  -v ${PWD}/static:/app/static \
+  -v ${PWD}/templates:/app/templates \
+  --restart unless-stopped \
+  vansmak/ocdarr:amd64_dev
+```
+Option 2: Build from Source
+```
+  git clone https://github.com/Vansmak/OCDarr.git
+  cd OCDarr
+  git checkout dev
+  docker-compose up -d --build
 
----
+```
+⚙️ Configuration
+Environment Variables
+Create a .env file:
 
-## ⚙️ Setup & Configuration
+```
+  SONARR_URL=url:port
+  SONARR_API_KEY=YOUR_SONARR_API_KEY_HERE 
+  JELLYSEERR_URL=url:port #LEAVE LABEL AS JELLYSEER BUT USE YOU OVERSEER URL AND API
+  JELLYSEERR_API_KEY=api_key
+  RADARR_URL=url:port
+  RADARR_API_KEY=api_key
+  TMDB_API_KEY=reallylongtmdbkey
+  PLEX_URL=plex_url:port
+  PLEX_TOKEN=plex_token
+  MAX_TMDB_ITEMS=24
+  MAX_SHOWS_ITEMS=24
+  MAX_MOVIES_ITEMS=24
+  
+```
+Docker Compose
+```
+version: '3.8'
+services:
+  ocdarr:
+    image: vansmak/ocdarr:amd64_dev
+    environment:
+      - SONARR_URL: ${SONARR_URL}
+      - SONARR_API_KEY: ${SONARR_API_KEY}
+      - JELLYSEERR_URL: ${JELLYSEERR_URL}
+      - JELLYSEERR_API_KEY: ${JELLYSEERR_API_KEY}
+      - RADARR_URL: ${RADARR_URL}
+      - RADARR_API_KEY: ${RADARR_API_KEY}
+      - TMDB_API_KEY: ${TMDB_API_KEYL}
+      - CONFIG_PATH: /app/config/config.json
+      - PLEX_URL: plex_url:port
+      - PLEX_TOKEN: plex_token
+      - MAX_TMDB_ITEMS: 24
+      - MAX_SHOWS_ITEMS: 24
+      - MAX_MOVIES_ITEMS: 24
+    env_file:
+      - .env
+    volumes:
+      - /mnt/media/OCDarr3/logs:/app/logs
+      - /mnt/media/OCDarr3/config:/app/config
+      - /mnt/media/OCDarr3/temp:/app/temp
+      - /mnt/media/OCDarr3/static:/app/static 
+      - /mnt/media/OCDarr3/templates:/app/templates
+    ports:
+      - "5002:5002"
+    restart: unless-stopped
+```
+# OcDarr for Unraid
 
-### **1. OCDarr Lite Interface**
-- Access at `http://your-server:5003`
-- Create and manage rules
-- Assign series to rules
-- Monitor statistics
+Flask application that provides integrated webhook functionality for Sonarr, Radarr, Jellyseerr, and Plex.
 
-### **2. Media Server Webhooks**
+## For Unraid Users
 
-#### **For Plex + Tautulli:**
-1. **Tautulli** → Settings → Notification Agents → Add Webhook
-2. **Webhook URL:** `http://your-ocdarr:5003/webhook`
-3. **Trigger:** Episode Watched  
-4. **JSON Data:**
-```json
+To install this Docker container on Unraid:
+
+1. Navigate to the "Docker" tab in your Unraid web UI
+2. Click on the "Docker Repositories" sub-tab
+3. Add `https://github.com/vansmak/OCDarr` to your template repositories
+4. Click "Save"
+5. Go back to the "Docker" tab
+6. Click "Add Container"
+7. Find "OcDarr" in the template dropdown
+8. Configure the container settings as needed
+9. Click "Apply"
+
+## Architecture Support
+
+This container is designed for AMD64/x86_64 systems only. It will not work on ARM-based Unraid servers.
+
+## Configuration
+
+The following environment variables are required:
+
+### Media Servers
+- `SONARR_URL`: URL for your Sonarr instance
+- `SONARR_API_KEY`: API key for your Sonarr instance
+- `RADARR_URL`: URL for your Radarr instance
+- `RADARR_API_KEY`: API key for your Radarr instance
+- `JELLYSEERR_URL`: URL for your Jellyseerr instance
+- `JELLYSEERR_API_KEY`: API key for your Jellyseerr instance
+- `PLEX_URL`: URL for your Plex server
+- `PLEX_TOKEN`: Authentication token for your Plex server
+
+### External APIs
+- `TMDB_API_KEY`: API key for The Movie Database
+
+### Optional Settings
+- `MAX_TMDB_ITEMS`: Maximum number of TMDB items to display (default: 24)
+- `MAX_SHOWS_ITEMS`: Maximum number of shows to display (default: 24)
+- `MAX_MOVIES_ITEMS`: Maximum number of movies to display (default: 24)
+- `LOG_PATH`: Path to application log file (default: /app/logs/app.log)
+- `MISSING_LOG_PATH`: Path to missing items log file (default: /app/logs/missing.log)
+- `FLASK_DEBUG`: Enable Flask debug mode (default: false)
+
+Docker image: [vansmak/ocdarr:amd64_dev](https://hub.docker.com/r/vansmak/ocdarr)
+📝 Rules System
+Create rules using the OCDarr website (start with Default rule)
+
+Rules define how OCDarr manages each show. Each rule has four components:
+
+Get Option (get_option): 
+
+  1 - Get only the next episode
+  3 - Get next three episodes
+  season - Get full seasons
+  all - Get everything upcoming  
+
+Action Option (action_option):
+
+  monitor - Only monitor episodes
+  search - Monitor and actively search
+
+Keep Watched (keep_watched):
+
+  1 - Keep only last watched episode
+  2 - Keep the last 2, etc
+  season - Keep current season
+  all - Keep everything
+
+Monitor Watched (monitor_watched):
+
+  true - Keep watched episodes monitored
+  false - Unmonitor after watching
+
+Rule Assignment
+Shows can get rules in two ways:
+Default Rule: Applied if no other rule matches
+This is the first rule you should edit to how you want most shows added as it will be applied if no other rule is set.
+For example, a typical Default rule might be:
+```
+"rules": {
+    "Default": {
+        "get_option": "1",
+        "action_option": "search",
+        "keep_watched": "1",
+        "monitor_watched": true
+    }
+}
+```
+Manual Assignment: Through OCDarr's web interface
+Automatic via Tags: When requesting shows through Overseerr/Jellyseerr
+
+Without tag: Goes to default rule
+With "episodes" tag: Applies no rule and presents form to select episodes
+
+🔗 Media Server Integration
+Plex (via Tautulli) Setup
+
+In Tautulli, go to Settings > Notification Agents
+Click "Add a new notification agent" and select "Webhook"
+Configure the webhook:
+
+Webhook URL: http://your-ocdarr-ip:5002/webhook
+Trigger: Episode Watched
+JSON Data: Use exactly this template:
+```
 {
   "plex_title": "{show_name}",
   "plex_season_num": "{season_num}",
   "plex_ep_num": "{episode_num}"
 }
 ```
+![webhook](https://github.com/Vansmak/OCDarr/assets/16037573/cf0db503-d730-4a9c-b83e-2d21a3430ece)![webhook2](https://github.com/Vansmak/OCDarr/assets/16037573/45be66c2-1869-49c1-8074-9081ed7c913b)
+![webhook3](https://github.com/Vansmak/OCDarr/assets/16037573/24f02a75-2100-4b2a-9137-ce1e68803d1f)![webhook4](https://github.com/Vansmak/OCDarr/assets/16037573/f82198fc-e4c4-40ec-a9c7-551b2d8cdccd)
 
-#### **For Jellyfin:**
-1. **Jellyfin** → Dashboard → Plugins → Webhooks
-2. **Webhook URL:** `http://your-ocdarr:5003/jellyfin-webhook`
-3. **Notification Type:** Playback Progress
-4. **Item Type:** Episodes
+Important: Adjust your "Watched Percentage" in Tautulli's general settings to control when webhooks trigger.
 
-### **3. Sonarr Integration**
-1. **Sonarr** → Settings → Connect → Add Webhook
-2. **URL:** `http://your-ocdarr:5003/sonarr-webhook`  
-3. **Triggers:** On Series Add
-4. **Purpose:** Applies default rule to new series
+## Setting Up Jellyfin Webhook for OCDarr
 
----
+To configure Jellyfin to send playback information to OCDarr, follow these steps:
 
-## 🎛️ Advanced Features
+1. In Jellyfin, navigate to **Dashboard** → **Plugins** → **Webhooks**
+  - If the Webhooks plugin is not installed, you'll need to install it first from the Plugin Catalog
 
-### **OCDarr Tag (Optional)**
-For power users who want episode-level control from day one:
+2. Once in the Webhooks section, click **+ Add New Webhook** and configure with these settings:
 
-- **Auto-created:** OCDarr creates an "ocdarr" tag in Sonarr on first run
-- **User choice:** Add tag when requesting new series for immediate control
-- **Self-cleaning:** Tag automatically removed after processing
-- **Delayed downloads:** Prevents Sonarr from auto-downloading full seasons
+  - **Webhook Name**: OCDarr Episode Tracking (or any name you prefer)
+  - **Server URL**: Your Jellyfin base URL (for linking to content)
+  - **Webhook URL**: `http://your-ocdarr-ip:5002/jellyfin-webhook`
+  - **Status**: Enabled
+  - **Notification Type**: Select only "Playback Progress"
+  - **User Filter** (Optional): Specific username(s) to track
+  - **Item Type**: Episodes
+  - **Send All Properties**: Enabled
+  - **Content Type**: application/json
 
-#### **How to Use:**
-1. **Request new series** → Optionally add "ocdarr" tag
-2. **OCDarr processes** → Applies rules, removes tag
-3. **Clean operation** → No permanent tag clutter
+3. Under **Request Headers**, add:
+  - **Key**: `Content-Type`
+  - **Value**: `application/json`
 
-#### **Sonarr Delayed Profile Setup (Recommended):**
-1. **Settings** → Profiles → Add Delay Profile
-2. **Delay:** 10519200 minutes (failsafe - prevents unwanted downloads)
-3. **Tags:** Select "ocdarr"
-4. **Bypass:** Do NOT select
-5. **Purpose:** Protection while OCDarr processes rules
+4. Click **Save**
 
-### **Jellyseerr/Overseerr Integration**
-- **With "ocdarr" tag:** Request gets deleted after processing (prevents conflicts)
-- **Without tag:** Normal workflow, rules apply after viewing
-- **Trade-off:** Choose episode control OR seerr visibility (not both)
+### Important Notes:
 
----
+- OCDarr processes playback events when progress is between 45-55% of the episode (mid-point)
+- Make sure your server can reach your OCDarr instance on port 5002
+- OCDarr will automatically manage episodes according to your configured rules when playback events are received
 
-## 🎯 Example Workflows
+### Troubleshooting:
 
-### **Typical User - "Next Episode Only"**
-- **Rule:** Get 1, Search, Keep 1, Don't Monitor Watched
-- **Experience:** Always have next episode ready, automatically clean up old ones
-- **Perfect for:** Binge watchers, current season followers
+- If webhooks aren't being received, check your servers logs for any webhook delivery errors
+- Verify the webhook URL is correctly pointing to your OCDarr instance
+- Ensure OCDarr logs show webhook events being received at `/app/logs/app.log`
 
-### **Season Watcher - "Full Season Management"**  
-- **Rule:** Get Season, Monitor, Keep Season, Monitor Watched
-- **Experience:** Get full seasons, keep current season, automatic cleanup
-- **Perfect for:** Prefer complete seasons, don't rewatch
+### Jellyseerr/Overseerr Webhook Setup
 
-### **Minimalist - "Just What I Need"**
-- **Rule:** Get 1, Monitor, Keep 1, Don't Monitor Watched  
-- **Experience:** Minimal downloads, maximum cleanup
-- **Perfect for:** Limited storage, very organized libraries
+*This is used with the episodes tag to cancel the request after it's added to Sonarr. If you want requests to stay in Jellyseerr/Overseerr, don't use the episodes tag when requesting.*
 
----
+1. In Jellyseerr, go to Settings > Notifications
+2. Add a new webhook notification
+3. Set the webhook URL to `http://yourocdarr:5002/seerr-webhook`
+4. Enable notifications for "Request Approved"
+5. Save the webhook configuration
+
+### Sonarr Webhook Setup
+
+1. In Sonarr, go to Settings > Connect
+2. Click the + button to add a new connection
+3. Select "Webhook"
+4. Configure:
+   - URL: `http://your-ocdarr-ip:5002/sonarr-webhook`
+   - Triggers: Enable "On Series Add"
+   - Leave other settings at default
+
+### Sonarr Delayed Release Profile
+
+*This buys time while the script unmonitors episodes so downloads don't start*
+
+1. Settings > Profiles > Add delay profile
+2. Add a ridiculous time like 10519200 (this is just to prevent downloads, it won't download anything less than 20 years old, it's a failsafe)
+3. Choose episodes tag
+4. Do not select bypass
+
+## 📋 Episode Selection Flow
+
+OCDarr supports multiple ways to request and manage TV shows:
+
+### External Requests (via Jellyseerr/Overseerr)
+
+When requesting shows through Jellyseerr:
+
+**With "episodes" tag**: Follows the episode selection flow:
+1. Show is sent to Sonarr
+2. All episodes are unmonitored
+3. Downloads are canceled
+4. A pending season selection request is created
+5. User selects episodes
+6. If only S01E01 is selected: Episodes tag is removed, show is added to default rule
+7. If multiple episodes: Episodes tag is kept, only selected episodes are monitored
+8. Original Jellyseerr request is canceled automatically
+
+**Without "episodes" tag**: Show is directly added to the default rule
+
+### Internal Requests (via OCDarr)
+
+When requesting shows through OCDarr's interface:
+1. Show is added to Sonarr with episodes tag
+2. All episodes are unmonitored
+3. Downloads are canceled
+4. A pending season selection request is created
+5. User selects episodes
+6. If only E01 is selected: Episodes tag is removed, show is added to default rule (meant to mimic pilot episode)
+7. If multiple episodes: Episodes tag is kept, only selected episodes are monitored
+
+This system gives you precise control over exactly which episodes you want, while cleaning up appropriately after requests.
 
 ## 🔧 Troubleshooting
 
-### **Episodes Not Updating After Watching:**
-- ✅ Verify webhook configuration in Tautulli/Jellyfin
-- ✅ Check OCDarr logs: `/app/logs/app.log`
-- ✅ Ensure series has a rule assigned
-- ✅ Confirm webhook is reaching OCDarr
+### Common Issues
 
-### **Rules Not Applying:**
-- ✅ Verify series is assigned to a rule in OCDarr interface
-- ✅ Check that series isn't manually configured in Sonarr
-- ✅ Review rule configuration for correct options
+**Shows aren't updating after watching episodes:**
+- Verify Tautulli webhook is properly configured
+- Check OCDarr logs for incoming webhook data
+- Ensure the show has a rule assigned
 
-### **New Series Downloading Everything:**
-- ✅ Set up Sonarr webhook for auto-rule assignment
-- ✅ Configure delayed release profile with "ocdarr" tag
-- ✅ Use "ocdarr" tag when requesting series for immediate control
+**Rule not applying correctly:**
+- Edit config.json directly if UI changes aren't saving
+- Verify the show isn't using the "episodes" tag which overrides rules
+- Check Sonarr for any manual changes that might conflict
 
----
+**Docker container won't start:**
+- Verify environment variables are set correctly
+- Check folder permissions for mounted volumes
+- Review logs for specific error messages
 
-## 📈 Statistics & Monitoring
+For additional support, please open an issue on GitHub.
 
-OCDarr Lite provides clear visibility into your setup:
+## 📊 Version History
 
-- **Total Series:** All series in your Sonarr instance
-- **Assigned Series:** Series with OCDarr rules  
-- **Unassigned Series:** Series using default Sonarr behavior
-- **Rule Breakdown:** How many series each rule manages
+**v0.9.0-beta (Current Dev Branch)**
+- Added Plex Watchlist integration
+- Improved request handling
+- UI refinements
 
----
+**v0.8.0-alpha**
+- Initial public release
+- Core rule functionality
+- Basic integration with Sonarr and Jellyseerr/Overseerr
 
-## 🎪 Why OCDarr Lite?
-
-### **The Problem:**
-Most media tools work on "all or nothing" - download entire seasons, keep everything forever, manual cleanup.
-
-### **The Solution:**  
-**Smart, viewing-driven automation** that adapts to how you actually watch TV.
-
-### **The Result:**
-- ✨ **Always ready:** Next episode available when you want it
-- 🧹 **Automatically organized:** Old episodes cleaned up intelligently  
-- 🎯 **Personalized:** Different rules for different shows
-- ⚡ **Efficient:** Only downloads what you'll actually watch
-
----
-
-## 💡 Philosophy
-
-> *"OCDarr isn't about having everything - it's about having exactly what you need, exactly when you need it."*
-
-OCDarr Lite is for the **thoughtful media manager** - someone who values curation over collection, automation over accumulation, and purpose over hoarding.
-
-**Not designed for media hoarders or large household servers with multiple users at different points in series.**
-
----
-
-## 🏗️ Technical Details
-
-- **Language:** Python 3.11+
-- **Framework:** Flask
-- **Dependencies:** Minimal (Flask, requests, python-dotenv)
-- **Architecture:** Lightweight, focused, maintainable
-- **Webhooks:** Sonarr, Plex/Tautulli, Jellyfin
-- **Storage:** File-based configuration (config.json)
-- **Logging:** Rotating logs with configurable levels
-
----
-
-## 📝 License & Support
-
-**License:** MIT License  
-**Support:** GitHub Issues  
-**Documentation:** This README + inline help  
-
----
-
-*OCDarr Lite: Because your media library should work **for you**, not the other way around.*
+*Not designed for media hoarders or large household servers with multiple users at different points in series.
+Use is intended for owned media or paid subscription services.*

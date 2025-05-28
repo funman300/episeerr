@@ -1,0 +1,509 @@
+/* ====== Plex Watchlist Core Styles ====== */
+#plex-tab {
+    padding: 10px 15px; /* Reduced top padding */
+}
+
+/* ====== Scrollable Rows and Media Items ====== */
+/* These match the main styling but with Plex-specific tweaks */
+#plex-tab .scrollable-row {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px; /* Tighter spacing */
+    padding-bottom: var(--spacing-sm);
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    margin-bottom: 5px;
+}
+
+#plex-tab .scrollable-row::-webkit-scrollbar {
+    display: none;
+}
+
+#plex-tab .media-item {
+    transition: transform 0.2s ease;
+}
+
+#plex-tab .media-item:hover {
+    transform: scale(1.05);
+}
+
+#plex-tab .poster-wrapper {
+    position: relative;
+    aspect-ratio: 2/3;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    background-color: var(--surface-color);
+}
+
+#plex-tab .poster {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#plex-tab .media-info {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    padding: var(--spacing-sm);
+    text-align: center;
+}
+
+#plex-tab .media-subtitle {
+    font-size: 12px;
+    color: var(--text-color);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ====== Stats Components ====== */
+.stat-pill {
+    background-color: rgba(52, 152, 219, 0.2);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 14px;
+}
+
+.stat-label {
+    color: rgba(255, 255, 255, 0.7);
+    margin-right: 5px;
+}
+
+.stats-icons {
+    font-size: 0.8rem;
+    margin-right: 0.3rem;
+    opacity: 0.7;
+}
+
+#plex-tab .stats-card {
+    margin-bottom: 8px; /* Reduced margin */
+}
+
+/* ====== Remaining styles unchanged ====== */
+.card {
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+#plex-connection-card {
+    margin-bottom: 10px;
+}
+
+.watchlist-item {
+    transition: transform 0.2s;
+    margin-bottom: 15px;
+}
+
+.watchlist-item:hover {
+    transform: translateY(-5px);
+}
+
+.item-poster {
+    border-radius: 6px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    max-height: 150px;
+}
+
+.item-title {
+    font-size: 18px;
+    margin-bottom: 5px;
+}
+
+.item-year {
+    font-size: 14px;
+}
+
+.item-type-badge {
+    display: inline-block;
+    margin-left: 10px;
+}
+
+.item-rule-select {
+    background-color: #2c3e50;
+    color: white;
+    border: 1px solid #34495e;
+}
+
+.item-exclude {
+    cursor: pointer;
+}
+
+#watchlist-loading {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-secondary);
+}
+
+#empty-watchlist {
+    text-align: center;
+    padding: 30px;
+}
+
+#view-all-btn.active,
+#view-movies-btn.active,
+#view-tv-btn.active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+#connection-status {
+    display: flex;
+    align-items: center;
+}
+
+#connection-status i {
+    margin-right: 8px;
+}
+
+#last-sync-time {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.form-check-input {
+    cursor: pointer;
+}
+
+.form-check-input:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* Add this to your CSS */
+.media-card {
+    position: relative;
+}
+
+.request-actions {
+    display: none;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 8px;
+    text-align: center;
+}
+
+.media-card:hover .request-actions {
+    display: flex;
+    justify-content: space-around;
+}
+
+.request-actions button {
+    margin: 0 2px;
+}
+
+.media-badges {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+}
+
+.media-badges .badge {
+    padding: 5px 8px;
+    font-size: 0.75rem;
+}
+.media-badges {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+}
+
+.badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: white;
+}
+
+.badge-warning {
+    background-color: #ffc107;
+}
+
+.badge-info {
+    background-color: #17a2b8;
+}
+
+.badge-success {
+    background-color: #28a745;
+}
+
+.badge-danger {
+    background-color: #dc3545;
+}
+
+.badge-primary {
+    background-color: #007bff;
+}
+
+.badge-secondary {
+    background-color: #6c757d;
+}
+
+.badge-dark {
+    background-color: #343a40;
+}
+
+.error-message, .empty-message {
+    padding: 20px;
+    text-align: center;
+    color: #999;
+}
+
+.error-message {
+    color: #dc3545;
+}
+/* ====== Responsive Styles ====== */
+/* Mobile (up to 767px) */
+@media (max-width: 767px) {
+    /* Reposition stats bar */
+    #plex-tab .row.mb-3 {
+        margin-bottom: 5px !important; /* Force smaller margin */
+        margin-top: -10px !important; /* Move it up but not too much */
+    }
+    
+    #plex-tab .card.bg-dark {
+        margin-bottom: 0 !important;
+    }
+    
+    /* Fix content row heights with proper spacing */
+    #plex-tab .content-row {
+        height: calc((100vw / 3) * 1.5); /* Base height on width */
+        margin-bottom: 15px; /* Ensure enough space between rows */
+        margin-top: 10px; /* Add space above rows */
+        position: relative; /* For proper stacking */
+    }
+
+    #plex-tab .row-header {
+        margin-bottom: 6px; /* Ensure headers don't crowd content */
+        position: relative; /* For proper stacking */
+        z-index: 2; /* Keep above content */
+    }
+
+    #plex-tab .scrollable-row {
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 8px; /* Reduced padding */
+        position: relative; /* For proper stacking */
+        z-index: 1; /* Keep below headers */
+    }
+
+    #plex-tab .media-item {
+        scroll-snap-align: start;
+        flex: 0 0 calc(33.33% - 8px);
+        max-width: calc(33.33% - 8px);
+        min-width: 110px; /* Slightly smaller */
+    }
+
+    #plex-tab .poster-wrapper {
+        height: auto; /* Let aspect ratio control height */
+        width: 100%;
+    }
+
+    /* Stats card styling for mobile */
+    #plex-tab .stats-card .card-body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 4px; /* Minimal padding */
+    }
+
+    #plex-tab .stats-card .stat-group {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 5px;
+    }
+
+    #plex-tab .stats-card .stat-group > * {
+        margin: 0 5px;
+    }
+    /* Add this to plex-watchlist.css */
+    #plex-tab .card-body {
+        display: flex;
+        justify-content: space-between;
+    }
+    #plex-tab .ticker-container {
+        width: 60%;
+        flex-grow: 0;
+        flex-shrink: 1;
+    }
+
+    #plex-tab .ticker-settings {
+        cursor: pointer;
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+    }
+
+    #plex-tab .ticker-settings:hover {
+        opacity: 1;
+    }
+    #plex-tab .fa-cog.ticker-settings {
+        margin-left: 15px;
+        padding-left: 10px;
+    }
+    #plex-tab .small.text-right.w-100 {
+        width: auto !important;
+        white-space: nowrap;
+    }
+
+    /* Hide ticker and settings icon on mobile, only show stats */
+    @media (max-width: 767px) {
+        #plex-tab .ticker-container,
+        #plex-tab .ticker-settings {
+            display: none !important;
+        }
+        
+        #plex-tab .card-body {
+            justify-content: center;
+        }
+    }
+    
+    /* Make row headers smaller but still visible */
+    #plex-tab .row-header h4 {
+        font-size: 12px; /* Slightly larger than before */
+        margin-bottom: 0;
+        padding: 2px 0;
+        background-color: rgba(18, 18, 18, 0.7); /* Semi-transparent background */
+    }
+    
+    /* Ensure the first content row has proper spacing from stats */
+    #plex-tab .content-row:first-of-type {
+        margin-top: 15px;
+    }
+}
+
+/* Desktop (768px and up) */
+@media (min-width: 768px) {
+    /* Make posters larger in Plex section only */
+    .media-item {
+        flex: 0 0 calc(16.666% - 6px); /* Show 6 items per row instead of 7 */
+        max-width: calc(16.666% - 6px);
+        margin: 3px;
+    }
+    
+    /* Make posters a bit smaller with a fixed height */
+    .poster-wrapper {
+        height: 240px; /* Fixed height for desktop */
+    }
+    
+    /* Make sure content rows have proper spacing */
+    .content-row {
+        margin-bottom: 15px;
+        max-height: 290px; /* Limit height to fit 3 rows on screen */
+    }
+}
+@media (max-width: 767px) {
+    #plex-tab .row.mb-3 {
+        margin-top: -25px !important; /* Move it up more */
+        
+    }
+    
+    #plex-tab .card.bg-dark {
+        margin-left: auto; /* Push to the right */
+        margin-right: auto; /* Center horizontally */
+        max-width: 90%; /* Don't take full width */
+    }
+    
+    #plex-tab .small.text-right.w-100 {
+        text-align: center !important; /* Center the text inside */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        white-space: nowrap;
+    }
+}
+/* Override styling for requests row to match other media items */
+#requests-row .media-card {
+    flex: 0 0 calc(16.666% - 6px);
+    max-width: calc(16.666% - 6px);
+    margin: 3px;
+}
+
+#requests-row .media-poster {
+    position: relative;
+    height: 240px; /* Match the fixed height you use for desktop */
+    width: 160px; /* Maintain aspect ratio */
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    background-color: var(--surface-color);
+}
+
+#requests-row .media-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#requests-row .media-title {
+    font-size: 12px;
+    margin-top: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 767px) {
+    #requests-row .media-card {
+        flex: 0 0 calc(33.33% - 8px);
+        max-width: calc(33.33% - 8px);
+    }
+    
+    #requests-row .media-poster {
+        height: auto; /* Let aspect ratio control height on mobile */
+        width: 100%;
+        aspect-ratio: 2/3;
+    }
+}
+.status-pending {
+    background-color: #f39c12;
+}
+.status-approved {
+    background-color: #27ae60;
+}
+.status-declined {
+    background-color: #e74c3c;
+}
+.status-watchlist {
+    background-color: #3498db;
+}
+.status-unknown {
+    background-color: #95a5a6;
+}
+
+.requested-by {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 5px;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 10px;
+    color: white;
+    border-radius: 4px 4px 0 0;
+}
+
+.source-label {
+    font-size: 0.85em;
+    color: #777;
+    margin-top: 3px;
+}

@@ -1,43 +1,39 @@
-# Use an official Python runtime as a parent image
-FROM python:3.8-slim
+# Use official Python runtime as base image
+FROM python:3.11-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Update system packages and install dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       libxml2-dev \
-       libxslt-dev \
-       libjpeg-dev \
-       zlib1g-dev \
-       libfreetype6-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set the working directory in the container to /app
+# Set working directory
 WORKDIR /app
 
-# Copy the requirements file to the container
-COPY requirements.txt /app/
+# Install system dependencies if needed
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies listed in requirements.txt
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application's code to the container
-COPY . /app
+# Create necessary directories
+RUN mkdir -p /app/logs /app/config /app/data /app/temp
 
-# Define environment variables for runtime
-ENV SONARR_URL=http://sonarr.example.com \
-    SONARR_API_KEY=apikey_here \
-    LOG_PATH=/app/logs/app.log
+# Copy application files
+COPY webhook_listener.py .
+COPY servertosonarr.py .
+COPY modified_episeerr.py .
+COPY sonarr_utils.py .
+COPY templates/ templates/
+COPY static/ static/
 
-# Create a directory for logs
-RUN mkdir -p /app/logs
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5005/api/series-stats || exit 1
 
-# Expose port 5005 to allow communication to/from the server
+# Expose port
 EXPOSE 5005
 
 # Use Gunicorn to serve the application
-CMD ["gunicorn", "--workers", "4", "--bind", "0.0.0.0:5005", "webhook_listener:app"]
+CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:5005", "--access-logfile", "-", "--error-logfile", "-", "webhook_listener:app"]

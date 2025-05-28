@@ -1,14 +1,65 @@
+# Python
 __pycache__/
-venv/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-README.md
+# Environment
 .env
-# Ignore node_modules
-node_modules/
-# Ignore log files
-logs/
-# Ignore temp and config contents
-/temp/* 
-/config/*
-*.pyc
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
+# Logs and temp data
+logs/
+temp/
+*.log
+
+# Config (will be mounted as volume)
+config/
+data/
+
+# Development files
+.git/
+.gitignore
+README.md
+*.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*copy.py
+*.bak
+*.backup
+
+# Removed modules (not needed in lite version)
+tmdb_utils.py
+jellyfin_utils.py
+api/

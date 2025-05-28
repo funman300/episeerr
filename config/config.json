@@ -1,6 +1,7 @@
 {
+    "default_rule": "one_at_a_time",
     "rules": {
-        "single_episodes": {
+        "one_at_a_time": {
             "get_option": "1",
             "action_option": "search",
             "keep_watched": "1",
@@ -68,7 +69,7 @@
                 "385"
             ]
         },
-        "seaons": {
+        "season": {
             "get_option": "season",
             "action_option": "monitor",
             "keep_watched": "season",
@@ -76,5 +77,8 @@
             "series": []
         }
     },
-    "default_rule": "single_episodes"
+    "preferences": {
+        "radarr_quality_profile": "Any",
+        "sonarr_quality_profile": "Any"
+    }
 }

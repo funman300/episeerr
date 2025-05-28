@@ -1,4 +1,12 @@
-Flask
-python-dotenv
-requests
-gunicorn
+# Core Flask dependencies
+Flask>=3.0.0
+Werkzeug>=3.0.0
+
+# HTTP requests
+requests>=2.31.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Production server
+gunicorn>=21.0.0

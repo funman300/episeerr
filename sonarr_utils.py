@@ -1,251 +1,103 @@
-# sonarr_utils.py - Simplified version for rules-only app
-
 import os
 import requests
-import logging
+from datetime import datetime
 from dotenv import load_dotenv
+import logging
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
 # Configuration settings from environment variables
 SONARR_URL = os.getenv('SONARR_URL')
 SONARR_API_KEY = os.getenv('SONARR_API_KEY')
 
+MAX_SHOWS_ITEMS = int(os.getenv('MAX_SHOWS_ITEMS', 24))
+
 # Setup logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def load_preferences():
     """
     Load preferences for Sonarr configuration.
     Returns a dictionary containing Sonarr URL and API key.
     """
-    if not SONARR_URL or not SONARR_API_KEY:
-        raise ValueError("SONARR_URL and SONARR_API_KEY must be set in environment variables")
-    
-    return {
-        'SONARR_URL': SONARR_URL, 
-        'SONARR_API_KEY': SONARR_API_KEY
-    }
+    return {'SONARR_URL': SONARR_URL, 'SONARR_API_KEY': SONARR_API_KEY}
 
-def get_series_list(preferences=None):
-    """
-    Get all series from Sonarr.
-    Returns a list of series sorted alphabetically by title.
-    """
-    if not preferences:
-        preferences = load_preferences()
-    
+def get_series_list(preferences):
     url = f"{preferences['SONARR_URL']}/api/v3/series"
     headers = {'X-Api-Key': preferences['SONARR_API_KEY']}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
+    response = requests.get(url, headers=headers)
+    if response.ok:
         series_list = response.json()
         # Sort the series list alphabetically by title
-        sorted_series_list = sorted(series_list, key=lambda x: x.get('title', '').lower())
-        
-        logger.info(f"Retrieved {len(sorted_series_list)} series from Sonarr")
+        sorted_series_list = sorted(series_list, key=lambda x: x['title'].lower())
         return sorted_series_list
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to fetch series from Sonarr: {str(e)}")
-        return []
-    except Exception as e:
-        logger.error(f"Unexpected error fetching series: {str(e)}")
+    else:
         return []
 
-def get_series_by_id(series_id, preferences=None):
-    """
-    Get a specific series by ID from Sonarr.
-    """
-    if not preferences:
-        preferences = load_preferences()
-    
-    url = f"{preferences['SONARR_URL']}/api/v3/series/{series_id}"
-    headers = {'X-Api-Key': preferences['SONARR_API_KEY']}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        return response.json()
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to fetch series {series_id} from Sonarr: {str(e)}")
-        return None
+def fetch_episode_file_details(episode_file_id):
+    episode_file_url = f"{SONARR_URL}/api/v3/episodefile/{episode_file_id}"
+    headers = {'X-Api-Key': SONARR_API_KEY}
+    response = requests.get(episode_file_url, headers=headers)
+    return response.json() if response.ok else None
 
-def update_series_tags(series_id, tags, preferences=None):
-    """
-    Update tags for a specific series in Sonarr.
-    """
-    if not preferences:
-        preferences = load_preferences()
+def fetch_series_and_episodes(preferences):
+    SONARR_URL = preferences['SONARR_URL']
+    SONARR_API_KEY = preferences['SONARR_API_KEY']
     
-    # First get the current series data
-    series = get_series_by_id(series_id, preferences)
-    if not series:
-        return False
-    
-    # Update the tags
-    series['tags'] = tags
-    
-    url = f"{preferences['SONARR_URL']}/api/v3/series"
-    headers = {
-        'X-Api-Key': preferences['SONARR_API_KEY'],
-        'Content-Type': 'application/json'
-    }
-    
-    try:
-        response = requests.put(url, headers=headers, json=series, timeout=10)
-        response.raise_for_status()
-        
-        logger.info(f"Updated tags for series {series_id}")
-        return True
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to update series {series_id} tags: {str(e)}")
-        return False
+    series_url = f"{SONARR_URL}/api/v3/series"
+    headers = {'X-Api-Key': SONARR_API_KEY}
+    active_series = []
 
-def get_quality_profiles(preferences=None):
-    """
-    Get available quality profiles from Sonarr.
-    """
-    if not preferences:
-        preferences = load_preferences()
-    
-    url = f"{preferences['SONARR_URL']}/api/v3/qualityprofile"
-    headers = {'X-Api-Key': preferences['SONARR_API_KEY']}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        return response.json()
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to fetch quality profiles: {str(e)}")
-        return []
+    series_response = requests.get(series_url, headers=headers)
+    series_list = series_response.json() if series_response.ok else []
 
-def get_tags(preferences=None):
-    """
-    Get all tags from Sonarr.
-    """
-    if not preferences:
-        preferences = load_preferences()
-    
-    url = f"{preferences['SONARR_URL']}/api/v3/tag"
-    headers = {'X-Api-Key': preferences['SONARR_API_KEY']}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        return response.json()
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to fetch tags: {str(e)}")
-        return []
+    for series in series_list:
+        episodes_url = f"{SONARR_URL}/api/v3/episode"
+        params = {'seriesId': series['id']}
+        episodes_response = requests.get(episodes_url, headers=headers, params=params)
+        episodes = episodes_response.json() if episodes_response.ok else []
 
-def create_tag(label, preferences=None):
-    """
-    Create a new tag in Sonarr.
-    """
-    if not preferences:
-        preferences = load_preferences()
-    
-    url = f"{preferences['SONARR_URL']}/api/v3/tag"
-    headers = {
-        'X-Api-Key': preferences['SONARR_API_KEY'],
-        'Content-Type': 'application/json'
-    }
-    
-    data = {'label': label}
-    
-    try:
-        response = requests.post(url, headers=headers, json=data, timeout=10)
-        response.raise_for_status()
-        
-        logger.info(f"Created tag '{label}'")
-        return response.json()
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to create tag '{label}': {str(e)}")
-        return None
+        for episode in episodes:
+            if episode.get('monitored') and episode.get('hasFile'):
+                episode_file_details = fetch_episode_file_details(episode['episodeFileId'])
+                if episode_file_details and 'dateAdded' in episode_file_details:
+                    date_added = datetime.fromisoformat(episode_file_details['dateAdded'].replace('Z', '+00:00'))
+                    active_series.append({
+                        'name': series['title'],
+                        'latest_monitored_episode': f"S{episode['seasonNumber']}E{episode['episodeNumber']} - {episode['title']}",
+                        'artwork_url': f"{SONARR_URL}/api/v3/mediacover/{series['id']}/poster.jpg?apikey={SONARR_API_KEY}",
+                        'sonarr_series_url': f"{SONARR_URL}/series/{series['titleSlug']}",
+                        'dateAdded': date_added,
+                        'tag_id': 2 if 2 in series.get('tags', []) else None  # Check if tag_id 2 is in the tags list
+                    })
+                    break
 
-def test_connection(preferences=None):
-    """
-    Test connection to Sonarr.
-    """
-    if not preferences:
-        try:
-            preferences = load_preferences()
-        except ValueError as e:
-            return False, str(e)
-    
-    url = f"{preferences['SONARR_URL']}/api/v3/system/status"
-    headers = {'X-Api-Key': preferences['SONARR_API_KEY']}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=5)
-        response.raise_for_status()
-        
-        status = response.json()
-        logger.info(f"Connected to Sonarr: {status.get('appName', 'Unknown')} v{status.get('version', 'Unknown')}")
-        return True, "Connection successful"
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to connect to Sonarr: {str(e)}")
-        return False, f"Connection failed: {str(e)}"
+    active_series.sort(key=lambda series: series['dateAdded'], reverse=True)
+    return active_series[:MAX_SHOWS_ITEMS]
 
-# Additional utility functions for rules management
+def fetch_upcoming_premieres(preferences):
+    SONARR_URL = preferences['SONARR_URL']
+    SONARR_API_KEY = preferences['SONARR_API_KEY']
+    
+    series_url = f"{SONARR_URL}/api/v3/series"
+    headers = {'X-Api-Key': SONARR_API_KEY}
+    upcoming_premieres = []
 
-def get_series_statistics(preferences=None):
-    """
-    Get basic statistics about series in Sonarr.
-    """
-    series_list = get_series_list(preferences)
-    
-    total_series = len(series_list)
-    monitored_series = sum(1 for series in series_list if series.get('monitored', False))
-    
-    return {
-        'total_series': total_series,
-        'monitored_series': monitored_series,
-        'unmonitored_series': total_series - monitored_series
-    }
+    series_response = requests.get(series_url, headers=headers)
+    if series_response.ok:
+        series_list = series_response.json()
+        for series in series_list:
+            if 'nextAiring' in series:
+                next_airing_dt = datetime.fromisoformat(series['nextAiring'].replace('Z', '+00:00'))
+                formatted_date = next_airing_dt.strftime('%Y-%m-%d at %H:%M')
+                upcoming_premieres.append({
+                    'name': series['title'],
+                    'nextAiring': formatted_date,
+                    'artwork_url': f"{SONARR_URL}/api/v3/mediacover/{series['id']}/poster.jpg?apikey={SONARR_API_KEY}",
+                    'sonarr_series_url': f"{SONARR_URL}/series/{series['titleSlug']}"
+                })
 
-def validate_sonarr_config():
-    """
-    Validate that Sonarr configuration is properly set up.
-    """
-    try:
-        preferences = load_preferences()
-        success, message = test_connection(preferences)
-        
-        if not success:
-            return False, message
-        
-        # Test if we can fetch series
-        series_list = get_series_list(preferences)
-        
-        return True, f"Configuration valid. Found {len(series_list)} series."
-        
-    except Exception as e:
-        return False, f"Configuration error: {str(e)}"
-
-if __name__ == "__main__":
-    # Simple test when run directly
-    print("Testing Sonarr connection...")
-    
-    success, message = validate_sonarr_config()
-    print(f"Result: {message}")
-    
-    if success:
-        print("\nFetching series statistics...")
-        stats = get_series_statistics()
-        print(f"Total series: {stats['total_series']}")
-        print(f"Monitored: {stats['monitored_series']}")
-        print(f"Unmonitored: {stats['unmonitored_series']}")
+    upcoming_premieres.sort(key=lambda x: x['nextAiring'])
+    return upcoming_premieres

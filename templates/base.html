@@ -116,29 +116,6 @@
             .stats-card h2 {
                 font-size: 1.5rem;
             }
-        }
-        
-        /* Desktop: 4 cards in a row */
-        @media (min-width: 769px) {
-            .stats-row {
-                grid-template-columns: 1fr 1fr 1fr 1fr;
-            }
-        }
-            .stats-card {
-                margin-bottom: 0;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                border-radius: 8px;
-            }
-            .stats-card .card-body {
-                padding: 0.75rem;
-            }
-            .stats-card h5 {
-                font-size: 0.8rem;
-                margin-bottom: 0.25rem;
-            }
-            .stats-card h2 {
-                font-size: 1.5rem;
-            }
             .container {
                 padding-left: 0.75rem;
                 padding-right: 0.75rem;
@@ -155,6 +132,18 @@
             }
         }
         
+        /* Desktop: 4 cards in a row */
+        @media (min-width: 769px) {
+            .stats-row {
+                grid-template-columns: 1fr 1fr 1fr 1fr;
+            }
+            .stats-card {
+                margin-bottom: 0;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                border-radius: 8px;
+            }
+        }
+        
         /* Prevent stats cards from looking clickable */
         .stats-card:hover {
             transform: none;
@@ -163,6 +152,98 @@
         .stats-card * {
             pointer-events: none;
         }
+
+        /* OCDarr Banner Styles */
+        .ocdarr-banner {
+            position: relative;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 12px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+            margin-bottom: 15px;
+        }
+
+        .banner-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .banner-icon {
+            font-size: 16px;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+
+        .banner-message {
+            flex: 1;
+            text-align: center;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .banner-close {
+            position: absolute;
+            right: 0;
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+            color: inherit;
+        }
+
+        .banner-close:hover {
+            opacity: 1;
+        }
+
+        /* Banner type styles */
+        .banner-success {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(21, 128, 61, 0.95));
+            color: white;
+        }
+
+        .banner-info {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(29, 78, 216, 0.95));
+            color: white;
+        }
+
+        .banner-warning {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.95));
+            color: white;
+        }
+
+        .banner-error {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(185, 28, 28, 0.95));
+            color: white;
+        }
+
+        .banner-download {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(109, 40, 217, 0.95));
+            color: white;
+        }
+
+        .banner-processing {
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.95), rgba(8, 145, 178, 0.95));
+            color: white;
+        }
+
+        /* Remove the content padding adjustment since banner is no longer fixed */
     </style>
 </head>
 <body>
@@ -183,17 +264,165 @@
     </nav>
 
     <div class="container mt-4">
-        {% if request.args.get('message') %}
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            {{ request.args.get('message') }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-        {% endif %}
-
         {% block content %}{% endblock %}
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     {% block scripts %}{% endblock %}
+
+    <script>
+    class OCDarrBanner {
+        constructor() {
+            this.bannerElement = null;
+            this.autoHideTimeout = null;
+            this.defaultHideDelay = 5000;
+            this.init();
+        }
+
+        init() {
+            if (!document.querySelector('.ocdarr-banner')) {
+                this.createBannerContainer();
+            }
+            this.checkForServerMessages();
+            this.startPeriodicUpdates();
+        }
+
+        createBannerContainer() {
+            const bannerHtml = `
+                <div class="ocdarr-banner" id="ocdarr-banner" style="display: none;">
+                    <div class="banner-content">
+                        <span class="banner-icon"></span>
+                        <span class="banner-message"></span>
+                        <button class="banner-close" onclick="ocdarrBanner.hide()">&times;</button>
+                    </div>
+                </div>
+            `;
+            // Insert inside container, like the old alert
+            const container = document.querySelector('.container.mt-4');
+            if (container) {
+                container.insertAdjacentHTML('afterbegin', bannerHtml);
+            } else {
+                document.body.insertAdjacentHTML('afterbegin', bannerHtml);
+            }
+            this.bannerElement = document.getElementById('ocdarr-banner');
+        }
+
+        show(message, type = 'info', autoHide = true, hideDelay = this.defaultHideDelay) {
+            if (!this.bannerElement) return;
+            
+            if (this.autoHideTimeout) {
+                clearTimeout(this.autoHideTimeout);
+            }
+            
+            const messageElement = this.bannerElement.querySelector('.banner-message');
+            const iconElement = this.bannerElement.querySelector('.banner-icon');
+            
+            messageElement.textContent = message;
+            this.bannerElement.className = `ocdarr-banner banner-${type}`;
+            
+            const icons = {
+                success: '✓',
+                info: 'ℹ',
+                warning: '⚠',
+                error: '✗',
+                download: '⬇',
+                processing: '⚙'
+            };
+            iconElement.textContent = icons[type] || icons.info;
+            
+            this.bannerElement.style.display = 'block';
+            
+            if (autoHide) {
+                this.autoHideTimeout = setTimeout(() => {
+                    this.hide();
+                }, hideDelay);
+            }
+        }
+
+        hide() {
+            if (this.bannerElement) {
+                this.bannerElement.style.display = 'none';
+            }
+            if (this.autoHideTimeout) {
+                clearTimeout(this.autoHideTimeout);
+                this.autoHideTimeout = null;
+            }
+        }
+
+        checkForServerMessages() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const message = urlParams.get('message');
+            
+            if (message) {
+                const decodedMessage = decodeURIComponent(message.replace(/\+/g, ' '));
+                
+                let type = 'info';
+                if (decodedMessage.includes('successfully') || decodedMessage.includes('created') || decodedMessage.includes('updated')) {
+                    type = 'success';
+                } else if (decodedMessage.includes('error') || decodedMessage.includes('failed')) {
+                    type = 'error';
+                } else if (decodedMessage.includes('warning')) {
+                    type = 'warning';
+                }
+                
+                this.show(decodedMessage, type);
+                
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, newUrl);
+            }
+        }
+
+        async startPeriodicUpdates() {
+            setInterval(() => {
+                this.checkRecentActivity();
+            }, 30000);
+        }
+
+        async checkRecentActivity() {
+            try {
+                const response = await fetch('/api/recent-activity');
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.recentDownloads && data.recentDownloads.length > 0) {
+                        const download = data.recentDownloads[0];
+                        this.show(
+                            `📺 Downloaded: ${download.series} S${download.season}E${download.episode}`,
+                            'download',
+                            true,
+                            7000
+                        );
+                    } else if (data.recentRuleApplications && data.recentRuleApplications.length > 0) {
+                        const rule = data.recentRuleApplications[0];
+                        this.show(
+                            `⚙ Applied "${rule.ruleName}" to ${rule.series}`,
+                            'processing',
+                            true,
+                            6000
+                        );
+                    }
+                }
+            } catch (error) {
+                console.debug('Recent activity check failed:', error);
+            }
+        }
+
+        showRuleApplied(seriesName, ruleName) {
+            this.show(`Rule "${ruleName}" applied to ${seriesName}`, 'success');
+        }
+
+        showDownloadStarted(seriesName, episode) {
+            this.show(`Download started: ${seriesName} ${episode}`, 'download', true, 8000);
+        }
+
+        showProcessingComplete(seriesName, count) {
+            this.show(`Processing complete: ${seriesName} (${count} episodes)`, 'success');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        window.ocdarrBanner = new OCDarrBanner();
+    });
+    </script>
 </body>
 </html>
