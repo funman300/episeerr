@@ -14,7 +14,7 @@ services:
       - ./data:/app/data
       - ./temp:/app/temp
     ports:
-      - "5005:5005"
+      - "5002:5002"
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1

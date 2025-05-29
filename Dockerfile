@@ -33,7 +33,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5005/api/series-stats || exit 1
 
 # Expose port
-EXPOSE 5005
+EXPOSE 5002
 
 # Use Gunicorn to serve the application
-CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:5005", "--access-logfile", "-", "--error-logfile", "-", "webhook_listener:app"]
+CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:5002", "--access-logfile", "-", "--error-logfile", "-", "webhook_listener:app"]
