@@ -67,13 +67,26 @@
                 "74",
                 "60",
                 "385"
-            ]
+            ],
+            "keep_unwatched_days": null,
+            "keep_watched_days": 7
         },
         "season": {
             "get_option": "season",
             "action_option": "monitor",
             "keep_watched": "season",
             "monitor_watched": false,
+            "series": [],
+            "keep_unwatched_days": null,
+            "keep_watched_days": null
+        },
+        "14dayseason": {
+            "get_option": "season",
+            "action_option": "monitor",
+            "keep_watched": "season",
+            "monitor_watched": false,
+            "keep_unwatched_days": null,
+            "keep_watched_days": 14,
             "series": []
         }
     },

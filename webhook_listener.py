@@ -1,7 +1,8 @@
-__version__ = "2.0.0"
+__version__ = "beta-2.1.0"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
+import atexit
 import re
 import time
 import logging
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 import requests
 import modified_episeerr
 import threading
+from threading import Lock
 from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 
@@ -75,6 +77,80 @@ app.logger.addHandler(stream_handler)
 # Configuration management
 config_path = os.path.join(app.root_path, 'config', 'config.json')
 
+# Internal Scheduler Class (DEFINE THE CLASS FIRST)
+class OCDarrScheduler:
+    """Simple internal scheduler - works anywhere Python runs."""
+    
+    def __init__(self):
+        self.cleanup_thread = None
+        self.running = False
+        self.cleanup_interval_hours = int(os.getenv('CLEANUP_INTERVAL_HOURS', '6'))
+        self.last_cleanup = 0
+        
+    def start_scheduler(self):
+        """Start the cleanup scheduler."""
+        if self.running:
+            return
+            
+        self.running = True
+        self.cleanup_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+        self.cleanup_thread.start()
+        
+        app.logger.info(f"✓ Internal scheduler started - cleanup every {self.cleanup_interval_hours} hours")
+    
+    def _scheduler_loop(self):
+        """Main scheduler loop - runs in background."""
+        time.sleep(300)  # Wait 5 minutes after startup
+        
+        while self.running:
+            try:
+                current_time = time.time()
+                hours_since_last = (current_time - self.last_cleanup) / 3600
+                
+                if hours_since_last >= self.cleanup_interval_hours:
+                    app.logger.info("⏰ Starting scheduled cleanup...")
+                    self._run_cleanup()
+                    self.last_cleanup = current_time
+                
+                time.sleep(600)  # Check every 10 minutes
+                
+            except Exception as e:
+                app.logger.error(f"Scheduler error: {str(e)}")
+                time.sleep(300)
+    
+    def _run_cleanup(self):
+        """Execute cleanup in separate thread."""
+        try:
+            import servertosonarr
+            servertosonarr.run_periodic_cleanup()
+            app.logger.info("✓ Scheduled cleanup completed")
+        except Exception as e:
+            app.logger.error(f"Cleanup failed: {str(e)}")
+    
+    def force_cleanup(self):
+        """Manually trigger cleanup."""
+        cleanup_thread = threading.Thread(target=self._run_cleanup, daemon=True)
+        cleanup_thread.start()
+        return "Cleanup started"
+    
+    def get_status(self):
+        """Get scheduler status."""
+        if not self.running:
+            return {"status": "stopped", "next_cleanup": None}
+        
+        if self.last_cleanup == 0:
+            next_cleanup = "5 minutes after startup"
+        else:
+            next_time = self.last_cleanup + (self.cleanup_interval_hours * 3600)
+            next_cleanup = datetime.fromtimestamp(next_time).strftime("%Y-%m-%d %H:%M:%S")
+        
+        return {
+            "status": "running",
+            "interval_hours": self.cleanup_interval_hours,
+            "last_cleanup": datetime.fromtimestamp(self.last_cleanup).strftime("%Y-%m-%d %H:%M:%S") if self.last_cleanup else "Never",
+            "next_cleanup": next_cleanup
+        }
+
 def load_config():
     """Load configuration from JSON file."""
     try:
@@ -82,6 +158,9 @@ def load_config():
             config = json.load(file)
         if 'rules' not in config:
             config['rules'] = {}
+        
+        # Migrate existing rules to include new time-based fields
+        config = migrate_config_for_time_based_cleanup(config)
         return config
     except FileNotFoundError:
         default_config = {
@@ -91,6 +170,8 @@ def load_config():
                     'action_option': 'monitor',
                     'keep_watched': 'season',
                     'monitor_watched': False,
+                    'keep_unwatched_days': None,
+                    'keep_watched_days': None,
                     'series': []
                 },
                 'one_at_a_time': {
@@ -98,6 +179,8 @@ def load_config():
                     'action_option': 'search',
                     'keep_watched': '1',
                     'monitor_watched': False,
+                    'keep_unwatched_days': None,
+                    'keep_watched_days': None,
                     'series': []
                 }
             },
@@ -107,6 +190,28 @@ def load_config():
         save_config(default_config)
         return default_config
 
+def migrate_config_for_time_based_cleanup(config):
+    """Migrate existing config to include time-based cleanup fields."""
+    try:
+        updated = False
+        for rule_name, rule_details in config.get('rules', {}).items():
+            # Add new fields if they don't exist
+            if 'keep_unwatched_days' not in rule_details:
+                rule_details['keep_unwatched_days'] = None
+                updated = True
+            if 'keep_watched_days' not in rule_details:
+                rule_details['keep_watched_days'] = None
+                updated = True
+        
+        if updated:
+            save_config(config)
+            app.logger.info("Config migrated to include time-based cleanup fields")
+        
+        return config
+    except Exception as e:
+        app.logger.error(f"Error migrating config: {str(e)}")
+        return config
+  
 def save_config(config):
     """Save configuration to JSON file."""
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
@@ -132,6 +237,28 @@ def get_sonarr_series():
     except Exception as e:
         app.logger.error(f"Error fetching Sonarr series: {str(e)}")
         return []
+
+# =============================================================================
+# WEB UI ROUTES (UNCHANGED)
+# =============================================================================
+
+@app.route('/api/recent-cleanup-activity')
+def recent_cleanup_activity():
+    """Get recent cleanup activity."""
+    try:
+        # Placeholder: Return recent cleanup status
+        status = cleanup_scheduler.get_status()
+        return jsonify({
+            "recentCleanups": [
+                {
+                    "timestamp": status.get("last_cleanup", "Never"),
+                    "status": "completed" if status.get("last_cleanup") != "Never" else "pending"
+                }
+            ]
+        })
+    except Exception as e:
+        app.logger.error(f"Error getting recent cleanup activity: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/')
 def index():
@@ -168,11 +295,21 @@ def create_rule():
         if rule_name in config['rules']:
             return redirect(url_for('index', message=f"Rule '{rule_name}' already exists"))
         
+        # Handle time-based fields
+        keep_unwatched_days = request.form.get('keep_unwatched_days', '').strip()
+        keep_watched_days = request.form.get('keep_watched_days', '').strip()
+        
+        # Convert empty strings to None, otherwise convert to int
+        keep_unwatched_days = None if not keep_unwatched_days else int(keep_unwatched_days)
+        keep_watched_days = None if not keep_watched_days else int(keep_watched_days)
+        
         config['rules'][rule_name] = {
             'get_option': request.form.get('get_option', ''),
             'action_option': request.form.get('action_option', 'monitor'),
             'keep_watched': request.form.get('keep_watched', ''),
             'monitor_watched': request.form.get('monitor_watched', 'false').lower() == 'true',
+            'keep_unwatched_days': keep_unwatched_days,
+            'keep_watched_days': keep_watched_days,
             'series': []
         }
         
@@ -190,11 +327,21 @@ def edit_rule(rule_name):
         return redirect(url_for('index', message=f"Rule '{rule_name}' not found"))
     
     if request.method == 'POST':
+        # Handle time-based fields
+        keep_unwatched_days = request.form.get('keep_unwatched_days', '').strip()
+        keep_watched_days = request.form.get('keep_watched_days', '').strip()
+        
+        # Convert empty strings to None, otherwise convert to int
+        keep_unwatched_days = None if not keep_unwatched_days else int(keep_unwatched_days)
+        keep_watched_days = None if not keep_watched_days else int(keep_watched_days)
+        
         config['rules'][rule_name].update({
             'get_option': request.form.get('get_option', ''),
             'action_option': request.form.get('action_option', 'monitor'),
             'keep_watched': request.form.get('keep_watched', ''),
-            'monitor_watched': request.form.get('monitor_watched', 'false').lower() == 'true'
+            'monitor_watched': request.form.get('monitor_watched', 'false').lower() == 'true',
+            'keep_unwatched_days': keep_unwatched_days,
+            'keep_watched_days': keep_watched_days
         })
         
         save_config(config)
@@ -357,6 +504,30 @@ def cleanup():
     cleanup_config_rules()
     return redirect(url_for('index', message="Configuration cleaned up successfully"))
 
+@app.route('/scheduler')
+def scheduler_admin():
+    """Scheduler administration page."""
+    return render_template('scheduler_admin.html')
+
+@app.route('/api/scheduler-status')
+def scheduler_status():
+    """Get scheduler status."""
+    try:
+        if 'cleanup_scheduler' not in globals():
+            return jsonify({"status": "error", "message": "Scheduler not initialized"}), 500
+        return jsonify(cleanup_scheduler.get_status())
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/force-cleanup', methods=['POST'])
+def force_cleanup():
+    """Manually trigger cleanup."""
+    try:
+        result = cleanup_scheduler.force_cleanup()
+        return jsonify({"status": "success", "message": result})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
 @app.errorhandler(404)
 def not_found(error):
     return render_template('error.html', message="Page not found"), 404
@@ -378,11 +549,21 @@ def update_settings():
     get_option = request.form.get('get_option')
     keep_watched = request.form.get('keep_watched')
 
+    # Handle time-based fields
+    keep_unwatched_days = request.form.get('keep_unwatched_days', '').strip()
+    keep_watched_days = request.form.get('keep_watched_days', '').strip()
+    
+    # Convert empty strings to None, otherwise convert to int
+    keep_unwatched_days = None if not keep_unwatched_days else int(keep_unwatched_days)
+    keep_watched_days = None if not keep_watched_days else int(keep_watched_days)
+
     config['rules'][rule_name] = {
         'get_option': get_option,
         'action_option': request.form.get('action_option'),
         'keep_watched': keep_watched,
         'monitor_watched': request.form.get('monitor_watched', 'false').lower() == 'true',
+        'keep_unwatched_days': keep_unwatched_days,
+        'keep_watched_days': keep_watched_days,
         'series': config['rules'].get(rule_name, {}).get('series', [])
     }
     
@@ -404,11 +585,13 @@ def unassign_rules():
     save_config(config)
     return redirect(url_for('index', message="Rules updated successfully."))
 
-# WEBHOOK ROUTES
+# =============================================================================
+# WEBHOOK ROUTES - ACTIVITY TRACKING ONLY, NO DELETIONS
+# =============================================================================
 
 @app.route('/sonarr-webhook', methods=['POST'])
 def process_sonarr_webhook():
-    """Handle incoming Sonarr webhooks for series additions."""
+    """Handle incoming Sonarr webhooks for series additions - NO DELETIONS."""
     app.logger.info("Received webhook from Sonarr")
     
     try:
@@ -472,7 +655,7 @@ def process_sonarr_webhook():
                 "message": "Series has no ocdarr tag, no processing needed"
             }), 200
         
-        # If it has ocdarr tag, proceed with full processing
+        # If it has ocdarr tag, proceed with processing
         app.logger.info(f"Series {series_title} has ocdarr tag, proceeding with processing")
         global jellyseerr_pending_requests
         app.logger.info(f"Looking for TVDB ID {tvdb_id} in pending requests")
@@ -569,7 +752,7 @@ def process_sonarr_webhook():
                 save_config(config)
                 app.logger.info(f"Added series {series_title} (ID: {series_id}) to default rule")
 
-        # 4. Execute the default rule immediately for new series
+        # 4. Execute the default rule immediately for new series (NO DELETIONS)
         try:
             rule_config = config['rules'][default_rule_name]
             get_option = rule_config.get('get_option')
@@ -740,7 +923,7 @@ def process_seerr_webhook():
 
 @app.route('/webhook', methods=['POST'])
 def handle_server_webhook():
-    """Handle webhooks from Plex/Tautulli"""
+    """Handle webhooks from Plex/Tautulli - ACTIVITY TRACKING ONLY."""
     app.logger.info("Received webhook from Tautulli")
     data = request.json
     if data:
@@ -759,9 +942,13 @@ def handle_server_webhook():
             with open(os.path.join(temp_dir, 'data_from_server.json'), 'w') as f:
                 json.dump(plex_data, f)
             
+            # Call servertosonarr.py which now ONLY handles activity tracking and next content
+            # NO DELETIONS happen in webhook processing
             result = subprocess.run(["python3", os.path.join(os.getcwd(), "servertosonarr.py")], capture_output=True, text=True)
             if result.stderr:
                 app.logger.error(f"Servertosonarr.py error: {result.stderr}")
+            
+            app.logger.info("Webhook processing completed - activity tracked, next content processed")
             return jsonify({'status': 'success'}), 200
         except Exception as e:
             app.logger.error(f"Failed to process Tautulli webhook: {str(e)}")
@@ -770,7 +957,7 @@ def handle_server_webhook():
 
 @app.route('/jellyfin-webhook', methods=['POST'])
 def handle_jellyfin_webhook():
-    """Handle webhooks from Jellyfin for playback progress."""
+    """Handle webhooks from Jellyfin for playback progress - ACTIVITY TRACKING ONLY."""
     app.logger.info("Received webhook from Jellyfin")
     data = request.json
     if not data:
@@ -811,12 +998,15 @@ def handle_jellyfin_webhook():
                             with open(os.path.join(temp_dir, 'data_from_server.json'), 'w') as f:
                                 json.dump(jellyfin_data, f)
                             
-                            # Call the processing script
+                            # Call servertosonarr.py which now ONLY handles activity tracking and next content
+                            # NO DELETIONS happen in webhook processing
                             result = subprocess.run(["python3", os.path.join(os.getcwd(), "servertosonarr.py")], 
                                                    capture_output=True, text=True)
                             
                             if result.stderr:
                                 app.logger.error(f"Errors from servertosonarr.py: {result.stderr}")
+                            
+                            app.logger.info("Jellyfin webhook processing completed - activity tracked, next content processed")
                         else:
                             app.logger.warning(f"Missing episode info: Series={series_name}, Season={season}, Episode={episode}")
                     else:
@@ -846,11 +1036,19 @@ def initialize_episeerr():
     except Exception as e:
         app.logger.error(f"Error in initial download check: {str(e)}")
 
+# NOW CREATE THE INSTANCE (AFTER THE CLASS IS DEFINED)
+cleanup_scheduler = OCDarrScheduler()
+app.logger.info("✓ OCDarrScheduler instantiated successfully")
+cleanup_scheduler.start_scheduler()  # Just start it directly
+
 if __name__ == '__main__':
     # Call config rules cleanup at startup
     cleanup_config_rules()
+    
     # Call initialization function before running the app
     initialize_episeerr()
     
+    app.logger.info("🚀 OCDarr webhook listener starting - webhook handles activity tracking only, scheduler handles all deletions")
+    
     # Start the Flask application
-    app.run(host='0.0.0.0', port=5005, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
+    app.run(host='0.0.0.0', port=5002, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')

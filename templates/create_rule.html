@@ -4,51 +4,104 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6">
+    <div class="col-md-8">
         <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-plus me-2"></i>Create New Rule</h5>
             </div>
             <div class="card-body">
                 <form method="POST">
-                    <div class="mb-3">
-                        <label for="rule_name" class="form-label">Rule Name</label>
-                        <input type="text" class="form-control" id="rule_name" name="rule_name" required>
-                        <div class="form-text">Use underscores for spaces (e.g., full_seasons)</div>
-                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="rule_name" class="form-label">Rule Name</label>
+                                <input type="text" class="form-control" id="rule_name" name="rule_name" required>
+                                <div class="form-text">Use underscores for spaces (e.g., full_seasons)</div>
+                            </div>
 
-                    <div class="mb-3">
-                        <label for="get_option" class="form-label">How many episodes to get?</label>
-                        <input type="text" class="form-control" id="get_option" name="get_option" 
-                               placeholder="season, all, or a number" required>
-                        <div class="form-text">Examples: "season", "all", "5"</div>
-                    </div>
+                            <div class="mb-3">
+                                <label for="get_option" class="form-label">How many episodes to get?</label>
+                                <input type="text" class="form-control" id="get_option" name="get_option" 
+                                       placeholder="season, all, or a number" required>
+                                <div class="form-text">Examples: "season", "all", "5"</div>
+                            </div>
 
-                    <div class="mb-3">
-                        <label for="action_option" class="form-label">Action for Episodes</label>
-                        <select class="form-select" id="action_option" name="action_option" required>
-                            <option value="monitor">Monitor</option>
-                            <option value="search">Search</option>
-                        </select>
-                    </div>
+                            <div class="mb-3">
+                                <label for="action_option" class="form-label">Action for Episodes</label>
+                                <select class="form-select" id="action_option" name="action_option" required>
+                                    <option value="monitor">Monitor</option>
+                                    <option value="search">Search</option>
+                                </select>
+                            </div>
 
-                    <div class="mb-3">
-                        <label for="keep_watched" class="form-label">How many episodes to keep?</label>
-                        <input type="text" class="form-control" id="keep_watched" name="keep_watched" 
-                               placeholder="season, all, or a number">
-                        <div class="form-text">Examples: "season", "all", "3"</div>
-                    </div>
+                            <div class="mb-3">
+                                <label for="keep_watched" class="form-label">How many episodes to keep?</label>
+                                <input type="text" class="form-control" id="keep_watched" name="keep_watched" 
+                                       placeholder="season, all, or a number">
+                                <div class="form-text">Examples: "season", "all", "3"</div>
+                            </div>
 
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="monitor_watched" name="monitor_watched">
-                            <label class="form-check-label" for="monitor_watched">
-                                Keep monitored if watched
-                            </label>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="monitor_watched" name="monitor_watched">
+                                    <label class="form-check-label" for="monitor_watched">
+                                        Keep monitored if watched
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card bg-dark border-secondary">
+                                <div class="card-header bg-secondary">
+                                    <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Time-Based Cleanup</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="keep_unwatched_days" class="form-label">
+                                            Inactivity Timer (days)
+                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                               title="Delete kept content if no episodes are watched for X days. Leave empty to disable."></i>
+                                        </label>
+                                        <input type="number" class="form-control" id="keep_unwatched_days" 
+                                               name="keep_unwatched_days" min="1" placeholder="Leave empty to disable">
+                                        <div class="form-text text-muted">
+                                            <small>Example: "7" = Delete if no episodes watched for 7 days</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="keep_watched_days" class="form-label">
+                                            Grace Period (days)
+                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                               title="Keep content for X days after watching, then apply normal cleanup. Leave empty to keep forever."></i>
+                                        </label>
+                                        <input type="number" class="form-control" id="keep_watched_days" 
+                                               name="keep_watched_days" min="1" placeholder="Leave empty to keep forever">
+                                        <div class="form-text text-muted">
+                                            <small>Example: "30" = Keep for 30 days after watching</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-info alert-sm">
+                                        <small>
+                                            <p><strong>⚠️ **USE AT YOUR OWN RISK** ⚠️</strong></p>
+                                                <ul>
+                                                    <li>will permanently delete your media files!</li>
+                                                    
+                                                </ul>
+                                            <strong>How it works:</strong><br>
+                                            • <strong>Inactivity Timer:</strong> "Use it or lose it" - content is deleted if not watched<br>
+                                            • <strong>Grace Period:</strong> Delay before normal cleanup after watching<br>
+                                            • Both respect your "keep watched" setting above
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="d-flex justify-content-between">
+                    <div class="d-flex justify-content-between mt-4">
                         <a href="{{ url_for('index') }}" class="btn btn-secondary">
                             <i class="fas fa-arrow-left me-1"></i>Cancel
                         </a>
@@ -61,4 +114,16 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
 {% endblock %}

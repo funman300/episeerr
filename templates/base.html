@@ -253,12 +253,13 @@
                 <img src="static/ocdarrlogo.png" alt="OCDarr Logo" height="48" class="me-2">
             </a>
             <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('create_rule') }}">
-                    <i class="fas fa-plus me-1"></i>New Rule
-                </a>
-                <a class="nav-link" href="{{ url_for('cleanup') }}">
-                    <i class="fas fa-broom me-1"></i>Cleanup
-                </a>
+               
+               <a class="nav-link" href="{{ url_for('scheduler_admin') }}">
+                    <i class="fas fa-clock me-1"></i>Scheduler
+               </a>
+               <a class="nav-link" href="{{ url_for('cleanup') }}">
+                    <i class="fas fa-broom me-1"></i>Clean Config
+               </a>
             </div>
         </div>
     </nav>
