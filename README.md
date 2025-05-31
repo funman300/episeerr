@@ -93,7 +93,39 @@ Abandonment Timer: 60 days → Nuke show if unwatched for 2 months
   - **Plex** + Tautulli (webhook required)
   - **Jellyfin** (built-in webhooks)
 - Docker environment
+## 🚀 Installation
 
+### Option 1: Docker Hub (Recommended)
+
+
+⚙️ Configuration
+Environment Variables
+Create a .env file:
+
+Docker Compose
+```
+version: '3.8'
+services:
+  ocdarr:
+    image: vansmak/ocdarrlite:latest or vansmak/ocdarr:beta-2.1.0
+    environment:
+      - SONARR_URL: ${SONARR_URL}
+      - SONARR_API_KEY: ${SONARR_API_KEY}
+      - JELLYSEERR_URL: ${JELLYSEERR_URL}
+      - JELLYSEERR_API_KEY: ${JELLYSEERR_API_KEY}
+  
+      - CONFIG_PATH: /app/config/config.json
+      
+    env_file:
+      - .env
+    volumes:
+      - /mnt/media/OCDarr3/logs:/app/logs
+      - /mnt/media/OCDarr3/config:/app/config
+      
+    ports:
+      - "5002:5002"
+    restart: unless-stopped
+```
 ### **Quick Start:**
 ```bash
 # Clone OCDarr
