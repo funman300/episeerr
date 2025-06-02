@@ -18,9 +18,6 @@
                 "383": {
                     "activity_date": null
                 },
-                "411": {
-                    "activity_date": null
-                },
                 "76": {
                     "activity_date": null
                 },
@@ -88,9 +85,6 @@
                     "activity_date": null
                 },
                 "29": {
-                    "activity_date": null
-                },
-                "440": {
                     "activity_date": null
                 },
                 "71": {
@@ -219,9 +213,18 @@
             "monitor_watched": false,
             "grace_days": null,
             "dormant_days": null,
-            "series": {}
+            "series": {
+                "440": {
+                    "activity_date": 1748889167
+                },
+                "411": {
+                    "activity_date": 1748888517
+                }
+            },
+            "dry_run": false
         }
     },
     "field_migration_complete": true,
-    "field_migration_complete_saved": true
+    "field_migration_complete_saved": true,
+    "series_migration_complete": true
 }

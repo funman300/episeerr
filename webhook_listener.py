@@ -1,4 +1,4 @@
-__version__ = "beta-2.2.0"
+__version__ = "beta-2.1.1"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 import requests
 import modified_episeerr
 import threading
+import shutil
 from threading import Lock
 from functools import lru_cache
 from logging.handlers import RotatingFileHandler
@@ -208,40 +209,127 @@ def setup_cleanup_logging():
 # Initialize cleanup logger
 cleanup_logger = setup_cleanup_logging()
 
-def migrate_old_field_names_once(config):
-    """One-time migration from old to new field names."""
-    if config.get('field_migration_complete'):
-        return config  # Already migrated
+def migrate_config_complete(config_path):
+    """
+    Complete migration from old to new config format:
+    1. Field names: keep_watched_days → grace_days, keep_unwatched_days → dormant_days
+    2. Series structure: array → dict with activity_date
+    3. Add dry_run field to rules
+    """
+    try:
+        # Read current config
+        with open(config_path, 'r') as f:
+            config = json.load(f)
         
-    print("🔄 Migrating old field names to new field names...")
-    migrated_rules = 0
-    
-    for rule_name, rule in config['rules'].items():
-        # Copy old values to new fields if new fields don't exist
-        if 'grace_days' not in rule and 'keep_watched_days' in rule:
-            rule['grace_days'] = rule['keep_watched_days']
-            print(f"  ✓ Migrated keep_watched_days → grace_days for rule '{rule_name}'")
-            migrated_rules += 1
+        # Check if already migrated
+        if config.get('field_migration_complete') and config.get('series_migration_complete'):
+            print("✅ Config already fully migrated")
+            return config
+        
+        # Create backup
+        backup_path = config_path + f'.backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+        shutil.copy2(config_path, backup_path)
+        print(f"📁 Created backup: {backup_path}")
+        
+        # Track what we migrated
+        field_migrations = 0
+        series_migrations = 0
+        
+        # Migrate each rule
+        for rule_name, rule in config.get('rules', {}).items():
+            print(f"\n🔄 Migrating rule: {rule_name}")
             
-        if 'dormant_days' not in rule and 'keep_unwatched_days' in rule:
-            rule['dormant_days'] = rule['keep_unwatched_days']
-            print(f"  ✓ Migrated keep_unwatched_days → dormant_days for rule '{rule_name}'")
-            migrated_rules += 1
+            # 1. Migrate field names
+            if 'keep_watched_days' in rule:
+                rule['grace_days'] = rule.pop('keep_watched_days')
+                field_migrations += 1
+                print(f"  ✓ Migrated keep_watched_days → grace_days")
             
-        # Remove old fields after copying
-        if 'keep_watched_days' in rule:
-            del rule['keep_watched_days']
-        if 'keep_unwatched_days' in rule:
-            del rule['keep_unwatched_days']
+            if 'keep_unwatched_days' in rule:
+                rule['dormant_days'] = rule.pop('keep_unwatched_days')
+                field_migrations += 1
+                print(f"  ✓ Migrated keep_unwatched_days → dormant_days")
+            
+            # Ensure new fields exist
+            if 'grace_days' not in rule:
+                rule['grace_days'] = None
+            if 'dormant_days' not in rule:
+                rule['dormant_days'] = None
+            
+            # 2. Migrate series structure from array to dict
+            if 'series' in rule and isinstance(rule['series'], list):
+                old_series = rule['series']
+                new_series = {}
+                
+                for series_id in old_series:
+                    # Convert to string and add activity_date
+                    new_series[str(series_id)] = {
+                        'activity_date': None
+                    }
+                
+                rule['series'] = new_series
+                series_migrations += 1
+                print(f"  ✓ Migrated {len(old_series)} series from array to dict format")
+            
+            # 3. Add dry_run field if missing
+            if 'dry_run' not in rule:
+                rule['dry_run'] = False
+                print(f"  ✓ Added dry_run field (default: False)")
+        
+        # Mark migrations complete
+        config['field_migration_complete'] = True
+        config['series_migration_complete'] = True
+        
+        # Save migrated config
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=4)
+        
+        print(f"\n✅ Migration complete!")
+        print(f"   - Field migrations: {field_migrations}")
+        print(f"   - Series structure migrations: {series_migrations}")
+        print(f"   - Backup saved to: {backup_path}")
+        
+        return config
+        
+    except Exception as e:
+        print(f"❌ Migration failed: {str(e)}")
+        raise
+
+
+# Integration function for your existing code
+def load_config_with_migration(config_path):
+    """
+    Load config with automatic migration.
+    Use this instead of plain json.load() in your code.
+    """
+    if not os.path.exists(config_path):
+        # Create default config if it doesn't exist
+        default_config = {
+            "rules": {
+                "default": {
+                    "get_option": "1",
+                    "action_option": "search",
+                    "keep_watched": "1",
+                    "monitor_watched": False,
+                    "grace_days": None,
+                    "dormant_days": None,
+                    "series": {},
+                    "dry_run": False
+                }
+            },
+            "default_rule": "default",
+            "field_migration_complete": True,
+            "series_migration_complete": True
+        }
+        
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        with open(config_path, 'w') as f:
+            json.dump(default_config, f, indent=4)
+        
+        return default_config
     
-    config['field_migration_complete'] = True
-    
-    if migrated_rules > 0:
-        print(f"✅ Migration complete: Updated {migrated_rules} field mappings")
-    else:
-        print("✅ Migration complete: No old fields found")
-    
-    return config
+    # Migrate if needed
+    return migrate_config_complete(config_path)
 
 def load_config():
     """Load configuration from JSON file."""
@@ -251,13 +339,8 @@ def load_config():
         if 'rules' not in config:
             config['rules'] = {}
         
-        # Run one-time field migration
-        config = migrate_old_field_names_once(config)
-        
-        # Save if migration happened
-        if not config.get('field_migration_complete_saved'):
-            save_config(config)
-            config['field_migration_complete_saved'] = True
+        # Run the complete migration
+        config = migrate_config_complete(config_path)
         
         return config
     except FileNotFoundError:
@@ -276,7 +359,8 @@ def load_config():
                 }
             },
             'default_rule': 'full_seasons',
-            'field_migration_complete': True
+            'field_migration_complete': True,
+            'series_migration_complete': True
         }
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         save_config(default_config)

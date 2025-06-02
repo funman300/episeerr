@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 import logging
 from logging.handlers import RotatingFileHandler
@@ -13,37 +14,105 @@ load_dotenv()
 # Define log paths
 LOG_PATH = os.getenv('LOG_PATH', '/app/logs/app.log')
 MISSING_LOG_PATH = os.getenv('MISSING_LOG_PATH', '/app/logs/missing.log')
+CLEANUP_LOG_PATH = os.getenv('CLEANUP_LOG_PATH', '/app/logs/cleanup.log')
 
-# Configure logging
+# Ensure log directories exist
+os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+os.makedirs(os.path.dirname(MISSING_LOG_PATH), exist_ok=True)
+os.makedirs(os.path.dirname(CLEANUP_LOG_PATH), exist_ok=True)
+
+# Configure root logger with minimal handlers (console only)
 logging.basicConfig(
-    level=logging.INFO, 
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(LOG_PATH),
-        logging.StreamHandler()  # Optional: adds console logging
+        logging.StreamHandler()  # Console logging only
     ]
 )
 
-# Create loggers
+# Create main logger for general logs
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.handlers.clear()  # Clear any inherited handlers
+
+# Add handler for main app log
+app_handler = RotatingFileHandler(
+    LOG_PATH,  # /app/logs/app.log
+    maxBytes=10*1024*1024,  # 10 MB
+    backupCount=3,
+    encoding='utf-8'
+)
+app_handler.setLevel(logging.INFO)
+app_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(app_handler)
+
+# Add console handler for main logger
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
+
+# Create missing logger for missing series
 missing_logger = logging.getLogger('missing')
+missing_logger.setLevel(logging.INFO)
+missing_logger.handlers.clear()  # Clear any inherited handlers
+missing_logger.propagate = False  # Prevent propagation to root logger
 
 # Add file handler for missing logger
-missing_handler = logging.FileHandler(MISSING_LOG_PATH)
+missing_handler = logging.FileHandler(MISSING_LOG_PATH)  # /app/logs/missing.log
+missing_handler.setLevel(logging.INFO)
 missing_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 missing_logger.addHandler(missing_handler)
 
-# Load settings from a JSON configuration file
-def load_config():
-    config_path = os.getenv('CONFIG_PATH', '/app/config/config.json')
-    with open(config_path, 'r') as file:
-        config = json.load(file)
-    # Ensure required keys are present with default values
-    if 'rules' not in config:
-        config['rules'] = {}
-    return config
+# Add console handler for missing logger
+missing_logger.addHandler(console_handler)
 
-config = load_config()
+# Enhanced logging setup for cleanup operations
+def setup_cleanup_logging():
+    """Setup cleanup logging to write to BOTH console AND files."""
+    # Create cleanup-specific logger
+    cleanup_logger = logging.getLogger('cleanup')
+    cleanup_logger.setLevel(logging.INFO)
+    cleanup_logger.handlers.clear()  # Clear any inherited handlers
+    cleanup_logger.propagate = False  # Prevent propagation to root logger
+    
+    # File handler for cleanup-specific log
+    cleanup_file_handler = RotatingFileHandler(
+        CLEANUP_LOG_PATH,  # /app/logs/cleanup.log
+        maxBytes=5*1024*1024,  # 5 MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    cleanup_file_handler.setLevel(logging.INFO)
+    cleanup_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    cleanup_file_handler.setFormatter(cleanup_formatter)
+    
+    # File handler for main app log (with CLEANUP prefix)
+    main_file_handler = RotatingFileHandler(
+        LOG_PATH,  # /app/logs/app.log
+        maxBytes=10*1024*1024,  # 10 MB
+        backupCount=3,
+        encoding='utf-8'
+    )
+    main_file_handler.setLevel(logging.INFO)
+    main_formatter = logging.Formatter('%(asctime)s - CLEANUP - %(levelname)s - %(message)s')
+    main_file_handler.setFormatter(main_formatter)
+    
+    # Console handler for Docker logs
+    console_handler_cleanup = logging.StreamHandler()
+    console_handler_cleanup.setLevel(logging.INFO)
+    console_formatter = logging.Formatter('%(asctime)s - CLEANUP - %(levelname)s - %(message)s')
+    console_handler_cleanup.setFormatter(console_formatter)
+    
+    # Add handlers to cleanup logger
+    cleanup_logger.addHandler(main_file_handler)
+    cleanup_logger.addHandler(cleanup_file_handler)
+    cleanup_logger.addHandler(console_handler_cleanup)
+    
+    return cleanup_logger
+
+# Initialize cleanup logger
+cleanup_logger = setup_cleanup_logging()
 
 # Define global variables based on environment settings
 SONARR_URL = os.getenv('SONARR_URL')
@@ -55,61 +124,16 @@ DRY_RUN_MODE = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
 # Time-based cleanup tracking
 ACTIVITY_TRACKING_FILE = os.path.join(os.getcwd(), 'data', 'activity_tracking.json')
 os.makedirs(os.path.dirname(ACTIVITY_TRACKING_FILE), exist_ok=True)
-# Enhanced logging setup for cleanup operations
-def setup_cleanup_logging():
-    """Setup cleanup logging to write to BOTH console AND files."""
-    
-    LOG_PATH = os.getenv('LOG_PATH', '/app/logs/app.log')
-    CLEANUP_LOG_PATH = os.getenv('CLEANUP_LOG_PATH', '/app/logs/cleanup.log')
-    
-    # Ensure log directories exist
-    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-    os.makedirs(os.path.dirname(CLEANUP_LOG_PATH), exist_ok=True)
-    
-    # Create cleanup-specific logger
-    cleanup_logger = logging.getLogger('cleanup')
-    cleanup_logger.setLevel(logging.INFO)
-    cleanup_logger.handlers.clear()
-    
-    # File handler for main app log
-    main_file_handler = RotatingFileHandler(
-        LOG_PATH,
-        maxBytes=10*1024*1024,  # 10 MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    main_file_handler.setLevel(logging.INFO)
-    main_formatter = logging.Formatter('%(asctime)s - CLEANUP - %(levelname)s - %(message)s')
-    main_file_handler.setFormatter(main_formatter)
-    
-    # Dedicated cleanup file handler
-    cleanup_file_handler = RotatingFileHandler(
-        CLEANUP_LOG_PATH,
-        maxBytes=5*1024*1024,  # 5 MB
-        backupCount=5,
-        encoding='utf-8'
-    )
-    cleanup_file_handler.setLevel(logging.INFO)
-    cleanup_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    cleanup_file_handler.setFormatter(cleanup_formatter)
-    
-    # Console handler for Docker logs (what you're seeing now)
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter('%(asctime)s - CLEANUP - %(levelname)s - %(message)s')
-    console_handler.setFormatter(console_formatter)
-    
-    # Add ALL handlers
-    cleanup_logger.addHandler(main_file_handler)
-    cleanup_logger.addHandler(cleanup_file_handler)  
-    cleanup_logger.addHandler(console_handler)
-    
-    cleanup_logger.propagate = False
-    
-    return cleanup_logger
 
-# Initialize cleanup logger
-cleanup_logger = setup_cleanup_logging()
+# Load settings from a JSON configuration file
+def load_config():
+    config_path = os.getenv('CONFIG_PATH', '/app/config/config.json')
+    with open(config_path, 'r') as file:
+        config = json.load(file)
+    # Ensure required keys are present with default values
+    if 'rules' not in config:
+        config['rules'] = {}
+    return config
 
 def load_activity_tracking():
     """Load activity tracking data."""
@@ -390,19 +414,62 @@ def get_server_activity():
     return None, None, None
 
 def get_series_id(series_name):
-    """Fetch series ID by name from Sonarr."""
+    """Fetch series ID by name from Sonarr with improved matching."""
     url = f"{SONARR_URL}/api/v3/series"
     headers = {'X-Api-Key': SONARR_API_KEY}
-    response = requests.get(url, headers=headers)
-    if response.ok:
+    try:
+        response = requests.get(url, headers=headers)
+        if not response.ok:
+            logger.error(f"Failed to fetch series from Sonarr: {response.status_code}")
+            return None
+        
         series_list = response.json()
+        
+        # 1. Exact match
         for series in series_list:
             if series['title'].lower() == series_name.lower():
+                logger.info(f"Found exact match: {series['title']}")
                 return series['id']
-        missing_logger.info(f"Series not found in Sonarr: {series_name}")
-    else:
-        logger.error("Failed to fetch series from Sonarr.")
-    return None
+        
+        # 2. Match without year suffixes
+        webhook_title_clean = re.sub(r'\s*\(\d{4}\)$', '', series_name).strip()
+        for series in series_list:
+            sonarr_title_clean = re.sub(r'\s*\(\d{4}\)$', '', series['title']).strip()
+            if sonarr_title_clean.lower() == webhook_title_clean.lower():
+                logger.info(f"Found match ignoring year: '{series['title']}' matches '{series_name}'")
+                return series['id']
+        
+        # 3. Partial match
+        for series in series_list:
+            if series_name.lower() in series['title'].lower():
+                logger.info(f"Found partial match: '{series['title']}' contains '{series_name}'")
+                return series['id']
+        
+        # 4. Check alternate titles
+        for series in series_list:
+            alternate_titles = series.get('alternateTitles', [])
+            for alt_title in alternate_titles:
+                alt_title_text = alt_title.get('title', '')
+                if alt_title_text.lower() == series_name.lower():
+                    logger.info(f"Found match in alternate title: {series['title']}")
+                    return series['id']
+        
+        # 5. Log close matches for debugging
+        close_matches = []
+        for series in series_list:
+            if series_name.lower() in series['title'].lower():
+                close_matches.append(series['title'])
+        
+        if close_matches:
+            missing_logger.info(f"Series not found in Sonarr: '{series_name}'. Possible matches: {close_matches}")
+        else:
+            missing_logger.info(f"Series not found in Sonarr: '{series_name}'. No close matches.")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error in series lookup: {str(e)}")
+        return None
+
 
 def get_episode_details(series_id, season_number):
     """Fetch details of episodes for a specific series and season from Sonarr."""
@@ -1003,37 +1070,47 @@ def migrate_existing_series_to_tracking():
         config_path = os.path.join(os.getcwd(), 'config', 'config.json')
         with open(config_path, 'r') as file:
             config = json.load(file)
-        
+       
         activity_data = load_activity_tracking()
         current_time = int(time.time())
         migrated_count = 0
-        
+       
         for rule_name, rule_details in config.get('rules', {}).items():
-            for series_id in rule_details.get('series', []):
+            series_dict = rule_details.get('series', {})
+            
+            # Handle both old array format and new dict format
+            if isinstance(series_dict, list):
+                # Old format - convert to dict first
+                series_ids = series_dict
+            else:
+                # New format - get the keys
+                series_ids = series_dict.keys()
+            
+            for series_id in series_ids:
                 series_id_str = str(series_id)
-                
+               
                 if series_id_str not in activity_data:
                     activity_data[series_id_str] = {}
-                
+               
                 # Only add rule_assigned_date if it doesn't exist
                 if 'rule_assigned_date' not in activity_data[series_id_str]:
                     activity_data[series_id_str]['rule_assigned_date'] = current_time
                     activity_data[series_id_str]['current_rule'] = rule_name
                     activity_data[series_id_str]['last_updated'] = current_time
-                    
+                   
                     # Ensure last_watched exists
                     if 'last_watched' not in activity_data[series_id_str]:
                         activity_data[series_id_str]['last_watched'] = 0
-                    
+                   
                     migrated_count += 1
                     logger.info(f"Migrated series {series_id} in rule '{rule_name}' with assignment date {current_time}")
-        
+       
         if migrated_count > 0:
             save_activity_tracking(activity_data)
             logger.info(f"Migration completed: Added assignment dates for {migrated_count} existing series")
         else:
             logger.info("Migration completed: No series needed assignment date updates")
-            
+           
     except Exception as e:
         logger.error(f"Error during migration: {str(e)}")
 

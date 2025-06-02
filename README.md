@@ -91,7 +91,7 @@ Grace Period: null, Dormant Timer: null
 version: '3.8'
 services:
   ocdarr:
-    image: vansmak/ocdarr:beta-2.1.0
+    image: vansmak/ocdarr-lite:beta-2.1.1
     environment:
       - SONARR_URL=http://your-sonarr:8989
       - SONARR_API_KEY=your_api_key
