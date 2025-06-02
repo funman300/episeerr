@@ -262,4 +262,8 @@ JELLYFIN_URL=http://your-jellyfin:8096
 
 ---
 
+<<<<<<< HEAD
 *OCDarr: Because your media library should work for you, adapt to your viewing patterns, and clean up based on time, not the other way around.*
+=======
+*OCDarr: Because your media library should work for you, adapt to your viewing patterns, and clean up based on time, not the other way around.*
+>>>>>>> 8a236cdaaa9851f503f3964bc31c0fb01b14af7f
