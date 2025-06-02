@@ -66,6 +66,9 @@
                 "19": {
                     "activity_date": null
                 },
+                "63": {
+                    "activity_date": null
+                },
                 "85": {
                     "activity_date": null
                 },
@@ -216,11 +219,7 @@
             "monitor_watched": false,
             "grace_days": null,
             "dormant_days": null,
-            "series": {
-                "63": {
-                    "activity_date": 1748821335
-                }
-            }
+            "series": {}
         }
     },
     "field_migration_complete": true,
