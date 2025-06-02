@@ -135,10 +135,17 @@ Features:
 - Comprehensive logging and monitoring"
 fi
 
-# Push commits and tags
-echo "Pushing to GitHub..."
-git push origin $BRANCH
-git push origin "v$VERSION"
+# Push commits and tags with force
+echo "⚠️  Warning: Force pushing to GitHub. This will overwrite remote changes!"
+echo "Pushing to GitHub with --force..."
+if ! git push origin $BRANCH --force; then
+    echo "❌ Error: Failed to force push commits to $BRANCH. Check your network or permissions."
+    exit 1
+fi
+if ! git push origin "v$VERSION" --force; then
+    echo "❌ Error: Failed to force push tag v$VERSION. Check your network or permissions."
+    exit 1
+fi
 
 echo "✅ Git operations completed"
 
