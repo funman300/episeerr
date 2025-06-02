@@ -159,25 +159,25 @@ if [ "$IS_PRERELEASE" = true ]; then
     echo "Building OCDarr pre-release multi-arch image (no 'latest' tag)..."
     docker buildx build \
       --platform linux/amd64,linux/arm64,linux/arm/v7 \
-      -t vansmak/ocdarr:$VERSION \
+      -t vansmak/ocdarr-lite:$VERSION \
       --push \
       .
     
     echo "🧪 Pre-release image built and pushed:"
-    echo "  - vansmak/ocdarr:$VERSION"
+    echo "  - vansmak/ocdarr-lite:$VERSION"
     echo "  - NOT tagged as 'latest' (pre-release)"
 else
     echo "Building OCDarr stable multi-arch image..."
     docker buildx build \
       --platform linux/amd64,linux/arm64,linux/arm/v7 \
-      -t vansmak/ocdarr:$VERSION \
-      -t vansmak/ocdarr:latest \
+      -t vansmak/ocdarr-lite:$VERSION \
+      -t vansmak/ocdarr-lite:latest \
       --push \
       .
     
     echo "✅ Stable release images built and pushed:"
-    echo "  - vansmak/ocdarr:$VERSION"
-    echo "  - vansmak/ocdarr:latest"
+    echo "  - vansmak/ocdarr-lite:$VERSION"
+    echo "  - vansmak/ocdarr-lite:latest"
 fi
 
 echo "✅ Docker operations completed"
@@ -195,9 +195,9 @@ fi
 echo "Git tag: v$VERSION"
 echo "Git branch: $BRANCH"
 echo "Docker images:"
-echo "  - vansmak/ocdarr:$VERSION"
+echo "  - vansmak/ocdarr-lite:$VERSION"
 if [ "$IS_PRERELEASE" = false ]; then
-    echo "  - vansmak/ocdarr:latest"
+    echo "  - vansmak/ocdarr-lite:latest"
 fi
 
 echo ""
@@ -215,13 +215,13 @@ fi
 
 echo ""
 echo "Next steps:"
-echo "  - Check GitHub: https://github.com/Vansmak/OCDarr"
+echo "  - Check GitHub: https://github.com/vansmak/ocdarr-lite"
 if [ "$IS_PRERELEASE" = true ]; then
-    echo "  - Check Docker Hub: https://hub.docker.com/r/vansmak/ocdarr (pre-release tag)"
-    echo "  - Test with: docker pull vansmak/ocdarr:$VERSION"
+    echo "  - Check Docker Hub: https://hub.docker.com/r/vansmak/ocdarr-lite (pre-release tag)"
+    echo "  - Test with: docker pull vansmak/ocdarr-lite:$VERSION"
     echo "  - 🧪 Report testing feedback on GitHub Issues"
 else
-    echo "  - Check Docker Hub: https://hub.docker.com/r/vansmak/ocdarr"
-    echo "  - Test with: docker pull vansmak/ocdarr:$VERSION"
+    echo "  - Check Docker Hub: https://hub.docker.com/r/vansmak/ocdarr-lite"
+    echo "  - Test with: docker pull vansmak/ocdarr-lite:$VERSION"
     echo "  - Update documentation if needed"
 fi
