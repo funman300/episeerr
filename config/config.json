@@ -6,92 +6,223 @@
             "action_option": "search",
             "keep_watched": "1",
             "monitor_watched": false,
-            "series": [
-                "90",
-                "245",
-                "383",
-                "411",
-                "76",
-                "66",
-                "27",
-                "93",
-                "73",
-                "378",
-                "252",
-                "55",
-                "39",
-                "25",
-                "81",
-                "20",
-                "54",
-                "31",
-                "19",
-                "63",
-                "85",
-                "18",
-                "16",
-                "380",
-                "51",
-                "243",
-                "29",
-                "417",
-                "71",
-                "410",
-                "9",
-                "88",
-                "3",
-                "64",
-                "23",
-                "41",
-                "15",
-                "87",
-                "7",
-                "8",
-                "92",
-                "52",
-                "1",
-                "2",
-                "17",
-                "4",
-                "84",
-                "10",
-                "83",
-                "101",
-                "11",
-                "70",
-                "32",
-                "21",
-                "91",
-                "75",
-                "45",
-                "74",
-                "60",
-                "385"
-            ],
-            "keep_unwatched_days": null,
-            "keep_watched_days": 7
+            "grace_days": null,
+            "dormant_days": null,
+            "series": {
+                "90": {
+                    "activity_date": null
+                },
+                "245": {
+                    "activity_date": null
+                },
+                "383": {
+                    "activity_date": null
+                },
+                "411": {
+                    "activity_date": null
+                },
+                "76": {
+                    "activity_date": null
+                },
+                "66": {
+                    "activity_date": null
+                },
+                "27": {
+                    "activity_date": null
+                },
+                "93": {
+                    "activity_date": null
+                },
+                "73": {
+                    "activity_date": null
+                },
+                "378": {
+                    "activity_date": null
+                },
+                "252": {
+                    "activity_date": null
+                },
+                "55": {
+                    "activity_date": null
+                },
+                "39": {
+                    "activity_date": null
+                },
+                "25": {
+                    "activity_date": null
+                },
+                "81": {
+                    "activity_date": null
+                },
+                "20": {
+                    "activity_date": null
+                },
+                "54": {
+                    "activity_date": null
+                },
+                "31": {
+                    "activity_date": null
+                },
+                "19": {
+                    "activity_date": null
+                },
+                "85": {
+                    "activity_date": null
+                },
+                "18": {
+                    "activity_date": null
+                },
+                "16": {
+                    "activity_date": null
+                },
+                "380": {
+                    "activity_date": null
+                },
+                "51": {
+                    "activity_date": null
+                },
+                "243": {
+                    "activity_date": null
+                },
+                "29": {
+                    "activity_date": null
+                },
+                "440": {
+                    "activity_date": null
+                },
+                "71": {
+                    "activity_date": null
+                },
+                "410": {
+                    "activity_date": null
+                },
+                "9": {
+                    "activity_date": null
+                },
+                "88": {
+                    "activity_date": null
+                },
+                "3": {
+                    "activity_date": null
+                },
+                "64": {
+                    "activity_date": null
+                },
+                "23": {
+                    "activity_date": null
+                },
+                "41": {
+                    "activity_date": null
+                },
+                "15": {
+                    "activity_date": null
+                },
+                "87": {
+                    "activity_date": null
+                },
+                "7": {
+                    "activity_date": null
+                },
+                "8": {
+                    "activity_date": null
+                },
+                "92": {
+                    "activity_date": null
+                },
+                "52": {
+                    "activity_date": null
+                },
+                "1": {
+                    "activity_date": null
+                },
+                "2": {
+                    "activity_date": null
+                },
+                "17": {
+                    "activity_date": null
+                },
+                "4": {
+                    "activity_date": null
+                },
+                "84": {
+                    "activity_date": null
+                },
+                "10": {
+                    "activity_date": null
+                },
+                "83": {
+                    "activity_date": null
+                },
+                "101": {
+                    "activity_date": null
+                },
+                "11": {
+                    "activity_date": null
+                },
+                "70": {
+                    "activity_date": null
+                },
+                "32": {
+                    "activity_date": null
+                },
+                "21": {
+                    "activity_date": null
+                },
+                "91": {
+                    "activity_date": null
+                },
+                "75": {
+                    "activity_date": null
+                },
+                "45": {
+                    "activity_date": null
+                },
+                "74": {
+                    "activity_date": null
+                },
+                "60": {
+                    "activity_date": null
+                },
+                "385": {
+                    "activity_date": null
+                }
+            },
+            "dry_run": false
         },
         "season": {
             "get_option": "season",
             "action_option": "monitor",
             "keep_watched": "season",
             "monitor_watched": false,
-            "series": [],
-            "keep_unwatched_days": null,
-            "keep_watched_days": null
+            "grace_days": 7,
+            "dormant_days": null,
+            "series": {},
+            "dry_run": false
         },
-        "14dayseason": {
-            "get_option": "season",
+        "nukeafter90days": {
+            "get_option": "1",
             "action_option": "monitor",
-            "keep_watched": "season",
+            "keep_watched": "all",
             "monitor_watched": false,
-            "keep_unwatched_days": null,
-            "keep_watched_days": 14,
-            "series": []
+            "grace_days": null,
+            "dormant_days": 90,
+            "series": {},
+            "dry_run": false
+        },
+        "get3keep1": {
+            "get_option": "3",
+            "action_option": "monitor",
+            "keep_watched": "1",
+            "monitor_watched": false,
+            "grace_days": null,
+            "dormant_days": null,
+            "series": {
+                "63": {
+                    "activity_date": 1748821335
+                }
+            }
         }
     },
-    "preferences": {
-        "radarr_quality_profile": "Any",
-        "sonarr_quality_profile": "Any"
-    }
+    "field_migration_complete": true,
+    "field_migration_complete_saved": true
 }

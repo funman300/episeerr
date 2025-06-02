@@ -57,63 +57,52 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="mb-3">
-                                        <label for="keep_unwatched_days" class="form-label">
-                                            Inactivity Timer (days)
+                                        <label for="grace_days" class="form-label">
+                                            Grace Period (days)
                                             <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                               title="Delete kept content if no episodes are watched for X days. Leave empty to disable."></i>
+                                            title="Keep content for X days after watching, then apply normal cleanup. Leave empty to keep forever."></i>
                                         </label>
-                                        <input type="number" class="form-control" id="keep_unwatched_days" 
-                                               name="keep_unwatched_days" min="1" 
-                                               value="{% if rule.keep_unwatched_days %}{{ rule.keep_unwatched_days }}{% endif %}"
-                                               placeholder="Leave empty to disable">
+                                        <input type="number" class="form-control" id="grace_days" 
+                                            name="grace_days" min="1" 
+                                            value="{% if rule.grace_days %}{{ rule.grace_days }}{% endif %}"
+                                            placeholder="Leave empty to keep forever">
                                         <div class="form-text text-muted">
-                                            <small>Example: "7" = Delete if no episodes watched for 7 days</small>
+                                            <small>Example: "7" = Keep for 7 days after watching</small>
                                         </div>
                                     </div>
 
                                     <div class="mb-3">
-                                        <label for="keep_watched_days" class="form-label">
-                                            Grace Period (days)
+                                        <label for="dormant_days" class="form-label">
+                                            Dormant Timer (days)
                                             <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                               title="Keep content for X days after watching, then apply normal cleanup. Leave empty to keep forever."></i>
+                                            title="Delete ALL content if no episodes are watched for X days. Leave empty to disable."></i>
                                         </label>
-                                        <input type="number" class="form-control" id="keep_watched_days" 
-                                               name="keep_watched_days" min="1" 
-                                               value="{% if rule.keep_watched_days %}{{ rule.keep_watched_days }}{% endif %}"
-                                               placeholder="Leave empty to keep forever">
+                                        <input type="number" class="form-control" id="dormant_days" 
+                                            name="dormant_days" min="1" 
+                                            value="{% if rule.dormant_days %}{{ rule.dormant_days }}{% endif %}"
+                                            placeholder="Leave empty to disable">
                                         <div class="form-text text-muted">
-                                            <small>Example: "30" = Keep for 30 days after watching</small>
+                                            <small>Example: "30" = Delete everything if unwatched for 30 days</small>
                                         </div>
                                     </div>
 
                                     <div class="alert alert-info alert-sm">
                                         <small>
-                                            <p><strong>⚠️ **USE AT YOUR OWN RISK** ⚠️</strong></p>
-                                                <ul>
-                                                    <li>will permanently delete your media files!</li>
-                                                    
-                                                </ul>
                                             <strong>Current Status:</strong><br>
-                                            {% if rule.keep_unwatched_days %}
-                                                • Inactivity Timer: {{ rule.keep_unwatched_days }} days<br>
-                                            {% else %}
-                                                • Inactivity Timer: Disabled<br>
-                                            {% endif %}
-                                            {% if rule.keep_watched_days %}
-                                                • Grace Period: {{ rule.keep_watched_days }} days<br>
+                                            {% if rule.grace_days %}
+                                                • Grace Period: {{ rule.grace_days }} days<br>
                                             {% else %}
                                                 • Grace Period: Keep forever<br>
                                             {% endif %}
+                                            {% if rule.dormant_days %}
+                                                • Dormant Timer: {{ rule.dormant_days }} days<br>
+                                            {% else %}
+                                                • Dormant Timer: Disabled<br>
+                                            {% endif %}
                                             
-                                            {% if not rule.keep_unwatched_days and not rule.keep_watched_days %}
+                                            {% if not rule.grace_days and not rule.dormant_days %}
                                                 <span class="text-warning">⚠ No time-based cleanup configured</span>
                                             {% endif %}
-                                        </small>
-                                    </div>
-
-                                    <div class="alert alert-warning alert-sm">
-                                        <small>
-                                            <strong>Note:</strong> Changes to time-based settings will apply to all {{ rule.series|length }} assigned series on their next evaluation.
                                         </small>
                                     </div>
                                 </div>

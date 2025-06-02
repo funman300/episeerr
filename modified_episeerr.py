@@ -69,49 +69,48 @@ def get_sonarr_headers():
 
 def create_ocdarr_tag():
     """Create a single 'ocdarr' tag in Sonarr and return its ID."""
+    global OCDARR_TAG_ID
+    
+    # If we already found it, return silently (no more spam)
+    if OCDARR_TAG_ID is not None:
+        return OCDARR_TAG_ID
+    
     try:
         headers = get_sonarr_headers()
         logger.debug(f"Making request to {SONARR_URL}/api/v3/tag")
-        
+       
         # Get existing tags
-        tags_response = requests.get(
-            f"{SONARR_URL}/api/v3/tag",
-            headers=headers
-        )
-        
+        tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers)
+       
         if not tags_response.ok:
             logger.error(f"Failed to get tags. Status: {tags_response.status_code}")
             return None
-
+            
         # Look for existing episodes tag
-        ocdarr_tag_id = None
         for tag in tags_response.json():
             if tag['label'].lower() == 'ocdarr':
-                ocdarr_tag_id = tag['id']
-                logger.info(f"Found existing 'ocdarr' tag with ID {ocdarr_tag_id}")
-                break
-        
+                OCDARR_TAG_ID = tag['id']
+                logger.info(f"Found existing 'ocdarr' tag with ID {OCDARR_TAG_ID}")  # Only logs ONCE
+                return OCDARR_TAG_ID
+       
         # Create episodes tag if it doesn't exist
-        if ocdarr_tag_id is None:
-            tag_create_response = requests.post(
-                f"{SONARR_URL}/api/v3/tag",
-                headers=headers,
-                json={"label": "ocdarr"}
-            )
-            if tag_create_response.ok:
-                ocdarr_tag_id = tag_create_response.json().get('id')
-                logger.info(f"Created tag: 'ocdarr' with ID {ocdarr_tag_id}")
-            else:
-                logger.error(f"Failed to create ocdarr tag. Status: {tag_create_response.status_code}")
-                return None
-        
-        # Store the episodes tag ID in a global variable for later use
-        global OCDARR_TAG_ID
-        OCDARR_TAG_ID = ocdarr_tag_id
-        return ocdarr_tag_id
+        tag_create_response = requests.post(
+            f"{SONARR_URL}/api/v3/tag",
+            headers=headers,
+            json={"label": "ocdarr"}
+        )
+        if tag_create_response.ok:
+            OCDARR_TAG_ID = tag_create_response.json().get('id')
+            logger.info(f"Created tag: 'ocdarr' with ID {OCDARR_TAG_ID}")
+            return OCDARR_TAG_ID
+        else:
+            logger.error(f"Failed to create ocdarr tag. Status: {tag_create_response.status_code}")
+            return None
+       
     except Exception as e:
         logger.error(f"Error creating episode tag: {str(e)}")
         return None
+    
 def unmonitor_series(series_id, headers):
     """Unmonitor all episodes in a series."""
     try:

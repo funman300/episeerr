@@ -1,4 +1,4 @@
-<!-- Create templates/scheduler_admin.html -->
+<!-- templates/scheduler_admin.html - Enhanced with dry run management -->
 {% extends "base.html" %}
 
 {% block title %}Scheduler Admin - OCDarr{% endblock %}
@@ -22,12 +22,22 @@
                 
                 <div class="mt-4">
                     <h6>Manual Actions</h6>
-                    <div class="btn-group">
+                    <div class="btn-group mb-3">
                         <button type="button" class="btn btn-primary" onclick="forceCleanup()">
                             <i class="fas fa-play me-1"></i>Clean Shows Now
                         </button>
                         <button type="button" class="btn btn-secondary" onclick="refreshStatus()">
                             <i class="fas fa-refresh me-1"></i>Refresh Status
+                        </button>
+                    </div>
+                    
+                    <h6>Safety & Testing</h6>
+                    <div class="btn-group">
+                        <a href="/dry-run-settings" class="btn btn-info">
+                            <i class="fas fa-flask me-1"></i>Dry Run Settings
+                        </a>
+                        <button type="button" class="btn btn-warning" onclick="viewCleanupLogs()">
+                            <i class="fas fa-file-alt me-1"></i>View Cleanup Logs
                         </button>
                     </div>
                 </div>
@@ -42,25 +52,33 @@
             </div>
             <div class="card-body">
                 <small>
-                    <p><strong>Automatic Cleanup:</strong></p>
+                    <p><strong>Your Two-Layer System:</strong></p>
                     <ul>
-                        <li>Runs every 6 hours by default</li>
-                        <li>Checks all series with time-based rules</li>
-                        <li>Deletes content based on inactivity/grace period timers</li>
+                        <li><strong>Webhook Layer:</strong> When you watch episodes, immediately manages next content and deletes old episodes</li>
+                        <li><strong>Scheduler Layer:</strong> Runs every 6 hours to handle time-based cleanup</li>
+                    </ul>
+                    
+                    <p><strong>Time-Based Cleanup:</strong></p>
+                    <ul>
+                        <li><strong>Grace Period:</strong> Delete watched content after X days of last activity</li>
+                        <li><strong>Dormant Timer:</strong> Delete everything and reset show after Y days of no activity</li>
+                        
                     </ul>
                     
                     <p><strong>Configuration:</strong></p>
                     <ul>
                         <li>Set <code>CLEANUP_INTERVAL_HOURS</code> in .env</li>
-                        <li>Configure time-based rules in Rules section</li>
-                        <li>Assign series to time-based rules</li>
+                        <li>Configure grace_days and dormant_days in rules</li>
+                        <li>Assign series to rules with time-based settings</li>
+                        <li><strong>Use dry run mode to test safely!</strong></li>
                     </ul>
                     
                     <p><strong>⚠️ **USE AT YOUR OWN RISK** ⚠️</strong></p>
                     <ul>
-                        <li>will permanently delete your media files!</li>
-                        <li>Test with non-critical series first</li>
-                        <li>Keep backups of important content</li>
+                        <li>Will permanently delete your media files!</li>
+                        <li>Grace period deletes your watched content</li>
+                        <li>Dormant timer resets shows to clean slate</li>
+                        <li>Always test with dry run mode first</li>
                     </ul>
                 </small>
             </div>
@@ -73,6 +91,17 @@
             <div class="card-body">
                 <div id="recent-activity">
                     <small class="text-muted">Loading recent cleanup activity...</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Current Status</h6>
+            </div>
+            <div class="card-body">
+                <div id="safety-status">
+                    <small class="text-muted">Loading safety status...</small>
                 </div>
             </div>
         </div>
@@ -152,7 +181,7 @@ function forceCleanup() {
     .then(data => {
         if (data.status === 'success') {
             ocdarrBanner.show('Manual cleanup started successfully', 'success');
-            setTimeout(refreshStatus, 2000); // Refresh status after 2 seconds
+            setTimeout(refreshStatus, 2000);
         } else {
             ocdarrBanner.show('Failed to start cleanup: ' + data.message, 'error');
         }
@@ -169,24 +198,26 @@ function forceCleanup() {
 
 function refreshStatus() {
     loadSchedulerStatus();
+    loadRecentActivity();
+    loadSafetyStatus();
     ocdarrBanner.show('Status refreshed', 'info', true, 2000);
 }
 
 function loadRecentActivity() {
-    // This could fetch recent cleanup logs
     fetch('/api/recent-cleanup-activity')
         .then(response => response.json())
         .then(data => {
             const activityDiv = document.getElementById('recent-activity');
-            if (data.activities && data.activities.length > 0) {
+            if (data.recentCleanups && data.recentCleanups.length > 0) {
                 let html = '<ul class="list-unstyled">';
-                data.activities.slice(0, 5).forEach(activity => {
-                    html += `<li><small>${activity.timestamp}: ${activity.description}</small></li>`;
+                data.recentCleanups.slice(0, 5).forEach(activity => {
+                    const icon = activity.type === 'Manual' ? 'hand-paper' : 'clock';
+                    html += `<li><small><i class="fas fa-${icon} me-1"></i>${activity.timestamp} - ${activity.type} cleanup</small></li>`;
                 });
                 html += '</ul>';
                 activityDiv.innerHTML = html;
             } else {
-                activityDiv.innerHTML = '<small class="text-muted">No recent activity</small>';
+                activityDiv.innerHTML = '<small class="text-muted">No recent cleanup activity</small>';
             }
         })
         .catch(error => {
@@ -195,13 +226,60 @@ function loadRecentActivity() {
         });
 }
 
+function loadSafetyStatus() {
+    // Check if dry run is enabled globally
+    const safetyDiv = document.getElementById('safety-status');
+    
+    fetch('/api/safety-status')
+        .then(response => response.json())
+        .then(data => {
+            let html = '<small>';
+            
+            if (data.global_dry_run) {
+                html += '<div class="alert alert-success alert-sm p-2 mb-2">';
+                html += '<i class="fas fa-shield-alt me-1"></i><strong>Global Dry Run: ENABLED</strong><br>';
+                html += 'No files will be deleted system-wide';
+                html += '</div>';
+            } else {
+                html += '<div class="alert alert-warning alert-sm p-2 mb-2">';
+                html += '<i class="fas fa-exclamation-triangle me-1"></i><strong>Live Mode: ACTIVE</strong><br>';
+                html += 'Cleanup will delete files unless overridden by rules';
+                html += '</div>';
+            }
+            
+            if (data.rules_with_dry_run && data.rules_with_dry_run.length > 0) {
+                html += '<div class="mb-2">';
+                html += '<strong>Rules in Dry Run:</strong><br>';
+                data.rules_with_dry_run.forEach(rule => {
+                    html += `<span class="badge bg-info me-1">${rule}</span>`;
+                });
+                html += '</div>';
+            }
+            
+            html += '</small>';
+            safetyDiv.innerHTML = html;
+        })
+        .catch(error => {
+            safetyDiv.innerHTML = '<small class="text-muted">Unable to load safety status</small>';
+        });
+}
+
+function viewCleanupLogs() {
+    // Open cleanup logs in a new window/modal
+    window.open('/cleanup-logs', '_blank');
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     loadSchedulerStatus();
     loadRecentActivity();
+    loadSafetyStatus();
     
     // Refresh status every 30 seconds
-    schedulerStatusInterval = setInterval(loadSchedulerStatus, 30000);
+    schedulerStatusInterval = setInterval(() => {
+        loadSchedulerStatus();
+        loadRecentActivity();
+    }, 30000);
 });
 
 // Cleanup interval when leaving page

@@ -1,0 +1,186 @@
+<!-- templates/cleanup_logs.html -->
+{% extends "base.html" %}
+
+{% block title %}Cleanup Logs - OCDarr{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-file-alt me-2"></i>Recent Cleanup Logs</h5>
+                <div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="refreshLogs()">
+                        <i class="fas fa-refresh me-1"></i>Refresh
+                    </button>
+                    <button type="button" class="btn btn-info btn-sm" onclick="toggleAutoRefresh()">
+                        <i class="fas fa-play me-1"></i><span id="auto-refresh-text">Start Auto-Refresh</span>
+                    </button>
+                    <a href="{{ url_for('scheduler_admin') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-arrow-left me-1"></i>Back to Scheduler
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if message %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>{{ message }}
+                </div>
+                {% elif not logs %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>No cleanup logs available yet.
+                </div>
+                {% else %}
+                <div class="mb-3">
+                    <small class="text-muted">
+                        Showing the most recent 200 log entries. Logs are automatically rotated when they get too large.
+                    </small>
+                </div>
+                
+                <!-- Log filtering controls -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" id="log-filter" class="form-control form-control-sm" 
+                               placeholder="Filter logs (e.g. 'DRY RUN', 'CLEANUP', series name)">
+                    </div>
+                    <div class="col-md-6">
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-secondary" onclick="filterLogs('all')">All</button>
+                            <button type="button" class="btn btn-outline-success" onclick="filterLogs('CLEANUP STARTED')">Start</button>
+                            <button type="button" class="btn btn-outline-info" onclick="filterLogs('DRY RUN')">Dry Run</button>
+                            <button type="button" class="btn btn-outline-warning" onclick="filterLogs('deleted')">Deletions</button>
+                            <button type="button" class="btn btn-outline-primary" onclick="filterLogs('CLEANUP COMPLETED')">Completed</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Log display area -->
+                <div id="log-container" style="max-height: 600px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.85em;">
+                    {% for line in logs %}
+                    <div class="log-line mb-1 p-1 border-bottom" style="border-bottom: 1px solid #333 !important;">
+                        {% if 'ERROR' in line or 'Failed' in line %}
+                            <span class="text-danger">{{ line.strip() }}</span>
+                        {% elif 'DRY RUN' in line %}
+                            <span class="text-info">{{ line.strip() }}</span>
+                        {% elif 'CLEANUP STARTED' in line or 'CLEANUP COMPLETED' in line %}
+                            <span class="text-success">{{ line.strip() }}</span>
+                        {% elif 'deleted' in line and 'would delete' not in line %}
+                            <span class="text-warning">{{ line.strip() }}</span>
+                        {% elif 'SKIPPED' in line %}
+                            <span class="text-muted">{{ line.strip() }}</span>
+                        {% else %}
+                            <span class="text-light">{{ line.strip() }}</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let autoRefreshInterval = null;
+let isAutoRefreshEnabled = false;
+
+function refreshLogs() {
+    location.reload();
+}
+
+function toggleAutoRefresh() {
+    const button = document.querySelector('button[onclick="toggleAutoRefresh()"]');
+    const text = document.getElementById('auto-refresh-text');
+    
+    if (isAutoRefreshEnabled) {
+        // Stop auto-refresh
+        clearInterval(autoRefreshInterval);
+        isAutoRefreshEnabled = false;
+        button.innerHTML = '<i class="fas fa-play me-1"></i><span id="auto-refresh-text">Start Auto-Refresh</span>';
+        button.className = 'btn btn-info btn-sm';
+    } else {
+        // Start auto-refresh
+        autoRefreshInterval = setInterval(refreshLogs, 10000); // Refresh every 10 seconds
+        isAutoRefreshEnabled = true;
+        button.innerHTML = '<i class="fas fa-stop me-1"></i><span id="auto-refresh-text">Stop Auto-Refresh</span>';
+        button.className = 'btn btn-warning btn-sm';
+    }
+}
+
+function filterLogs(filterType) {
+    const filterInput = document.getElementById('log-filter');
+    const logLines = document.querySelectorAll('.log-line');
+    
+    if (filterType === 'all') {
+        filterInput.value = '';
+        logLines.forEach(line => line.style.display = 'block');
+        return;
+    }
+    
+    filterInput.value = filterType;
+    
+    logLines.forEach(line => {
+        const text = line.textContent.toLowerCase();
+        const filter = filterType.toLowerCase();
+        
+        if (text.includes(filter)) {
+            line.style.display = 'block';
+        } else {
+            line.style.display = 'none';
+        }
+    });
+}
+
+// Real-time filter as user types
+document.addEventListener('DOMContentLoaded', function() {
+    const filterInput = document.getElementById('log-filter');
+    
+    if (filterInput) {
+        filterInput.addEventListener('input', function() {
+            const filterText = this.value.toLowerCase();
+            const logLines = document.querySelectorAll('.log-line');
+            
+            logLines.forEach(line => {
+                const text = line.textContent.toLowerCase();
+                
+                if (filterText === '' || text.includes(filterText)) {
+                    line.style.display = 'block';
+                } else {
+                    line.style.display = 'none';
+                }
+            });
+        });
+    }
+    
+    // Auto-scroll to bottom on page load
+    const logContainer = document.getElementById('log-container');
+    if (logContainer) {
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // Ctrl+R or F5 to refresh
+    if ((e.ctrlKey && e.key === 'r') || e.key === 'F5') {
+        e.preventDefault();
+        refreshLogs();
+    }
+    
+    // Ctrl+F to focus filter
+    if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        document.getElementById('log-filter').focus();
+    }
+});
+</script>
+{% endblock %}

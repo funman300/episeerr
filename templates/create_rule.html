@@ -58,42 +58,45 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="mb-3">
-                                        <label for="keep_unwatched_days" class="form-label">
-                                            Inactivity Timer (days)
+                                        <label for="grace_days" class="form-label">
+                                            Grace Period (days)
                                             <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                               title="Delete kept content if no episodes are watched for X days. Leave empty to disable."></i>
+                                            title="After watching an episode, keep the watched content (keep block) for X days before deleting it. Leave empty to keep forever."></i>
                                         </label>
-                                        <input type="number" class="form-control" id="keep_unwatched_days" 
-                                               name="keep_unwatched_days" min="1" placeholder="Leave empty to disable">
+                                        <input type="number" class="form-control" id="grace_days" 
+                                            name="grace_days" min="1" placeholder="Leave empty to keep forever">
                                         <div class="form-text text-muted">
-                                            <small>Example: "7" = Delete if no episodes watched for 7 days</small>
+                                            <small>Example: "7" = Keep watched episodes for 7 days after watching, then delete them</small>
                                         </div>
                                     </div>
 
                                     <div class="mb-3">
-                                        <label for="keep_watched_days" class="form-label">
-                                            Grace Period (days)
+                                        <label for="dormant_days" class="form-label">
+                                            Dormant Timer (days)
                                             <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                               title="Keep content for X days after watching, then apply normal cleanup. Leave empty to keep forever."></i>
+                                            title="If no episodes are watched for X days, delete ALL episodes and reset the show to clean slate. Leave empty to disable."></i>
                                         </label>
-                                        <input type="number" class="form-control" id="keep_watched_days" 
-                                               name="keep_watched_days" min="1" placeholder="Leave empty to keep forever">
+                                        <input type="number" class="form-control" id="dormant_days" 
+                                            name="dormant_days" min="1" placeholder="Leave empty to disable">
                                         <div class="form-text text-muted">
-                                            <small>Example: "30" = Keep for 30 days after watching</small>
+                                            <small>Example: "30" = If unwatched for 30 days, delete everything and reset show</small>
                                         </div>
                                     </div>
 
                                     <div class="alert alert-info alert-sm">
                                         <small>
                                             <p><strong>⚠️ **USE AT YOUR OWN RISK** ⚠️</strong></p>
-                                                <ul>
-                                                    <li>will permanently delete your media files!</li>
-                                                    
-                                                </ul>
-                                            <strong>How it works:</strong><br>
-                                            • <strong>Inactivity Timer:</strong> "Use it or lose it" - content is deleted if not watched<br>
-                                            • <strong>Grace Period:</strong> Delay before normal cleanup after watching<br>
-                                            • Both respect your "keep watched" setting above
+                                            <p>This will permanently delete your media files!</p>
+                                            
+                                            <strong>How Your Two-Timer System Works:</strong><br>
+                                            • <strong>Immediate Deletion:</strong> When you watch an episode, old episodes are deleted immediately based on your "keep watched" setting<br>
+                                            • <strong>Grace Period:</strong> After X days, delete the watched content (your keep block)<br>
+                                            • <strong>Dormant Timer:</strong> After Y days of no activity, delete everything and reset show to clean slate<br><br>
+                                            
+                                            <strong>Example with keep: 3, grace: 7, dormant: 30:</strong><br>
+                                            1. Watch E5 → Keep E3,E4,E5 + Get E6,E7,E8 + Delete E1,E2 (immediate)<br>
+                                            2. After 7 days → Delete E3,E4,E5 (grace cleanup)<br>
+                                            3. After 30 days → Delete E6,E7,E8 + unmonitor everything (dormant cleanup)
                                         </small>
                                     </div>
                                 </div>
