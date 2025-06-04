@@ -5,7 +5,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -181,15 +181,10 @@ def update_activity_date(series_id, season_number=None, episode_number=None, tim
 
 ## new activity date methods
 def get_activity_date_with_hierarchy(series_id, series_title=None):
-    """
-    Get activity date using hierarchy:
-    1. Config.json activity_date
-    2. Tautulli last watched 
-    3. Jellyfin last watched
-    4. Sonarr latest file date
-    5. 30-day fallback
-    """
-    # First check config.json
+    """Get activity date using hierarchy: config.json, Tautulli, Jellyfin, Sonarr - FIXED VERSION."""
+    logger.info(f"🔍 Getting activity date for series {series_id} ({series_title})")
+    
+    # Step 1: Check config.json
     config = load_config()
     for rule_name, rule_details in config['rules'].items():
         series_dict = rule_details.get('series', {})
@@ -197,40 +192,50 @@ def get_activity_date_with_hierarchy(series_id, series_title=None):
         if isinstance(series_data, dict):
             activity_date = series_data.get('activity_date')
             if activity_date:
-                logger.info(f"Using config activity date for series {series_id}: {datetime.fromtimestamp(activity_date)}")
+                logger.info(f"✅ Using config activity date for series {series_id}: {datetime.fromtimestamp(activity_date)}")
                 return activity_date
     
-    logger.info(f"No config activity date for series {series_id}, checking external sources...")
+    logger.info(f"⚠️  No config activity date for series {series_id}")
     
-    # Check Tautulli
+    # Get Sonarr title if not provided
+    if not series_title:
+        try:
+            headers = {'X-Api-Key': SONARR_API_KEY}
+            response = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers, timeout=5)
+            if response.ok:
+                series_title = response.json().get('title')
+                logger.info(f"Retrieved Sonarr title: {series_title}")
+        except Exception as e:
+            logger.warning(f"Failed to get Sonarr title for series {series_id}: {str(e)}")
+    
+    # Step 2: Check Tautulli (only once)
     if series_title:
+        logger.info(f"🔍 Checking Tautulli for '{series_title}'")
         tautulli_date = get_tautulli_last_watched(series_title)
         if tautulli_date:
-            logger.info(f"Using Tautulli date for series {series_id}: {datetime.fromtimestamp(tautulli_date)}")
-            # Update config with this date
-            update_activity_date(series_id, timestamp=tautulli_date)
+            logger.info(f"✅ Using Tautulli date for series {series_id}: {datetime.fromtimestamp(tautulli_date)}")
             return tautulli_date
+        logger.info(f"⚠️  No Tautulli date found for series {series_id}")
     
-    # Check Jellyfin
+    # Step 3: Check Jellyfin (only once)
     if series_title:
+        logger.info(f"🔍 Checking Jellyfin for '{series_title}'")
         jellyfin_date = get_jellyfin_last_watched(series_title)
         if jellyfin_date:
-            logger.info(f"Using Jellyfin date for series {series_id}: {datetime.fromtimestamp(jellyfin_date)}")
-            update_activity_date(series_id, timestamp=jellyfin_date)
+            logger.info(f"✅ Using Jellyfin date for series {series_id}: {datetime.fromtimestamp(jellyfin_date)}")
             return jellyfin_date
+        logger.info(f"⚠️  No Jellyfin date found for series {series_id}")
     
-    # Check Sonarr file dates
+    # Step 4: Check Sonarr episode file dates (FIXED)
+    logger.info(f"🔍 Checking Sonarr file dates for series {series_id}")
     sonarr_date = get_sonarr_latest_file_date(series_id)
     if sonarr_date:
-        logger.info(f"Using Sonarr file date for series {series_id}: {datetime.fromtimestamp(sonarr_date)}")
-        update_activity_date(series_id, timestamp=sonarr_date)
+        logger.info(f"✅ Using Sonarr file date for series {series_id}: {datetime.fromtimestamp(sonarr_date)}")
         return sonarr_date
     
-    # Fallback to 30 days ago
-    fallback_date = int((datetime.now() - timedelta(days=30)).timestamp())
-    logger.info(f"Using 30-day fallback for series {series_id}: {datetime.fromtimestamp(fallback_date)}")
-    update_activity_date(series_id, timestamp=fallback_date)
-    return fallback_date
+    logger.warning(f"⚠️  No activity date found for series {series_id}")
+    return None
+    
 
 def find_episodes_to_delete_immediate(all_episodes, keep_watched, last_watched_season, last_watched_episode):
     """
@@ -580,318 +585,369 @@ def fetch_all_episodes(series_id):
 # fallback dates
 
 def get_tautulli_last_watched(series_title):
-    """Get last watched date from Tautulli for this series - with enhanced debugging."""
+    """Get last watched date from Tautulli - OPTIMIZED VERSION."""
     try:
         tautulli_url = os.getenv('TAUTULLI_URL')
         tautulli_api_key = os.getenv('TAUTULLI_API_KEY')
         
         if not tautulli_url or not tautulli_api_key:
-            print(f"   ⚠️  Tautulli not configured (URL: {bool(tautulli_url)}, API: {bool(tautulli_api_key)})")
+            logger.warning(f"Tautulli not configured")
             return None
         
-        print(f"   🔍 Querying Tautulli for series: '{series_title}' at {tautulli_url}")
+        def normalize_title(title):
+            title = title.lower()
+            title = re.sub(r'\s*\(\d{4}\)', '', title)  # Remove year
+            title = re.sub(r'[^\w\s]', ' ', title)      # Remove special chars
+            return ' '.join(title.split())
         
-        # Try multiple variations of the title
+        normalized_series_title = normalize_title(series_title)
+        
+        # Create smart title variations
         title_variations = [
-            series_title,
-            series_title.replace(": ", " - "),  # e.g., "Daredevil: Born Again" -> "Daredevil - Born Again"
-            series_title.replace(": ", " "),    # e.g., "Daredevil: Born Again" -> "Daredevil Born Again"
-            "Marvel's " + series_title          # e.g., "Marvel's Daredevil: Born Again"
+            series_title,                                    # Original
+            re.sub(r'\s*\(\d{4}\)', '', series_title),      # No year
+            series_title.replace(": ", " - "),              # Colon variants
+            series_title.replace(": ", " "),
+            series_title.split(" (")[0],                     # Before parentheses
         ]
         
-        for search_title in title_variations:
-            print(f"   🔍 Trying title variation: '{search_title}'")
+        # Try each variation (but limit API calls)
+        for search_title in set(title_variations[:3]):  # Limit to top 3 variations
+            normalized_search = normalize_title(search_title)
+            logger.debug(f"Trying Tautulli title: '{search_title}'")
+            
             params = {
                 'apikey': tautulli_api_key,
                 'cmd': 'get_history',
+                'media_type': 'episode',
                 'search': search_title,
-                # Remove media_type filter to catch more entries
-                'length': 1  # Get the most recent entry
-                # Optionally add 'user_id' if you want to filter by a specific user
-                # 'user_id': '12345'
+                'length': 1
             }
             
             response = requests.get(f"{tautulli_url}/api/v2", params=params, timeout=10)
             
             if not response.ok:
-                print(f"   ❌ Tautulli API error: {response.status_code}")
+                logger.warning(f"Tautulli API error: {response.status_code}")
                 continue
                 
             data = response.json()
-            print(f"   📊 Tautulli API raw response: {data}")
             
             if data.get('response', {}).get('result') != 'success':
-                print(f"   ❌ Tautulli API result: {data.get('response', {}).get('result')}")
                 continue
             
             history = data.get('response', {}).get('data', {}).get('data', [])
-            print(f"   📊 Found {len(history)} history entries for '{search_title}'")
             
             if not history:
                 continue
                 
             most_recent = history[0]
-            print(f"   📊 Most recent history entry: {most_recent}")
+            entry_title = most_recent.get('grandparent_title', '')
+            normalized_entry = normalize_title(entry_title)
             
-            # Check for multiple possible date fields
-            last_watched = most_recent.get('date') or most_recent.get('watched_at') or most_recent.get('last_watched')
-            
-            if last_watched:
-                try:
-                    timestamp = int(last_watched)
-                    print(f"   ✅ Most recent watch: {timestamp} ({datetime.fromtimestamp(timestamp)})")
-                    return timestamp
-                except (ValueError, TypeError):
-                    print(f"   ⚠️  Invalid date format: {last_watched}")
-                    continue
-            else:
-                print(f"   ⚠️  No date field in history entry")
+            # Check if titles match
+            if (normalized_entry == normalized_search or 
+                normalized_entry in normalized_series_title or 
+                normalized_series_title in normalized_entry):
+                
+                last_watched = most_recent.get('date')
+                
+                if last_watched:
+                    try:
+                        timestamp = int(last_watched)
+                        logger.info(f"Found Tautulli watch for '{entry_title}': {datetime.fromtimestamp(timestamp)}")
+                        return timestamp
+                    except (ValueError, TypeError):
+                        continue
         
-        print(f"   ⚠️  No watch history found after trying all title variations")
+        logger.info(f"No Tautulli watch history found for '{series_title}'")
+        return None
         
     except requests.exceptions.Timeout:
-        print(f"   ⏰ Tautulli timeout")
+        logger.error(f"Tautulli timeout for series '{series_title}'")
+        return None
     except Exception as e:
-        print(f"   ❌ Tautulli error: {str(e)}")
-    
-    return None
+        logger.error(f"Tautulli error for series '{series_title}': {str(e)}")
+        return None
+
+def get_jellyfin_user_id(jellyfin_url, jellyfin_api_key, username):
+    """Get Jellyfin User ID (GUID) from username."""
+    try:
+        headers = {'X-Emby-Token': jellyfin_api_key}
+        response = requests.get(f"{jellyfin_url}/Users", headers=headers, timeout=10)
+        
+        if response.ok:
+            users = response.json()
+            for user in users:
+                if user.get('Name', '').lower() == username.lower():
+                    user_id = user.get('Id')
+                    logger.info(f"Found Jellyfin User ID for '{username}': {user_id}")
+                    return user_id
+            
+            logger.warning(f"Username '{username}' not found in Jellyfin users")
+            # Log available usernames for debugging
+            available_users = [user.get('Name', 'Unknown') for user in users]
+            logger.debug(f"Available Jellyfin users: {available_users}")
+        else:
+            logger.warning(f"Failed to get Jellyfin users: {response.status_code}")
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting Jellyfin User ID: {str(e)}")
+        return None
 
 def get_jellyfin_last_watched(series_title):
-    """Get last watched date from Jellyfin for this series - with debug output."""
+    """Get last watched date from Jellyfin - FIXED USER ID VERSION."""
     try:
         jellyfin_url = os.getenv('JELLYFIN_URL')
         jellyfin_api_key = os.getenv('JELLYFIN_API_KEY')
-        jellyfin_user_id = os.getenv('JELLYFIN_USER_ID')
+        jellyfin_user_input = os.getenv('JELLYFIN_USER_ID')  # Could be username or GUID
         
-        if not all([jellyfin_url, jellyfin_api_key, jellyfin_user_id]):
-            missing = []
-            if not jellyfin_url: missing.append("URL")
-            if not jellyfin_api_key: missing.append("API_KEY")
-            if not jellyfin_user_id: missing.append("USER_ID")
-            print(f"   ⚠️  Jellyfin not fully configured - missing: {', '.join(missing)}")
+        if not all([jellyfin_url, jellyfin_api_key, jellyfin_user_input]):
+            logger.warning("Jellyfin not configured")
             return None
         
-        print(f"   🔍 Querying Jellyfin: {jellyfin_url}")
+        # Check if the user input is already a GUID (contains hyphens) or a username
+        if '-' in jellyfin_user_input and len(jellyfin_user_input) > 30:
+            # Looks like a GUID already
+            jellyfin_user_id = jellyfin_user_input
+            logger.debug(f"Using provided GUID: {jellyfin_user_id}")
+        else:
+            # Looks like a username, convert to GUID
+            logger.debug(f"Converting username '{jellyfin_user_input}' to User ID")
+            jellyfin_user_id = get_jellyfin_user_id(jellyfin_url, jellyfin_api_key, jellyfin_user_input)
+            
+            if not jellyfin_user_id:
+                logger.warning(f"Could not find User ID for username '{jellyfin_user_input}'")
+                return None
         
-        # Search for the series
-        search_params = {
-            'api_key': jellyfin_api_key,
-            'searchTerm': series_title,
+        def normalize_title(title):
+            title = title.lower()
+            title = re.sub(r'\s*\(\d{4}\)', '', title)  # Remove year
+            title = re.sub(r'[^\w\s]', ' ', title)      # Remove special chars
+            return ' '.join(title.split())
+        
+        headers = {'X-Emby-Token': jellyfin_api_key}
+        
+        # Use the correct Jellyfin API endpoint with proper User ID
+        params = {
             'IncludeItemTypes': 'Series',
-            'Limit': 5
+            'Recursive': 'true',
+            'Fields': 'UserData'
         }
         
-        search_response = requests.get(f"{jellyfin_url}/Items", params=search_params, timeout=10)
-        if not search_response.ok:
-            print(f"   ❌ Jellyfin search failed: {search_response.status_code}")
+        # Try the user-specific endpoint with the GUID
+        response = requests.get(f"{jellyfin_url}/Users/{jellyfin_user_id}/Items", 
+                              headers=headers, params=params, timeout=10)
+        
+        if not response.ok:
+            logger.warning(f"Jellyfin API error: {response.status_code} - {response.text[:200]}")
             return None
             
-        search_data = search_response.json()
-        series_items = search_data.get('Items', [])
-        print(f"   📊 Found {len(series_items)} series matches")
+        data = response.json()
+        items = data.get('Items', [])
+        logger.debug(f"Jellyfin found {len(items)} series for user {jellyfin_user_input}")
         
-        # Find exact or close match
-        series_item = None
-        for item in series_items:
+        normalized_series_title = normalize_title(series_title)
+        
+        for item in items:
             item_name = item.get('Name', '')
-            print(f"   🔍 Checking: '{item_name}' vs '{series_title}'")
-            if item_name.lower() == series_title.lower():
-                series_item = item
-                print(f"   ✅ Exact match found")
-                break
-            elif series_title.lower() in item_name.lower() or item_name.lower() in series_title.lower():
-                series_item = item
-                print(f"   ✅ Partial match found")
-                # Continue looking for exact match, but keep this as backup
-        
-        if not series_item:
-            print(f"   ⚠️  No matching series found in Jellyfin")
-            return None
-        
-        series_id = series_item['Id']
-        print(f"   📺 Using series: {series_item['Name']} (ID: {series_id})")
-        
-        # Get episodes for this series with play state
-        episodes_params = {
-            'api_key': jellyfin_api_key,
-            'ParentId': series_id,
-            'IncludeItemTypes': 'Episode',
-            'Fields': 'UserData',
-            'UserId': jellyfin_user_id
-        }
-        
-        episodes_response = requests.get(f"{jellyfin_url}/Items", params=episodes_params, timeout=10)
-        if not episodes_response.ok:
-            print(f"   ❌ Failed to get episodes: {episodes_response.status_code}")
-            return None
+            normalized_item = normalize_title(item_name)
             
-        episodes_data = episodes_response.json()
-        episodes = episodes_data.get('Items', [])
-        print(f"   📊 Found {len(episodes)} episodes")
-        
-        # Find the most recently watched episode
-        latest_watch = None
-        latest_episode_info = None
-        watched_count = 0
-        
-        for episode in episodes:
-            user_data = episode.get('UserData', {})
-            if user_data.get('Played'):  # Episode was watched
-                watched_count += 1
+            # Check for title match with flexible matching
+            if (normalized_series_title == normalized_item or
+                normalized_series_title in normalized_item or 
+                normalized_item in normalized_series_title):
+                
+                logger.debug(f"Matched Jellyfin series: '{item_name}'")
+                
+                user_data = item.get('UserData', {})
                 last_played = user_data.get('LastPlayedDate')
+                
                 if last_played:
                     try:
-                        # Parse Jellyfin date format
-                        timestamp = int(datetime.fromisoformat(last_played.replace('Z', '+00:00')).timestamp())
+                        # Handle Jellyfin's ISO date format
+                        if last_played.endswith('Z'):
+                            dt = datetime.fromisoformat(last_played.replace('Z', '+00:00'))
+                        else:
+                            dt = datetime.fromisoformat(last_played)
                         
-                        episode_name = episode.get('Name', 'Unknown')
-                        season_num = episode.get('ParentIndexNumber', 0)
-                        episode_num = episode.get('IndexNumber', 0)
-                        
-                        if not latest_watch or timestamp > latest_watch:
-                            latest_watch = timestamp
-                            latest_episode_info = f"S{season_num}E{episode_num} - {episode_name}"
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
                             
-                    except Exception as e:
-                        print(f"   ⚠️  Date parse error: {str(e)}")
+                        timestamp = int(dt.timestamp())
+                        logger.info(f"Found Jellyfin LastPlayedDate for '{item_name}': {dt}")
+                        return timestamp
+                        
+                    except ValueError as e:
+                        logger.warning(f"Invalid Jellyfin LastPlayedDate format: {last_played} - {e}")
                         continue
         
-        print(f"   📊 {watched_count} watched episodes found")
-        
-        if latest_watch:
-            print(f"   ✅ Most recent watch: {latest_episode_info}")
-            print(f"   📆 Date: {datetime.fromtimestamp(latest_watch)}")
-            return latest_watch
-        else:
-            print(f"   ⚠️  No watched episodes found")
+        logger.info(f"No Jellyfin watch history found for '{series_title}'")
+        return None
         
     except requests.exceptions.Timeout:
-        print(f"   ⏰ Jellyfin timeout")
+        logger.error(f"Jellyfin timeout for series '{series_title}'")
+        return None
     except Exception as e:
-        print(f"   ❌ Jellyfin error: {str(e)}")
-    
-    return None
+        logger.error(f"Jellyfin error for series '{series_title}': {str(e)}")
+        return None
 
 def get_sonarr_latest_file_date(series_id):
-    """Get the most recent episode file date from Sonarr - with debug output."""
+    """Get the most recent episode file date from Sonarr - FIXED VERSION."""
     try:
         headers = {'X-Api-Key': SONARR_API_KEY}
+        logger.info(f"Getting episode file dates for series {series_id}")
         
-        print(f"   🔍 Getting episode file dates for series {series_id}")
+        # Use the correct endpoint for episode files
+        response = requests.get(f"{SONARR_URL}/api/v3/episodefile?seriesId={series_id}", headers=headers, timeout=10)
         
-        # Get all episodes for the series
-        response = requests.get(f"{SONARR_URL}/api/v3/episode?seriesId={series_id}", headers=headers, timeout=10)
         if not response.ok:
-            print(f"   ❌ Failed to get episodes: {response.status_code}")
+            logger.error(f"Failed to get episode files for series {series_id}: {response.status_code}")
             return None
         
-        episodes = response.json()
-        print(f"   📊 Found {len(episodes)} total episodes")
+        episode_files = response.json()
+        logger.debug(f"Sonarr found {len(episode_files)} episode files")
         
-        episodes_with_files = [ep for ep in episodes if ep.get('hasFile')]
-        print(f"   📊 Found {len(episodes_with_files)} episodes with files")
-        
-        if not episodes_with_files:
-            print(f"   ⚠️  No episode files found")
+        if not episode_files:
+            logger.warning(f"No episode files found for series {series_id}")
             return None
         
         latest_file_date = None
         latest_episode_info = None
         
-        # Check each episode file - ENHANCED DATE PARSING
-        for episode in episodes_with_files[:5]:  # Show first 5 for debugging
-            if episode.get('episodeFile'):
-                date_added_str = episode['episodeFile'].get('dateAdded')
-                season = episode.get('seasonNumber')
-                ep_num = episode.get('episodeNumber')
-                
-                print(f"     📅 S{season}E{ep_num}: dateAdded = '{date_added_str}'")
-                
-                if date_added_str:
-                    try:
-                        # Parse the date string with multiple fallback methods
-                        import re
-                        
-                        timestamp = None
-                        
-                        # Method 1: ISO format with Z
-                        if date_added_str.endswith('Z'):
-                            try:
-                                dt = datetime.fromisoformat(date_added_str.replace('Z', '+00:00'))
-                                timestamp = int(dt.timestamp())
-                                print(f"       ✅ Parsed with Method 1 (ISO+Z): {timestamp}")
-                            except:
-                                pass
-                        
-                        # Method 2: Direct ISO format
-                        if not timestamp:
-                            try:
-                                dt = datetime.fromisoformat(date_added_str)
-                                timestamp = int(dt.timestamp())
-                                print(f"       ✅ Parsed with Method 2 (ISO): {timestamp}")
-                            except:
-                                pass
-                        
-                        # Method 3: Strip milliseconds if present
-                        if not timestamp and '.' in date_added_str:
-                            try:
-                                # Remove microseconds: 2024-05-15T10:30:00.123Z -> 2024-05-15T10:30:00Z
-                                clean_date = re.sub(r'\.\d+', '', date_added_str)
-                                if clean_date.endswith('Z'):
-                                    clean_date = clean_date.replace('Z', '+00:00')
-                                dt = datetime.fromisoformat(clean_date)
-                                timestamp = int(dt.timestamp())
-                                print(f"       ✅ Parsed with Method 3 (no-ms): {timestamp}")
-                            except:
-                                pass
-                        
-                        # Method 4: Manual parsing as last resort
-                        if not timestamp:
-                            try:
-                                # Try to extract year, month, day, hour, minute, second
-                                match = re.match(r'(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})', date_added_str)
-                                if match:
-                                    year, month, day, hour, minute, second = map(int, match.groups())
-                                    dt = datetime(year, month, day, hour, minute, second)
-                                    timestamp = int(dt.timestamp())
-                                    print(f"       ✅ Parsed with Method 4 (manual): {timestamp}")
-                            except:
-                                pass
-                        
-                        if timestamp:
-                            print(f"       📆 Human date: {datetime.fromtimestamp(timestamp)}")
-                            
-                            if not latest_file_date or timestamp > latest_file_date:
-                                latest_file_date = timestamp
-                                latest_episode_info = f"S{season}E{ep_num}"
-                        else:
-                            print(f"       ❌ All parsing methods failed for: '{date_added_str}'")
-                            
-                    except Exception as e:
-                        print(f"       ❌ Date parse error: {str(e)}")
-                        continue
+        for file_data in episode_files:
+            season = file_data.get('seasonNumber')
+            
+            # Get episode numbers from the episodes array
+            episodes = file_data.get('episodes', [])
+            if episodes:
+                episode_numbers = [ep.get('episodeNumber') for ep in episodes]
+                ep_display = f"E{min(episode_numbers)}" if episode_numbers else "E?"
+            else:
+                ep_display = "E?"
+            
+            date_added_str = file_data.get('dateAdded')
+            logger.debug(f"S{season}{ep_display}: dateAdded = '{date_added_str}'")
+            
+            if not date_added_str:
+                logger.warning(f"Missing dateAdded for S{season}{ep_display}")
+                continue
+            
+            timestamp = parse_date_fixed(date_added_str, f"S{season}{ep_display}")
+            
+            if timestamp:
+                if not latest_file_date or timestamp > latest_file_date:
+                    latest_file_date = timestamp
+                    latest_episode_info = f"S{season}{ep_display}"
+            else:
+                logger.error(f"Failed to parse dateAdded for S{season}{ep_display}: '{date_added_str}'")
         
         if latest_file_date:
-            print(f"   ✅ Latest file: {latest_episode_info} at {datetime.fromtimestamp(latest_file_date)}")
+            logger.info(f"Latest file: {latest_episode_info} at {datetime.fromtimestamp(latest_file_date, tz=timezone.utc)} UTC")
             return latest_file_date
         else:
-            print(f"   ⚠️  Could not parse any episode file dates")
+            logger.warning(f"No valid episode file dates found for series {series_id}")
             return None
             
     except requests.exceptions.Timeout:
-        print(f"   ⏰ Sonarr timeout")
+        logger.error(f"Sonarr timeout for series {series_id}")
+        return None
     except Exception as e:
-        print(f"   ❌ Sonarr error: {str(e)}")
+        logger.error(f"Sonarr error for series {series_id}: {str(e)}")
+        return None
+
+def parse_date_fixed(date_str, context):
+    """Parse date string with multiple formats - FIXED VERSION."""
+    try:
+        # Method 1: Handle Z suffix (UTC)
+        if date_str.endswith('Z'):
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            timestamp = int(dt.timestamp())
+            logger.debug(f"Parsed {context} ISO+Z: {timestamp} ({dt})")
+            return timestamp
+        
+        # Method 2: Try direct ISO parsing
+        try:
+            dt = datetime.fromisoformat(date_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            timestamp = int(dt.timestamp())
+            logger.debug(f"Parsed {context} ISO: {timestamp} ({dt})")
+            return timestamp
+        except ValueError:
+            pass
+        
+        # Method 3: Strip milliseconds and try again
+        if '.' in date_str:
+            clean_date = re.sub(r'\.\d+', '', date_str)
+            if clean_date.endswith('Z'):
+                clean_date = clean_date.replace('Z', '+00:00')
+            try:
+                dt = datetime.fromisoformat(clean_date)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                timestamp = int(dt.timestamp())
+                logger.debug(f"Parsed {context} no-ms: {timestamp} ({dt})")
+                return timestamp
+            except ValueError:
+                pass
+        
+        logger.error(f"Could not parse date for {context}: '{date_str}'")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Date parse error for {context}: {str(e)}")
+        return None
+
+def parse_date(date_str, context):
+    """Parse date string with multiple formats."""
+    try:
+        timestamp = None
+        # ISO with Z
+        if date_str.endswith('Z'):
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00')).replace(tzinfo=timezone.utc)
+            timestamp = int(dt.timestamp())
+            print(f"   🔍 Parsed {context} ISO+Z: {timestamp} ({dt})")
+            logger.info(f"Parsed {context} ISO+Z: {timestamp} ({dt})")
+        # Direct ISO
+        if not timestamp:
+            try:
+                dt = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+                timestamp = int(dt.timestamp())
+                print(f"   🔍 Parsed {context} ISO: {timestamp} ({dt})")
+                logger.info(f"Parsed {context} ISO: {timestamp} ({dt})")
+            except ValueError:
+                pass
+        # Strip milliseconds
+        if not timestamp and '.' in date_str:
+            clean_date = re.sub(r'\.\d+', '', date_str)
+            if clean_date.endswith('Z'):
+                clean_date = clean_date.replace('Z', '+00:00')
+            try:
+                dt = datetime.fromisoformat(clean_date).replace(tzinfo=timezone.utc)
+                timestamp = int(dt.timestamp())
+                print(f"   🔍 Parsed {context} no-ms: {timestamp} ({dt})")
+                logger.info(f"Parsed {context} no-ms: {timestamp} ({dt})")
+            except ValueError:
+                pass
+        if timestamp:
+            return timestamp
+        return None
+    except Exception as e:
+        print(f"   ❌ Date parse error for {context}: {str(e)}")
+        logger.error(f"Date parse error for {context}: {str(e)}")
         return None
 
 def get_baseline_date(series_id, series_title=None):
     """
-    Get baseline date using COMPLETE hierarchy:
+    Get baseline date using hierarchy:
     1. OCDarr JSON activity tracking (most accurate recent activity)
     2. Tautulli last watch date (historical watch data)
     3. Jellyfin last watch date (historical watch data)
     4. Sonarr latest episode file date (when content was acquired)
-    5. Reasonable fallback
     """
     
     activity_data = load_activity_tracking()
@@ -945,11 +1001,9 @@ def get_baseline_date(series_id, series_title=None):
     else:
         print(f"⚠️  STEP 4: No Sonarr file dates found")
     
-    # 5. FALLBACK: Use reasonable past date (30 days ago)
-    fallback_date = int((datetime.now() - timedelta(days=30)).timestamp())
-    print(f"⚠️  STEP 5 FALLBACK: Using 30-day fallback: {fallback_date}")
-    print(f"   📆 Date: {datetime.fromtimestamp(fallback_date)}")
-    return fallback_date
+    # 5. NO FALLBACK: Return None if no date is found
+    print(f"⚠️  STEP 5: No valid date found, skipping")
+    return None
 
 
 
@@ -1022,26 +1076,31 @@ def process_episodes_for_webhook(series_id, season_number, episode_number, rule)
 # =============================================================================
 
 def check_time_based_cleanup(series_id, rule):
-    """Check if time-based cleanup should be performed using new field names and hierarchy."""
+    """Check if time-based cleanup should be performed - OPTIMIZED VERSION."""
     try:
-        grace_days = rule.get('grace_days')  # NEW FIELD NAME
-        dormant_days = rule.get('dormant_days')  # NEW FIELD NAME
+        grace_days = rule.get('grace_days')
+        dormant_days = rule.get('dormant_days')
         
         if not grace_days and not dormant_days:
             return False, "No time-based cleanup configured"
         
-        # Get series title for external API lookups
+        # Get series title for external API lookups (only once)
         series_title = None
         try:
             headers = {'X-Api-Key': SONARR_API_KEY}
-            response = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers)
+            response = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers, timeout=5)
             if response.ok:
                 series_title = response.json().get('title')
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to get series title: {str(e)}")
         
-        # Get activity date using hierarchy
+        # Get activity date using hierarchy (this calls the fixed function above)
         activity_date = get_activity_date_with_hierarchy(series_id, series_title)
+        
+        if activity_date is None:
+            logger.info(f"Series {series_id}: No activity date found, skipping cleanup")
+            return False, "No activity date available"
+        
         current_time = int(time.time())
         days_since_activity = (current_time - activity_date) / (24 * 60 * 60)
         

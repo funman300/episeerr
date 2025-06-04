@@ -21,9 +21,6 @@
                 "76": {
                     "activity_date": null
                 },
-                "66": {
-                    "activity_date": null
-                },
                 "27": {
                     "activity_date": null
                 },
@@ -58,9 +55,6 @@
                     "activity_date": null
                 },
                 "31": {
-                    "activity_date": null
-                },
-                "19": {
                     "activity_date": null
                 },
                 "63": {
@@ -162,9 +156,6 @@
                 "32": {
                     "activity_date": null
                 },
-                "21": {
-                    "activity_date": null
-                },
                 "91": {
                     "activity_date": null
                 },
@@ -211,14 +202,23 @@
             "action_option": "monitor",
             "keep_watched": "1",
             "monitor_watched": false,
-            "grace_days": null,
-            "dormant_days": null,
+            "grace_days": 1,
+            "dormant_days": 30,
             "series": {
-                "440": {
-                    "activity_date": 1748889167
-                },
                 "411": {
-                    "activity_date": 1748888517
+                    "activity_date": null
+                },
+                "66": {
+                    "activity_date": null
+                },
+                "19": {
+                    "activity_date": null
+                },
+                "440": {
+                    "activity_date": null
+                },
+                "21": {
+                    "activity_date": null
                 }
             },
             "dry_run": false

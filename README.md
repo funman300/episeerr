@@ -91,11 +91,16 @@ Grace Period: null, Dormant Timer: null
 version: '3.8'
 services:
   ocdarr:
-    image: vansmak/ocdarr-lite:beta-2.1.1
+    image: vansmak/ocdarr-lite:latest
     environment:
       - SONARR_URL=http://your-sonarr:8989
       - SONARR_API_KEY=your_api_key
       - CLEANUP_INTERVAL_HOURS=6
+      - TAUTULLI_URL=http://your-TAUTULLI:XXXX
+      - TAUTULLI_API_KEY=your_api_key
+      #OR
+      - JELLYFIN_URL=http://your-JELLYFIN:XXXX
+      - JELLYFIN_API_KEY=your_api_key
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
@@ -168,7 +173,11 @@ Grace Period: 1 day, Dormant Timer: 7 days
 # Required
 SONARR_URL=http://your-sonarr:8989
 SONARR_API_KEY=your_sonarr_api_key
-
+TAUTULLI_URL=http://your-TAUTULLI:XXXX
+TAUTULLI_API_KEY=your_api_key
+#OR
+JELLYFIN_URL=http://your-JELLYFIN:XXXX
+JELLYFIN_API_KEY=your_api_key
 # Optional
 CLEANUP_INTERVAL_HOURS=6    # How often to run time-based cleanup
 LOG_PATH=/app/logs/app.log
