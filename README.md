@@ -1,228 +1,191 @@
-# EpisEERR - Episode Request Manager for Sonarr/Jellyseerr
+
 Support This Project If you find this project helpful, please consider supporting it. Your contributions help maintain and improve the project. Any support is greatly appreciated! ❤️ https://buymeacoffee.com/vansmak Thank you for your support!
 
-EpisEERR is a specialized middleware tool that enhances the integration between Jellyseerr (or Overseerr) and Sonarr by allowing users to request specific episodes rather than entire seasons.
+# Episeerr
 
-## What Problem Does This Solve?
+**Backend episode management system for Sonarr** - Three independent automation solutions.
 
-When users request TV shows in Jellyseerr, it sends the entire season to Sonarr, which downloads all episodes. EpisEERR interrupts this process, allowing you to:
+## What Episeerr Does
 
-1. Select only specific episodes you want
-2. Cancel the full-season request in Jellyseerr
-3. Monitor and search for only your chosen episodes
-4. Request episodes directly via Telegram 
+Episeerr gives you precise control over your TV episodes with three separate systems that can work together or independently:
 
-This is particularly useful for:
-- Reality TV shows where you only want certain episodes
-- Shows with mixed quality episodes
-- Conserving disk space
-- Quick add epecific episoded on the go (via direct Telegram requests)
+### 🎯 **Three Solutions, One App**
 
-## Important Notes Before Using
+| Solution | Purpose | When to Use |
+|----------|---------|-------------|
+| **🎬 Granular Episode Requests** | Select exactly which episodes you want | Want specific episodes, not full seasons |
+| **⚡ Viewing-Based Rules** | Auto-manage episodes when you watch | Want next episode ready, cleanup watched ones |
+| **⏰ Time-Based Cleanup** | Clean up based on age and activity | Want automatic library maintenance |
 
-- **Tag Requirement**: EpisEERR creates a tag in Sonarr called "episodes" which is required for operation
-- **Indexer Impact**: The script may temporarily send searches to your indexers and may initiate downloads (that get cancelled), use delayed profile to prevent this 
+**Use any combination** - or just one solution that fits your needs.
 
-- **Continuous Operation**: The script must be running continuously to catch webhooks
-- **Existing Tags**: This should not affect other tags you may be using in Sonarr
+---
 
-## Features
+## 🎬 Granular Episode Requests
 
-- Intercepts Jellyseerr TV requests via webhook
-- Provides a Telegram interface for episode selection
-- Allows direct episode requests via Telegram (without going through Jellyseerr)
-   - Supports requesting multiple episodes across different seasons
-- Automatically cancels the full season request in Jellyseerr (neccessary or seer app will get confused)
-- Handles only the specific episodes you want
+Select individual episodes across multiple seasons with precision.
 
-## Installation
+**Perfect for:**
+- Getting just pilot episodes to try shows
+- Catching up on specific episodes you missed
+- Managing limited storage with surgical precision
 
-### Prerequisites
+**How it works:**
+1. Request via Episeerr interface or use `episeerr_select` tag in Jellyseerr/Overseerr
+2. Choose seasons and specific episodes
+3. Only selected episodes are monitored and downloaded
 
-- Sonarr
-- Jellyseerr or Overseerr
-- Python 3.7+
-- Telegram Bot 
+---
 
-### Option 1: Manual Installation
+## ⚡ Viewing-Based Rules
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/vansmak/episeerr.git
-   cd episeerr
-   ```
+Episodes automatically managed based on your viewing activity.
 
-2. Install the required Python packages:
-   ```bash
-   pip install -r requirements.txt
-   ```
+**Perfect for:**
+- Always having the next episode ready
+- Automatic cleanup of watched episodes
+- Different strategies for different shows
 
-3. Copy `.env.example` to `.env` and edit it with your configuration:
-   ```bash
-   cp .env.example .env
-   nano .env
-   ```
+**Example rule:** *"Keep last 2 episodes, get next 3, search immediately"*
+- Watch S01E05 → Keeps E04+E05, gets E06+E07+E08, deletes E01+E02+E03
 
-4. Run the script:
-   ```bash
-   python episeerr.py
-   ```
-Systemd Service Setup
+**Requires:** Plex+Tautulli or Jellyfin webhook setup
 
-Create the systemd service file:
+---
 
-```bash
-sudo nano /etc/systemd/system/episeerr.service
-```
-Copy the following content (replace your_username and /path/to/episeerr with your actual username and installation path):
-```
-[Unit]
-Description=EpisEERR - Episode Request Manager for Sonarr/Jellyseerr
-After=network.target
+## ⏰ Time-Based Cleanup
 
-[Service]
-Type=simple
-User=your_username
-WorkingDirectory=/path/to/episeerr
-ExecStart=/usr/bin/python3 /path/to/episeerr/episeerr.py
-Restart=on-failure
-RestartSec=5
+Automatic cleanup based on time and viewing patterns.
 
-[Install]
-WantedBy=multi-user.target
-```
-Reload systemd, enable, and start the service:
-```
-sudo systemctl daemon-reload
-sudo systemctl enable episeerr.service
-sudo systemctl start episeerr.service
+**Perfect for:**
+- Cleaning up shows you've abandoned
+- Maintaining library size automatically
+- Different retention for active vs dormant shows
+
+**Two timers:**
+- **Grace Period:** Cleanup after X days (keeps current viewing context)
+- **Dormant Timer:** Aggressive cleanup after Y days (reclaims storage from abandoned shows)
+
+**No webhooks required** - runs on schedule
+
+---
+
+## 🚀 Quick Start
+
+### Docker Compose
+```yaml
+version: '3.8'
+services:
+  episeerr:
+    image: vansmak/episeerr:latest
+    environment:
+      - SONARR_URL=http://your-sonarr:8989
+      - SONARR_API_KEY=your_api_key
+      - TMDB_API_KEY=your_tmdb_key # For episode selection UI
+      # Optional - for viewing-based rules
+      - TAUTULLI_URL=http://your-tautulli:8181
+      - TAUTULLI_API_KEY=your_tautulli_key
+      # Optional - for request integration  
+      - JELLYSEERR_URL=http://your-jellyseerr:5055
+      - JELLYSEERR_API_KEY=your_jellyseerr_key
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    ports:
+      - "5002:5002"
+    restart: unless-stopped
 ```
 
-### Option 2: Docker Installation
-****untested
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/vansmak/episeerr.git
-   cd episeerr
-   ```
+### Setup
+1. **Configure:** `http://your-server:5002` - Basic web interface for rule management
+2. **Create rules** for automated episode management  
+3. **Assign series** to rules (unassigned series are ignored)
+4. **Optional:** Set up webhooks for viewing-based automation
 
-2. Copy `.env.example` to `.env` and edit with your configuration:
-   ```bash
-   cp .env.example .env
-   nano .env
-   ```
+---
 
-3. Build and start the Docker container:
-   ```bash
-   docker-compose up -d
-   ```
+## 🎛️ Example Configurations
 
-## Configuration
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure the following variables:
-
+### Episode Requests Only
+Perfect for trying new shows or specific episode management.
 ```
-# Sonarr connection details
-SONARR_URL=http://192.168.x.x:8989
-SONARR_API_KEY=your_sonarr_api_key_here
-
-# Overseerr/Jellyseerr connection details
-OVERSEERR_URL=http://192.168.x.x:5055
-OVERSEERR_API_KEY=your_overseerr_api_key_here
-
-# Telegram bot details
-TELEGRAM_TOKEN=your_telegram_bot_token_here
-TELEGRAM_CHAT_ID=your_telegram_chat_id_here
-TELEGRAM_ADMIN_IDS=comma,separated,admin,user,ids
-```
-### Sonarr delayed release profile - this byes time while the script unmonitors episodes so downloads don't start
-1. Settings - profiles - add delay profile 
-2. add a riduculous time like 10519200  # this is just to prevent downloads, it wont dl anything less than 20 years old, its a failsafe
-3. choose episodes tag
-4. do not select bypass
-### Jellyseerr/Overseerr Webhook Setup
-
-1. In Jellyseerr, go to Settings > Notifications
-2. Add a new webhook notification
-3. Set the webhook URL to `http://your-episeerr-ip:5000/webhook`
-4. Enable notifications for "Request Approved"
-5. Save the webhook configuration
-
-### Telegram Bot Setup
-
-1. Create a new bot using [BotFather](https://t.me/botfather) in Telegram
-2. Get your bot token and add it to the `.env` file
-3. Start a chat with your bot
-4. Get your chat ID using [@userinfobot](https://t.me/userinfobot) and add it to `.env`
-5. Add your Telegram user ID to `TELEGRAM_ADMIN_IDS` to allow direct requests
-
-## Usage
-
-### Via Jellyseerr/Overseerr
-
-1. Request a TV show (must be season only) through Jellyseerr and choose the tag "episodes"
-2. Approve the request in Jellyseerr
-3. EpisEERR will intercept the request and send you a Telegram message
-4. Select the specific episodes you want via the Telegram interface
-5. The script will configure Sonarr to download only those episodes
-
-### Via Direct Telegram Requests
-
-You can also request episodes directly through Telegram without going through Jellyseerr:
-
-#### Single Season Request:
-```
-Show Title S01E05
-```
-or
-```
-Show Title S01EP01-03
+No rules needed - just use the episode selection interface
 ```
 
-#### Multi-Season Request:
+### Viewing Rules Only  
+Next episode always ready, automatic cleanup.
 ```
-Show Title S01E01,S01E03,S02E05
-```
-or
-```
-Show Title S01EP01-03,S02EP07,S03EP10-12
+Rule: Get 1, Search, Keep 1
+Webhooks: Tautulli or Jellyfin
+Timers: Disabled
 ```
 
-## Examples
+### Time Cleanup Only
+Hands-off library maintenance.
+```
+Rule: Get all, Monitor, Keep all  
+Grace: 30 days, Dormant: 90 days
+Webhooks: Not needed
+```
 
-### Jellyseerr Workflow
+### Full Automation
+Complete episode lifecycle management.
+```
+Rule: Get 2, Search, Keep 2
+Grace: 7 days, Dormant: 60 days  
+Webhooks: Enabled
+```
 
-1. Request "This show 3" in Jellyseerr
-2. Approve the request
-3. Receive a Telegram message with all episodes from that season
-4. Select episodes 2 and 8 via Telegram
-5. EpisEERR will monitor and search for only episodes 2 and 8
+---
 
-### Direct Telegram Request
+## 🔧 Integration
 
-1. Send a message to your bot: `This show S03E02,S03E05`
-2. The bot finds the show in Sonarr
-3. It monitors and searches for episodes 2 and 5 from season 3
-4. You get a confirmation message when this is complete
+### Sonarr Tags
+- `episeerr_default`: Auto-assigns to default rule when added
+- `episeerr_select`: Triggers episode selection workflow
 
-## Troubleshooting
+### Jellyseerr/Overseerr  
+- Request normally: Gets default rule
+- Request with `episeerr_select` tag: Triggers episode selection
 
-- **Check logs**: Look in the `logs/` directory for `episeerr.log`
-- **Webhook issues**: Ensure your Jellyseerr webhook is properly configured
-- **Telegram issues**: Verify your bot token and chat ID are correct
-- **Sonarr connection**: Check that EpisEERR can reach your Sonarr instance
+### Webhooks *(Optional)*
+- **Tautulli:** `http://your-episeerr:5002/webhook` 
+- **Jellyfin:** `http://your-episeerr:5002/jellyfin-webhook`  
+- **Sonarr:** `http://your-episeerr:5002/sonarr-webhook`
 
-## Contributing
+*Setup guides with templates and screenshots: [OCDarr Webhook Documentation](link-to-ocdarr-guides)*
 
-Contributions are welcome! Feel free to open issues or submit pull requests.
+---
 
-Acknowledgments
+## 🎯 Key Benefits
 
-Original concept and development by vansmak
-Telegram integration and multi-episode functionality developed with assistance from Claude (Anthropic)
+- **🔧 Modular:** Use only the features you need
+- **🎯 Precise:** Episode-level control when you want it
+- **⚡ Responsive:** Next episode ready when you need it  
+- **🧹 Smart:** Different cleanup strategies for different shows
+- **🏠 Respectful:** Only manages assigned series
 
-## License
+---
 
-[MIT License](LICENSE)
+## 📚 Documentation
+
+**Webhook Setup:** Use the detailed guides from [OCDarr Documentation](link-to-ocdarr-webhook-guides) - the webhook configurations are identical.
+
+**Episeerr-Specific:**
+- Rule configuration and management
+- Episode selection workflows  
+- Tag-based automation
+- Time-based cleanup strategies
+
+---
+
+## 🚫 What Episeerr Won't Do
+
+- Manage unassigned series (completely ignores them)
+- Interfere with your existing Sonarr setup
+- Force you to use features you don't want
+- Delete files without clear reasoning (all logged)
+
+---
+
+*Episeerr: Three solutions for episode management - use what you need, when you need it.*
