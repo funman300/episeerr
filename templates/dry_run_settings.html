@@ -1,0 +1,228 @@
+<!-- templates/dry_run_settings.html -->
+{% extends "base.html" %}
+
+{% block title %}Dry Run Settings - OCDarr{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-flask me-2"></i>Dry Run Mode Settings</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle me-2"></i>What is Dry Run Mode?</h6>
+                        <p>Dry run mode allows you to test cleanup logic without actually deleting any files. 
+                           It shows you exactly what <strong>would</strong> be deleted, helping you validate 
+                           your time-based cleanup settings safely.</p>
+                    </div>
+
+                    <div class="card bg-dark border-secondary mb-4">
+                        <div class="card-header bg-secondary">
+                            <h6><i class="fas fa-globe me-2"></i>Global Dry Run Setting</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="global_dry_run" 
+                                       name="global_dry_run" {% if global_dry_run %}checked{% endif %}>
+                                <label class="form-check-label" for="global_dry_run">
+                                    <strong>Enable Global Dry Run Mode</strong>
+                                </label>
+                            </div>
+                            <small class="text-muted">
+                                Note: This reflects the CLEANUP_DRY_RUN environment variable. 
+                                To change the global setting, update your .env file and restart the container.
+                            </small>
+
+                            {% if global_dry_run %}
+                            <div class="alert alert-success mt-2">
+                                <small><i class="fas fa-check me-1"></i>Global dry run is ENABLED - no files will be deleted system-wide</small>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-warning mt-2">
+                                <small><i class="fas fa-exclamation-triangle me-1"></i>Global dry run is DISABLED - cleanup will delete files unless overridden by rule settings</small>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="card bg-dark border-secondary">
+                        <div class="card-header bg-secondary">
+                            <h6><i class="fas fa-cogs me-2"></i>Rule-Specific Dry Run Settings</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><small>Rule-specific settings override the global setting for individual rules.</small></p>
+                            
+                            {% for rule_name, rule_details in config.rules.items() %}
+                            <div class="row mb-3 p-3 border rounded">
+                                <div class="col-md-4">
+                                    <strong>{{ rule_name.replace('_', ' ').title() }}</strong><br>
+                                    <small class="text-muted">{{ rule_details.series|length }} series assigned</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" 
+                                            id="rule_dry_run_{{ rule_name }}" 
+                                            name="rule_dry_run_{{ rule_name }}"
+                                            {% if rule_details.get('dry_run', False) %}checked{% endif %}>
+                                        <label class="form-check-label" for="rule_dry_run_{{ rule_name }}">
+                                            Enable Dry Run
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    {% if rule_details.grace_days or rule_details.dormant_days %}
+                                        <small class="text-info">
+                                            <i class="fas fa-clock me-1"></i>Time-based cleanup enabled
+                                            {% if rule_details.grace_days %}
+                                                <br>Grace Period: {{ rule_details.grace_days }} days
+                                            {% endif %}
+                                            {% if rule_details.dormant_days %}
+                                                <br>Dormant Timer: {{ rule_details.dormant_days }} days
+                                            {% endif %}
+                                        </small>
+                                    {% else %}
+                                        <small class="text-muted">No time-based cleanup</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+
+                            {% if not config.rules %}
+                            <div class="text-muted text-center">
+                                <p>No rules configured yet.</p>
+                                <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">Create First Rule</a>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('scheduler_admin') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Back to Scheduler
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Save Dry Run Settings
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6><i class="fas fa-vial me-2"></i>Test Individual Series</h6>
+            </div>
+            <div class="card-body">
+                <p><small>Test cleanup logic for a specific series without affecting other series.</small></p>
+                
+                <div class="mb-3">
+                    <label for="test-series-id" class="form-label">Series ID</label>
+                    <input type="number" id="test-series-id" class="form-control" placeholder="Enter series ID">
+                </div>
+                
+                <button type="button" class="btn btn-info w-100" onclick="testSeriesCleanup()">
+                    <i class="fas fa-play me-1"></i>Test This Series
+                </button>
+                
+                <div id="test-results" class="mt-3" style="display: none;">
+                    <!-- Test results will appear here -->
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-lightbulb me-2"></i>Dry Run Tips</h6>
+            </div>
+            <div class="card-body">
+                <small>
+                    <ul>
+                        <li><strong>Always test first:</strong> Enable dry run for new rules to see what would be deleted</li>
+                        <li><strong>Check the logs:</strong> Look for "DRY RUN:" messages to see planned deletions</li>
+                        <li><strong>Per-rule control:</strong> You can enable dry run for just specific rules</li>
+                        <li><strong>Safe testing:</strong> No files are ever deleted in dry run mode</li>
+                        <li><strong>Production ready:</strong> Disable dry run only when you're confident in your settings</li>
+                    </ul>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function testSeriesCleanup() {
+    const seriesId = document.getElementById('test-series-id').value;
+    
+    if (!seriesId) {
+        alert('Please enter a series ID');
+        return;
+    }
+    
+    const button = event.target;
+    const originalText = button.innerHTML;
+    const resultsDiv = document.getElementById('test-results');
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Testing...';
+    button.disabled = true;
+    
+    fetch(`/api/test-cleanup/${seriesId}`)
+        .then(response => response.json())
+        .then(data => {
+            resultsDiv.style.display = 'block';
+            
+            if (data.status === 'success') {
+                let alertClass = data.would_cleanup ? 'alert-warning' : 'alert-success';
+                let icon = data.would_cleanup ? 'exclamation-triangle' : 'check';
+                
+                resultsDiv.innerHTML = `
+                    <div class="alert ${alertClass}">
+                        <h6><i class="fas fa-${icon} me-2"></i>Test Results</h6>
+                        <p><strong>Rule:</strong> ${data.rule}</p>
+                        <p><strong>Status:</strong> ${data.message}</p>
+                        ${data.would_cleanup ? 
+                            '<p><small><i class="fas fa-info-circle me-1"></i>Check the logs for detailed information about what would be deleted.</small></p>' : 
+                            '<p><small><i class="fas fa-thumbs-up me-1"></i>No cleanup needed for this series at this time.</small></p>'
+                        }
+                    </div>
+                `;
+                
+                if (data.would_cleanup) {
+                    ocdarrBanner.show(`Test: Series ${seriesId} would trigger cleanup - ${data.reason}`, 'warning', true, 8000);
+                } else {
+                    ocdarrBanner.show(`Test: Series ${seriesId} passes cleanup check`, 'success', true, 5000);
+                }
+            } else {
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-times me-2"></i>Test Failed</h6>
+                        <p>${data.message}</p>
+                    </div>
+                `;
+                ocdarrBanner.show(`Test failed: ${data.message}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6><i class="fas fa-times me-2"></i>Error</h6>
+                    <p>Failed to test series cleanup: ${error.message}</p>
+                </div>
+            `;
+            resultsDiv.style.display = 'block';
+            ocdarrBanner.show('Test failed due to error', 'error');
+        })
+        .finally(() => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
+}
+</script>
+{% endblock %}

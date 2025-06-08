@@ -1,0 +1,702 @@
+/* === Theme Variables === */
+:root {
+    --bg-primary: #0f1419;
+    --bg-secondary: #1a1f24;
+    --bg-card: #242a32;
+    --header-bg: #1a3346;
+    --text-primary: #f5f5f7;
+    --text-secondary: #a0a5ad;
+    --accent-primary: #6366f1;
+    --accent-secondary: #8b5cf6;
+    --accent-success: #34d399;
+    --accent-error: #f87171;
+    --accent-warning: #fbbf24;
+    --border-color: #2e353e;
+    --glass-bg: rgba(36, 42, 50, 0.8);
+    --shadow-light: rgba(99, 102, 241, 0.1);
+    --shadow-dark: rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="night-owl"] {
+    --bg-primary: #011627;
+    --bg-secondary: #0d2231;
+    --bg-card: #1a3346;
+    --header-bg: #0d2231;
+    --text-primary: #d6deeb;
+    --text-secondary: #8badc1;
+    --accent-primary: #82aaff;
+    --accent-secondary: #c792ea;
+    --accent-success: #7fdbca;
+    --accent-error: #ef5350;
+    --accent-warning: #ffeb95;
+    --border-color: #1d3b53;
+    --glass-bg: rgba(26, 51, 70, 0.8);
+    --shadow-light: rgba(130, 170, 255, 0.1);
+    --shadow-dark: rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="nord"] {
+    --bg-primary: #2e3440;
+    --bg-secondary: #3b4252;
+    --bg-card: #434c5e;
+    --header-bg: #3b4252;
+    --text-primary: #eceff4;
+    --text-secondary: #d8dee9;
+    --accent-primary: #88c0d0;
+    --accent-secondary: #81a1c1;
+    --accent-success: #a3be8c;
+    --accent-error: #bf616a;
+    --accent-warning: #ebcb8b;
+    --border-color: #4c566a;
+    --glass-bg: rgba(67, 76, 94, 0.8);
+    --shadow-light: rgba(136, 192, 208, 0.1);
+    --shadow-dark: rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="light-breeze"] {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #e2e8f0;
+    --bg-card: #ffffff;
+    --header-bg: #e2e8f0;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --accent-primary: #3b82f6;
+    --accent-secondary: #8b5cf6;
+    --accent-success: #10b981;
+    --accent-error: #ef4444;
+    --accent-warning: #f59e0b;
+    --border-color: #cbd5e1;
+    --glass-bg: rgba(255, 255, 255, 0.8);
+    --shadow-light: rgba(59, 130, 246, 0.1);
+    --shadow-dark: rgba(0, 0, 0, 0.1);
+}
+
+/* === Base Styles === */
+body {
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+    color: var(--text-primary);
+    min-height: 100vh;
+    transition: all 0.3s ease;
+}
+
+/* OCDarr Banner Styles */
+.ocdarr-banner {
+    position: relative;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 12px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    transition: all 0.3s ease;
+    margin-bottom: 15px;
+}
+
+.banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    position: relative;
+}
+
+.banner-icon {
+    font-size: 16px;
+    margin-right: 10px;
+    font-weight: bold;
+}
+
+.banner-message {
+    flex: 1;
+    text-align: center;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.banner-close {
+    position: absolute;
+    right: 0;
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+    color: inherit;
+}
+
+.banner-close:hover {
+    opacity: 1;
+}
+
+/* Banner type styles */
+.banner-success {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(21, 128, 61, 0.95));
+    color: white;
+}
+
+.banner-info {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(29, 78, 216, 0.95));
+    color: white;
+}
+
+.banner-warning {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.95));
+    color: white;
+}
+
+.banner-error {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(185, 28, 28, 0.95));
+    color: white;
+}
+
+.banner-download {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(109, 40, 217, 0.95));
+    color: white;
+}
+
+.banner-processing {
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.95), rgba(8, 145, 178, 0.95));
+    color: white;
+}
+
+/* === Navbar Styles === */
+.navbar {
+    background: var(--header-bg) !important;
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 2px 20px var(--shadow-dark);
+}
+
+.navbar-brand {
+    display: flex;
+    align-items: center;
+    font-weight: 700;
+    font-size: 1.5rem;
+    color: var(--text-primary) !important;
+    text-decoration: none;
+}
+
+.navbar-brand img {
+    margin-right: 12px;
+    filter: drop-shadow(0 2px 8px var(--shadow-light));
+}
+
+.brand-text {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-family: 'Orbitron', 'SF Pro Display', -apple-system, sans-serif;
+    letter-spacing: -0.5px;
+    font-weight: 800;
+}
+
+.nav-link {
+    color: var(--text-secondary) !important;
+    border-radius: 8px;
+    margin: 0 4px;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.nav-link:hover {
+    color: var(--accent-primary) !important;
+    background: var(--glass-bg);
+    transform: translateY(-1px);
+}
+
+.nav-link.active {
+    color: var(--accent-primary) !important;
+    background: var(--glass-bg);
+}
+
+/* === Card Styles === */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px var(--shadow-dark);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 48px var(--shadow-dark);
+}
+
+.card-header {
+    background: linear-gradient(135deg, var(--glass-bg), transparent);
+    border-bottom: 1px solid var(--border-color);
+    border-radius: 16px 16px 0 0 !important;
+    padding: 1.25rem 1.5rem;
+}
+
+.card-header h5 {
+    color: var(--text-primary);
+    margin: 0;
+    font-weight: 600;
+}
+
+/* === Stats Cards === */
+.stats-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (min-width: 768px) {
+    .stats-row {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+}
+
+/* Override the stats card styles to work with grid */
+.stats-card {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    border: none;
+    cursor: default;
+    user-select: none;
+    width: 100% !important;
+    height: 100%;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px var(--shadow-light);
+    transition: all 0.3s ease;
+}
+
+/* Prevent stats cards from looking clickable */
+.stats-card:hover {
+    transform: none !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+}
+
+.stats-card * {
+    pointer-events: none;
+}
+
+/* Fix stats card text sizes */
+.stats-card h5 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    opacity: 0.9;
+    color: white;
+}
+
+.stats-card h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1;
+    color: white;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.stats-card .card-body {
+    text-align: center;
+    padding: 1rem;
+}
+
+/* Mobile optimizations */
+@media (max-width: 767px) {
+    .stats-card .card-body {
+        padding: 0.75rem;
+    }
+    .stats-card h5 {
+        font-size: 0.8rem;
+        margin-bottom: 0.25rem;
+    }
+    .stats-card h2 {
+        font-size: 1.5rem;
+    }
+    .container {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+}
+
+/* Rule badge */
+.rule-badge {
+    font-size: 0.75rem;
+}
+
+/* Fix regular cards (not stats cards) */
+.card:not(.stats-card):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 48px var(--shadow-dark);
+}
+
+/* === Buttons === */
+.btn {
+    border-radius: 10px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border: none;
+    padding: 0.5rem 1rem;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    color: white;
+    box-shadow: 0 4px 16px var(--shadow-light);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px var(--shadow-light);
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
+}
+
+.btn-success {
+    background: var(--accent-success);
+    color: white;
+}
+
+.btn-danger {
+    background: var(--accent-error);
+    color: white;
+}
+
+.btn-warning {
+    background: var(--accent-warning);
+    color: var(--bg-primary);
+}
+
+.btn-secondary, .btn-outline-light {
+    background: var(--glass-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(10px);
+}
+
+.btn-secondary:hover, .btn-outline-light:hover {
+    background: var(--bg-card);
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+/* === Tables - Enhanced Specificity === */
+.table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--text-primary);
+    --bs-table-border-color: var(--border-color);
+    --bs-table-striped-bg: var(--glass-bg);
+    --bs-table-striped-color: var(--text-primary);
+    --bs-table-active-bg: var(--glass-bg);
+    --bs-table-active-color: var(--text-primary);
+    --bs-table-hover-bg: var(--glass-bg);
+    --bs-table-hover-color: var(--text-primary);
+    color: var(--text-primary) !important;
+    background-color: transparent !important;
+}
+
+.table > :not(caption) > * > * {
+    background-color: var(--bs-table-bg) !important;
+    border-bottom-width: 1px;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+.table-dark {
+    --bs-table-bg: var(--bg-card) !important;
+    --bs-table-striped-bg: var(--glass-bg) !important;
+    --bs-table-striped-color: var(--text-primary) !important;
+    --bs-table-active-bg: var(--glass-bg) !important;
+    --bs-table-active-color: var(--text-primary) !important;
+    --bs-table-hover-bg: var(--glass-bg) !important;
+    --bs-table-hover-color: var(--text-primary) !important;
+    --bs-table-color: var(--text-primary) !important;
+    --bs-table-border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+.table-dark > thead {
+    border-color: var(--border-color) !important;
+}
+
+.table-dark > tbody {
+    border-color: var(--border-color) !important;
+}
+
+.table-dark.table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: var(--glass-bg) !important;
+    color: var(--text-primary) !important;
+}
+
+.table-dark.table-hover > tbody > tr:hover > * {
+    background-color: var(--glass-bg) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Force override Bootstrap table colors */
+table.table-dark th,
+table.table-dark td,
+table.table th,
+table.table td {
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+table.table-dark thead th,
+table.table thead th {
+    background-color: var(--glass-bg) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Series Management Table Specific */
+#seriesTable {
+    background: var(--bg-card) !important;
+}
+
+#seriesTable th {
+    background: var(--glass-bg) !important;
+    color: var(--text-primary) !important;
+}
+
+#seriesTable td {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+}
+
+#seriesTable tr:hover td {
+    background: var(--glass-bg) !important;
+}
+
+/* === Forms === */
+.form-control, .form-select {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    background: var(--bg-card) !important;
+    border-color: var(--accent-primary) !important;
+    color: var(--text-primary) !important;
+    box-shadow: 0 0 0 0.2rem var(--shadow-light) !important;
+}
+
+/* Dropdown menus */
+.dropdown-menu {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+.dropdown-item {
+    color: var(--text-primary) !important;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background: var(--glass-bg) !important;
+    color: var(--accent-primary) !important;
+}
+
+/* Form selects and options */
+select option {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+}
+
+.form-check-input {
+    background-color: var(--bg-card);
+    border-color: var(--border-color);
+}
+
+.form-check-input:checked {
+    background-color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+/* === Badge Styles === */
+.badge {
+    font-weight: 500;
+}
+
+.badge.bg-success {
+    background-color: var(--accent-success) !important;
+}
+
+.badge.bg-danger {
+    background-color: var(--accent-error) !important;
+}
+
+.badge.bg-warning {
+    background-color: var(--accent-warning) !important;
+    color: var(--bg-primary) !important;
+}
+
+.badge.bg-info,
+.badge.bg-primary {
+    background-color: var(--accent-primary) !important;
+}
+
+/* === Theme Selector === */
+.theme-selector {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1000;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 8px 32px var(--shadow-dark);
+    backdrop-filter: blur(10px);
+    min-width: 200px;
+}
+
+.theme-option {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    margin: 0.25rem 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.theme-option:hover {
+    background: var(--glass-bg);
+}
+
+.theme-option.active {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.theme-preview {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    margin-right: 0.75rem;
+    border: 2px solid var(--border-color);
+}
+
+/* === Responsive Design === */
+@media (max-width: 768px) {
+    .stats-row {
+        gap: 0.75rem;
+    }
+    
+    .stats-card .card-body {
+        padding: 1rem;
+    }
+    
+    .stats-card h2 {
+        font-size: 1.8rem;
+    }
+    
+    .theme-selector {
+        right: 10px;
+        top: 70px;
+        min-width: 180px;
+    }
+}
+
+/* === Glass Effect Utilities === */
+.glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+}
+
+.glow {
+    box-shadow: 0 0 20px var(--shadow-light);
+}
+
+/* === Animation Classes === */
+.fade-in {
+    animation: fadeIn 0.6s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-up {
+    animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* === Additional Global Overrides === */
+/* Ensure all text elements use theme colors */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-primary) !important;
+}
+
+p, span, div, label {
+    color: inherit;
+}
+
+/* Ensure links use theme colors */
+a {
+    color: var(--accent-primary);
+}
+
+a:hover {
+    color: var(--accent-secondary);
+}
+
+/* Modal styling */
+.modal-content {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+.modal-header {
+    border-bottom-color: var(--border-color) !important;
+}
+
+.modal-footer {
+    border-top-color: var(--border-color) !important;
+}
+
+/* List groups */
+.list-group-item {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.list-group-item:hover {
+    background: var(--glass-bg) !important;
+}
+
+/* Pagination */
+.page-link {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.page-link:hover {
+    background: var(--glass-bg) !important;
+    color: var(--accent-primary) !important;
+}
+
+.page-item.active .page-link {
+    background: var(--accent-primary) !important;
+    border-color: var(--accent-primary) !important;
+}

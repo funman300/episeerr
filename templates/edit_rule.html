@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Rule - Sonarr Rules Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-edit me-2"></i>Edit Rule: {{ rule_name.replace('_', ' ').title() }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="get_option" class="form-label">How many episodes to get?</label>
+                                <input type="text" class="form-control" id="get_option" name="get_option" 
+                                       value="{{ rule.get_option }}" placeholder="season, all, or a number" required>
+                                <div class="form-text">Examples: "season", "all", "5"</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="action_option" class="form-label">Action for Episodes</label>
+                                <select class="form-select" id="action_option" name="action_option" required>
+                                    <option value="monitor" {% if rule.action_option == 'monitor' %}selected{% endif %}>Monitor</option>
+                                    <option value="search" {% if rule.action_option == 'search' %}selected{% endif %}>Search</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="keep_watched" class="form-label">How many episodes to keep?</label>
+                                <input type="text" class="form-control" id="keep_watched" name="keep_watched" 
+                                       value="{{ rule.keep_watched }}" placeholder="season, all, or a number">
+                                <div class="form-text">Examples: "season", "all", "3"</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="monitor_watched" name="monitor_watched" 
+                                           {% if rule.monitor_watched %}checked{% endif %}>
+                                    <label class="form-check-label" for="monitor_watched">
+                                        Keep monitored if watched
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="alert alert-info">
+                                <strong>Currently assigned to {{ rule.series|length }} series</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card bg-dark border-secondary">
+                                <div class="card-header bg-secondary">
+                                    <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Time-Based Cleanup</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="grace_days" class="form-label">
+                                            Grace Period (days)
+                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                            title="Keep content for X days after watching, then apply normal cleanup. Leave empty to keep forever."></i>
+                                        </label>
+                                        <input type="number" class="form-control" id="grace_days" 
+                                            name="grace_days" min="1" 
+                                            value="{% if rule.grace_days %}{{ rule.grace_days }}{% endif %}"
+                                            placeholder="Leave empty to keep forever">
+                                        <div class="form-text text-muted">
+                                            <small>Example: "7" = Keep for 7 days after watching</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="dormant_days" class="form-label">
+                                            Dormant Timer (days)
+                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                            title="Delete ALL content if no episodes are watched for X days. Leave empty to disable."></i>
+                                        </label>
+                                        <input type="number" class="form-control" id="dormant_days" 
+                                            name="dormant_days" min="1" 
+                                            value="{% if rule.dormant_days %}{{ rule.dormant_days }}{% endif %}"
+                                            placeholder="Leave empty to disable">
+                                        <div class="form-text text-muted">
+                                            <small>Example: "30" = Delete everything if unwatched for 30 days</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-info alert-sm">
+                                        <small>
+                                            <strong>Current Status:</strong><br>
+                                            {% if rule.grace_days %}
+                                                • Grace Period: {{ rule.grace_days }} days<br>
+                                            {% else %}
+                                                • Grace Period: Keep forever<br>
+                                            {% endif %}
+                                            {% if rule.dormant_days %}
+                                                • Dormant Timer: {{ rule.dormant_days }} days<br>
+                                            {% else %}
+                                                • Dormant Timer: Disabled<br>
+                                            {% endif %}
+                                            
+                                            {% if not rule.grace_days and not rule.dormant_days %}
+                                                <span class="text-warning">⚠ No time-based cleanup configured</span>
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Back to Rules
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Update Rule
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

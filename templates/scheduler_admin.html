@@ -1,0 +1,292 @@
+<!-- templates/scheduler_admin.html - Enhanced with dry run management -->
+{% extends "base.html" %}
+
+{% block title %}Scheduler Admin - OCDarr{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-clock me-2"></i>Time-Based Cleanup Scheduler</h5>
+            </div>
+            <div class="card-body">
+                <div id="scheduler-status">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading scheduler status...</p>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <h6>Manual Actions</h6>
+                    <div class="btn-group mb-3">
+                        <button type="button" class="btn btn-primary" onclick="forceCleanup()">
+                            <i class="fas fa-play me-1"></i>Clean Shows Now
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="refreshStatus()">
+                            <i class="fas fa-refresh me-1"></i>Refresh Status
+                        </button>
+                    </div>
+                    
+                    <h6>Safety & Testing</h6>
+                    <div class="btn-group">
+                        <a href="/dry-run-settings" class="btn btn-info">
+                            <i class="fas fa-flask me-1"></i>Dry Run Settings
+                        </a>
+                        <button type="button" class="btn btn-warning" onclick="viewCleanupLogs()">
+                            <i class="fas fa-file-alt me-1"></i>View Cleanup Logs
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6><i class="fas fa-info-circle me-2"></i>How It Works</h6>
+            </div>
+            <div class="card-body">
+                <small>
+                    <p><strong>Your Two-Layer System:</strong></p>
+                    <ul>
+                        <li><strong>Webhook Layer:</strong> When you watch episodes, immediately manages next content and deletes old episodes</li>
+                        <li><strong>Scheduler Layer:</strong> Runs every 6 hours to handle time-based cleanup</li>
+                    </ul>
+                    
+                    <p><strong>Time-Based Cleanup:</strong></p>
+                    <ul>
+                        <li><strong>Grace Period:</strong> Delete watched content after X days of last activity</li>
+                        <li><strong>Dormant Timer:</strong> Delete everything and reset show after Y days of no activity</li>
+                        
+                    </ul>
+                    
+                    <p><strong>Configuration:</strong></p>
+                    <ul>
+                        <li>Set <code>CLEANUP_INTERVAL_HOURS</code> in .env</li>
+                        <li>Configure grace_days and dormant_days in rules</li>
+                        <li>Assign series to rules with time-based settings</li>
+                        <li><strong>Use dry run mode to test safely!</strong></li>
+                    </ul>
+                    
+                    <p><strong>⚠️ **USE AT YOUR OWN RISK** ⚠️</strong></p>
+                    <ul>
+                        <li>Will permanently delete your media files!</li>
+                        <li>Grace period deletes your watched content</li>
+                        <li>Dormant timer resets shows to clean slate</li>
+                        <li>Always test with dry run mode first</li>
+                    </ul>
+                </small>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-chart-line me-2"></i>Recent Activity</h6>
+            </div>
+            <div class="card-body">
+                <div id="recent-activity">
+                    <small class="text-muted">Loading recent cleanup activity...</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Current Status</h6>
+            </div>
+            <div class="card-body">
+                <div id="safety-status">
+                    <small class="text-muted">Loading safety status...</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let schedulerStatusInterval;
+
+function loadSchedulerStatus() {
+    fetch('/api/scheduler-status')
+        .then(response => response.json())
+        .then(data => {
+            updateSchedulerDisplay(data);
+        })
+        .catch(error => {
+            console.error('Error loading scheduler status:', error);
+            document.getElementById('scheduler-status').innerHTML = 
+                '<div class="alert alert-danger">Failed to load scheduler status</div>';
+        });
+}
+
+function updateSchedulerDisplay(status) {
+    const statusDiv = document.getElementById('scheduler-status');
+    
+    let statusBadge, statusText;
+    if (status.status === 'running') {
+        statusBadge = '<span class="badge bg-success">Running</span>';
+        statusText = 'Scheduler is active and monitoring for cleanup conditions.';
+    } else {
+        statusBadge = '<span class="badge bg-danger">Stopped</span>';
+        statusText = 'Scheduler is not running. Cleanup must be performed manually.';
+    }
+    
+    statusDiv.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Status: ${statusBadge}</h6>
+                <p>${statusText}</p>
+            </div>
+            <div class="col-md-6">
+                <table class="table table-sm table-dark">
+                    <tr>
+                        <td>Cleanup Interval:</td>
+                        <td>${status.interval_hours || 'N/A'} hours</td>
+                    </tr>
+                    <tr>
+                        <td>Last Cleanup:</td>
+                        <td>${status.last_cleanup || 'Never'}</td>
+                    </tr>
+                    <tr>
+                        <td>Next Cleanup:</td>
+                        <td>${status.next_cleanup || 'Unknown'}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+function forceCleanup() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Running...';
+    button.disabled = true;
+    
+    fetch('/api/force-cleanup', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            ocdarrBanner.show('Manual cleanup started successfully', 'success');
+            setTimeout(refreshStatus, 2000);
+        } else {
+            ocdarrBanner.show('Failed to start cleanup: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        ocdarrBanner.show('Failed to start cleanup', 'error');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function refreshStatus() {
+    loadSchedulerStatus();
+    loadRecentActivity();
+    loadSafetyStatus();
+    ocdarrBanner.show('Status refreshed', 'info', true, 2000);
+}
+
+function loadRecentActivity() {
+    fetch('/api/recent-cleanup-activity')
+        .then(response => response.json())
+        .then(data => {
+            const activityDiv = document.getElementById('recent-activity');
+            if (data.recentCleanups && data.recentCleanups.length > 0) {
+                let html = '<ul class="list-unstyled">';
+                data.recentCleanups.slice(0, 5).forEach(activity => {
+                    const icon = activity.type === 'Manual' ? 'hand-paper' : 'clock';
+                    html += `<li><small><i class="fas fa-${icon} me-1"></i>${activity.timestamp} - ${activity.type} cleanup</small></li>`;
+                });
+                html += '</ul>';
+                activityDiv.innerHTML = html;
+            } else {
+                activityDiv.innerHTML = '<small class="text-muted">No recent cleanup activity</small>';
+            }
+        })
+        .catch(error => {
+            document.getElementById('recent-activity').innerHTML = 
+                '<small class="text-muted">Unable to load recent activity</small>';
+        });
+}
+
+function loadSafetyStatus() {
+    // Check if dry run is enabled globally
+    const safetyDiv = document.getElementById('safety-status');
+    
+    fetch('/api/safety-status')
+        .then(response => response.json())
+        .then(data => {
+            let html = '<small>';
+            
+            if (data.global_dry_run) {
+                html += '<div class="alert alert-success alert-sm p-2 mb-2">';
+                html += '<i class="fas fa-shield-alt me-1"></i><strong>Global Dry Run: ENABLED</strong><br>';
+                html += 'No files will be deleted system-wide';
+                html += '</div>';
+            } else {
+                html += '<div class="alert alert-warning alert-sm p-2 mb-2">';
+                html += '<i class="fas fa-exclamation-triangle me-1"></i><strong>Live Mode: ACTIVE</strong><br>';
+                html += 'Cleanup will delete files unless overridden by rules';
+                html += '</div>';
+            }
+            
+            if (data.rules_with_dry_run && data.rules_with_dry_run.length > 0) {
+                html += '<div class="mb-2">';
+                html += '<strong>Rules in Dry Run:</strong><br>';
+                data.rules_with_dry_run.forEach(rule => {
+                    html += `<span class="badge bg-info me-1">${rule}</span>`;
+                });
+                html += '</div>';
+            }
+            
+            html += '</small>';
+            safetyDiv.innerHTML = html;
+        })
+        .catch(error => {
+            safetyDiv.innerHTML = '<small class="text-muted">Unable to load safety status</small>';
+        });
+}
+
+function viewCleanupLogs() {
+    // Open cleanup logs in a new window/modal
+    window.open('/cleanup-logs', '_blank');
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadSchedulerStatus();
+    loadRecentActivity();
+    loadSafetyStatus();
+    
+    // Refresh status every 30 seconds
+    schedulerStatusInterval = setInterval(() => {
+        loadSchedulerStatus();
+        loadRecentActivity();
+    }, 30000);
+});
+
+// Cleanup interval when leaving page
+window.addEventListener('beforeunload', function() {
+    if (schedulerStatusInterval) {
+        clearInterval(schedulerStatusInterval);
+    }
+});
+</script>
+{% endblock %}
