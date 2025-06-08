@@ -25,22 +25,44 @@ Every rule has these components:
    - **Action Option:** `search` (download automatically)
    - **Keep Watched:** `1` (keep last watched)
    - **Monitor Watched:** `false` (unmonitor after watching)
-   - **Grace Days:** `7` (cleanup after a week)
-   - **Dormant Days:** `30` (abandon after a month)
+   
+   **Time-Based Cleanup (Optional):**
+   - **Grace Days:** `7` (cleanup after a week) *or leave blank for no cleanup*
+   - **Dormant Days:** `30` (abandon after a month) *or leave blank for no cleanup*
 
 4. **Save the rule**
 5. **Assign series:** Go to Series Management and assign shows to your new rule
 
+> **Note:** Time-based cleanup is completely optional. You can use just viewing-based automation, just time-based cleanup, or both together.
+
 ## Rule Examples
 
-### "Next Episode Ready"
-Perfect for actively watching shows:
+### "Next Episode Ready" (No Cleanup)
+Perfect for actively watching shows without automatic deletion:
 ```
 Get: 1, Search, Keep: 1
 Monitor Watched: false
-Grace: 3 days, Dormant: 14 days
+Grace: null, Dormant: null
 ```
-**Behavior:** Always have next episode ready, quick cleanup
+**Behavior:** Always have next episode ready, no automatic cleanup
+
+### "Viewing Only" (Webhook Automation)
+Episode management based only on viewing activity:
+```
+Get: 3, Search, Keep: 2  
+Monitor Watched: false
+Grace: null, Dormant: null
+```
+**Behavior:** Episodes managed by viewing, no time-based deletion
+
+### "Cleanup Only" (No Viewing Automation)
+Just time-based cleanup without viewing response:
+```
+Get: all, Monitor, Keep: all
+Monitor Watched: true  
+Grace: 14 days, Dormant: 90 days
+```
+**Behavior:** No viewing automation, just scheduled cleanup
 
 ### "Small Buffer" 
 For shows you watch regularly:
@@ -94,19 +116,26 @@ E02 [keep] E03 [keep] E04 [current] E05 [ready] E06 [new!]
 - E01 gets unmonitored/deleted (outside keep block)
 - E06 gets monitored/searched (get option = 2)
 
-## Time-Based Cleanup
+## Time-Based Cleanup (Optional)
 
-Rules can include automatic cleanup based on time:
+Rules can include automatic cleanup based on time. **This is completely optional** - you can use rules without any time-based cleanup.
 
-### Grace Period
+### When to Use Time-Based Cleanup
+- **With viewing automation:** Supplement webhook-based management
+- **Without viewing automation:** Pure time-based library maintenance  
+- **Mixed approach:** Some rules with timers, others without
+
+### Grace Period (Optional)
 **Purpose:** Clean up old episodes while maintaining viewing context
 **Trigger:** X days after watching an episode
 **Behavior:** Removes episodes outside the "keep" block
+**Setting:** Number of days or `null` (disabled)
 
-### Dormant Timer  
+### Dormant Timer (Optional)  
 **Purpose:** Aggressive cleanup for abandoned shows
 **Trigger:** X days with no viewing activity
 **Behavior:** Removes most/all episodes (configurable)
+**Setting:** Number of days or `null` (disabled)
 
 ### Timer Combinations
 
