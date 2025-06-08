@@ -136,8 +136,11 @@ Webhooks: Not needed
 Complete episode lifecycle management.
 ```
 Intercept and manage requests
-Rule: Get 2, Search, Keep 2
-Grace: 7 days, Dormant: 60 days  
+  using tags 
+Create viewing rules
+  Rule: Get 2, Search, Keep 2
+Add cleanup 
+  Grace: 7 days, Dormant: 60 days  
 Webhooks: Enabled
 ```
 
