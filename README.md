@@ -169,13 +169,13 @@ Webhooks: Enabled
 
 ## 📚 Documentation
 
-**Webhook Setup:** Use the detailed guides from [OCDarr Documentation](link-to-ocdarr-webhook-guides) - the webhook configurations are identical.
+**[Complete Documentation →](./docs/)**
 
-**Episeerr-Specific:**
-- Rule configuration and management
-- Episode selection workflows  
-- Tag-based automation
-- Time-based cleanup strategies
+**Quick Links:**
+- [Installation & Setup](./docs/installation.md)
+- [Rules System Guide](./docs/rules-guide.md) 
+- [Episode Selection](./docs/episode-selection.md)
+- [Webhook Setup](./docs/webhooks.md) - Links to OCDarr's detailed guides
 
 ---
 
