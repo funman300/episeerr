@@ -1,14 +1,21 @@
-version: '3'
+version: '3.8'
 
 services:
-  episeerr:
-    build: .
-    container_name: episeerr
-    restart: unless-stopped
-    ports:
-      - "5000:5000"
+  ocdarr-lite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ocdarr-lite
+    env_file:
+      - .env
     volumes:
       - ./logs:/app/logs
-      - ./.env:/app/.env
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./temp:/app/temp
+    ports:
+      - "5002:5002"
+    restart: unless-stopped
     environment:
-      - TZ=UTC
+      - PYTHONUNBUFFERED=1
+    
