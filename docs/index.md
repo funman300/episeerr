@@ -24,8 +24,8 @@ Welcome to the Episeerr documentation. Episeerr provides three independent autom
 
 ## Integration
 
+- [Sonarr Integration](sonarr-integration.md) - Tags, delayed profiles, and webhook setup
 - [Webhook Setup](webhooks.md) - Links to OCDarr's detailed webhook guides
-- [Sonarr Integration](sonarr-integration.md) - Tags, profiles, and automation
 - [API Reference](api-reference.md) - Endpoints and usage
 
 ## Troubleshooting
