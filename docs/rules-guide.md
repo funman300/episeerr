@@ -148,42 +148,50 @@ Rules can include automatic cleanup based on time. **This is completely optional
 
 ## Rule Assignment
 
-### Default Rule (Very Important!)
-The **default rule** is automatically applied to any series that doesn't have a specific rule assigned. This is crucial because:
+## Rule Assignment
 
-- **New series** without tags get the default rule
-- **Sonarr webhook** assigns series with `episeerr_default` tag to default rule
-- **Fallback behavior** for any unassigned series
+### How Rule Assignment Really Works
 
-**Setting the Default Rule:**
-1. Go to Rules section in Episeerr
-2. Use the "Default Rule" dropdown to select which rule should be default
-3. This rule will be applied automatically to new series
+**Important:** Episeerr **only manages series that are explicitly assigned to rules**. Unassigned series are completely ignored.
 
-### Automatic Assignment Methods
+### Default Rule Purpose
+The **default rule** is used for:
+- **Series with `episeerr_default` tag** - automatically assigned via Sonarr webhook
+- **Pilot episode workflow** - when user selects only S01E01, tag is removed and series goes to default rule
+- **NOT for unassigned series** - those are ignored entirely
 
-#### No Tag (Most Common)
-- **Series added normally** → Gets **default rule**
-- **Jellyseerr/Overseerr requests** without tags → Gets **default rule**
-- **Manual Sonarr additions** → Gets **default rule** if Episeerr webhook is set up
+### Assignment Methods
+
+#### No Tag/Manual Addition
+- **Series added normally to Sonarr** → **No Episeerr management** 
+- **Uses standard Sonarr behavior** - Episeerr doesn't touch it
+- **Must manually assign** in Episeerr interface if you want management
 
 #### episeerr_default Tag
-- **Forces assignment** to default rule
+- **Forces assignment** to default rule via Sonarr webhook
 - **Immediate automation** - episodes managed according to default rule settings
-- **Webhook triggers** automatic processing when series is added to Sonarr
+- **Tag removed** after processing
 
 #### episeerr_select Tag  
-- **Bypasses rules** - triggers episode selection workflow instead
-- **Manual control** - user chooses specific episodes
-- **No automatic rule assignment** until tag is removed
+- **Triggers episode selection** workflow
+- **No rule assignment** until user completes selection
+- **Special case:** If only S01E01 selected → tag removed, assigned to default rule
+
+#### Manual Assignment
+- **Use Episeerr interface** to assign specific series to specific rules
+- **One rule per series** - assigning to a different rule replaces the previous assignment
+- **Override method** - works regardless of tags
 
 ### Manual Assignment  
-- Use Episeerr interface to assign specific series to rules
-- Unassigned series are completely ignored
+- **Primary method:** Use Episeerr interface to assign specific series to specific rules
+- **One rule per series:** Each series can only be assigned to one rule at a time
+- **Reassignment:** Assigning to a different rule replaces the previous assignment
+- **Unassigned series:** Completely ignored by Episeerr - use normal Sonarr behavior
 
 ### Tag-Based Assignment
-- `episeerr_default`: Assigns to default rule
-- `episeerr_select`: Triggers episode selection workflow
+- **`episeerr_default`:** Assigns to default rule via webhook
+- **`episeerr_select`:** Triggers episode selection (special case: pilot-only → default rule)
+- **No tag:** Series is ignored by Episeerr unless manually assigned
 
 ## Rule Management
 
