@@ -49,9 +49,9 @@ logger.addHandler(console_handler)
 SONARR_URL = os.getenv('SONARR_URL', 'http://sonarr:8989')
 SONARR_API_KEY = os.getenv('SONARR_API_KEY')
 
-# Global variables
-OCDARR_TAG_ID = None  # Will be set when create_ocdarr_tag() is called
-
+# episeerr_utils.py
+EPISEERR_DEFAULT_TAG_ID = None
+EPISEERR_SELECT_TAG_ID = None
 # Directory to store pending requests
 REQUESTS_DIR = os.path.join(os.getcwd(), 'data', 'requests')
 os.makedirs(REQUESTS_DIR, exist_ok=True)
@@ -60,6 +60,8 @@ os.makedirs(REQUESTS_DIR, exist_ok=True)
 # Format: {series_id: {'title': 'Series Title', 'season': 1, 'episodes': [1, 2, 3, ...]}}
 pending_selections = {}
 
+
+
 def get_sonarr_headers():
     """Get headers for Sonarr API requests."""
     return {
@@ -67,50 +69,124 @@ def get_sonarr_headers():
         'Content-Type': 'application/json'
     }
 
-def create_ocdarr_tag():
-    """Create a single 'ocdarr' tag in Sonarr and return its ID."""
-    global OCDARR_TAG_ID
+def create_episeerr_default_tag():
+    """Create a single 'episeerr_default' tag in Sonarr and return its ID."""
+    global EPISEERR_DEFAULT_TAG_ID
     
-    # If we already found it, return silently (no more spam)
-    if OCDARR_TAG_ID is not None:
-        return OCDARR_TAG_ID
+    if EPISEERR_DEFAULT_TAG_ID is not None:
+        logger.debug(f"'episeerr_default' tag ID already set: {EPISEERR_DEFAULT_TAG_ID}")
+        return EPISEERR_DEFAULT_TAG_ID
     
     try:
         headers = get_sonarr_headers()
-        logger.debug(f"Making request to {SONARR_URL}/api/v3/tag")
+        logger.debug(f"Making GET request to {SONARR_URL}/api/v3/tag to fetch existing tags")
        
-        # Get existing tags
-        tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers)
+        tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
        
         if not tags_response.ok:
-            logger.error(f"Failed to get tags. Status: {tags_response.status_code}")
+            logger.error(f"Failed to get tags. Status: {tags_response.status_code}, Response: {tags_response.text}")
             return None
             
-        # Look for existing episodes tag
         for tag in tags_response.json():
-            if tag['label'].lower() == 'ocdarr':
-                OCDARR_TAG_ID = tag['id']
-                logger.info(f"Found existing 'ocdarr' tag with ID {OCDARR_TAG_ID}")  # Only logs ONCE
-                return OCDARR_TAG_ID
+            if tag['label'].lower() == 'episeerr_default':
+                EPISEERR_DEFAULT_TAG_ID = tag['id']
+                logger.info(f"Found existing 'episeerr_default' tag with ID {EPISEERR_DEFAULT_TAG_ID}")
+                return EPISEERR_DEFAULT_TAG_ID
        
-        # Create episodes tag if it doesn't exist
+        logger.debug("No 'episeerr_default' tag found, creating new tag")
         tag_create_response = requests.post(
             f"{SONARR_URL}/api/v3/tag",
             headers=headers,
-            json={"label": "ocdarr"}
+            json={"label": "episeerr_default"},
+            timeout=10
         )
         if tag_create_response.ok:
-            OCDARR_TAG_ID = tag_create_response.json().get('id')
-            logger.info(f"Created tag: 'ocdarr' with ID {OCDARR_TAG_ID}")
-            return OCDARR_TAG_ID
+            EPISEERR_DEFAULT_TAG_ID = tag_create_response.json().get('id')
+            logger.info(f"Created tag: 'episeerr_default' with ID {EPISEERR_DEFAULT_TAG_ID}")
+            return EPISEERR_DEFAULT_TAG_ID
         else:
-            logger.error(f"Failed to create ocdarr tag. Status: {tag_create_response.status_code}")
+            logger.error(f"Failed to create episeerr_default tag. Status: {tag_create_response.status_code}, Response: {tag_create_response.text}")
             return None
        
-    except Exception as e:
-        logger.error(f"Error creating episode tag: {str(e)}")
+    except requests.Timeout:
+        logger.error("Request to Sonarr timed out while creating 'episeerr_default' tag")
         return None
+    except Exception as e:
+        logger.error(f"Error creating 'episeerr_default' tag: {str(e)}")
+        return None
+
+def create_episeerr_select_tag():
+    """Create a single 'episeerr_select' tag in Sonarr and return its ID."""
+    global EPISEERR_SELECT_TAG_ID
     
+    if EPISEERR_SELECT_TAG_ID is not None:
+        logger.debug(f"'episeerr_select' tag ID already set: {EPISEERR_SELECT_TAG_ID}")
+        return EPISEERR_SELECT_TAG_ID
+    
+    try:
+        headers = get_sonarr_headers()
+        logger.debug(f"Making GET request to {SONARR_URL}/api/v3/tag to fetch existing tags")
+       
+        tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
+       
+        if not tags_response.ok:
+            logger.error(f"Failed to get tags. Status: {tags_response.status_code}, Response: {tags_response.text}")
+            return None
+            
+        for tag in tags_response.json():
+            if tag['label'].lower() == 'episeerr_select':
+                EPISEERR_SELECT_TAG_ID = tag['id']
+                logger.info(f"Found existing 'episeerr_select' tag with ID {EPISEERR_SELECT_TAG_ID}")
+                return EPISEERR_SELECT_TAG_ID
+       
+        logger.debug("No 'episeerr_select' tag found, creating new tag")
+        tag_create_response = requests.post(
+            f"{SONARR_URL}/api/v3/tag",
+            headers=headers,
+            json={"label": "episeerr_select"},
+            timeout=10
+        )
+        if tag_create_response.ok:
+            EPISEERR_SELECT_TAG_ID = tag_create_response.json().get('id')
+            logger.info(f"Created tag: 'episeerr_select' with ID {EPISEERR_SELECT_TAG_ID}")
+            return EPISEERR_SELECT_TAG_ID
+        else:
+            logger.error(f"Failed to create episeerr_select tag. Status: {tag_create_response.status_code}, Response: {tag_create_response.text}")
+            return None
+       
+    except requests.Timeout:
+        logger.error("Request to Sonarr timed out while creating 'episeerr_select' tag")
+        return None
+    except Exception as e:
+        logger.error(f"Error creating 'episeerr_select' tag: {str(e)}")
+        return None
+
+def initialize_episeerr():
+    
+    logger.debug("Entering initialize_episeerr()")
+    
+    logger.debug("Creating episeerr_default tag")
+    default_tag_id = create_episeerr_default_tag()
+    if default_tag_id is None:
+        logger.error("Failed to initialize 'episeerr_default' tag. Request system may not function correctly.")
+    else:
+        logger.info(f"Initialized 'episeerr_default' tag with ID {default_tag_id}")
+
+    logger.debug("Creating episeerr_select tag")
+    select_tag_id = create_episeerr_select_tag()
+    if select_tag_id is None:
+        logger.error("Failed to initialize 'episeerr_select' tag. Request system may not function correctly.")
+    else:
+        logger.info(f"Initialized 'episeerr_select' tag with ID {select_tag_id}")
+
+    logger.debug("Checking unmonitored downloads")
+    try:
+        check_and_cancel_unmonitored_downloads()
+    except Exception as e:
+        logger.error(f"Error in initial download check: {str(e)}")
+
+    logger.debug("Exiting initialize_episeerr()")
+
 def unmonitor_series(series_id, headers):
     """Unmonitor all episodes in a series."""
     try:
@@ -407,10 +483,7 @@ def delete_overseerr_request(request_id):
 
 def process_episode_selection(series_id, episode_numbers):
     """
-    Process selected episodes by monitoring and searching for them.
-    
-    :param series_id: Sonarr series ID
-    :param episode_numbers: List of episode numbers to process
+    Fixed version that properly handles the season information
     """
     try:
         series_id = int(series_id)
@@ -427,13 +500,14 @@ def process_episode_selection(series_id, episode_numbers):
             return False
             
         series = series_response.json()
-         # Debug: Check the global pending_selections dictionary
-        logger.info(f"Current pending_selections: {pending_selections}")
-         # Find the season even if not in pending_selections
-        if str(series_id) not in pending_selections:
-            logger.error(f"No pending selection found for series {series_id}")
-            
-            # Look through requests directory for this series
+        
+        # Check pending_selections for season info
+        season_number = None
+        if str(series_id) in pending_selections:
+            season_number = pending_selections[str(series_id)]['season']
+        
+        # If not in pending_selections, look through requests directory
+        if season_number is None:
             for filename in os.listdir(REQUESTS_DIR):
                 if filename.endswith('.json'):
                     try:
@@ -442,57 +516,48 @@ def process_episode_selection(series_id, episode_numbers):
                             if request_data.get('series_id') == series_id:
                                 season_number = request_data.get('season')
                                 logger.info(f"Found season {season_number} from request file for series {series_id}")
-                                # Store in pending selections for later processing
-                                pending_selections[str(series_id)] = {
-                                    'title': series['title'],
-                                    'season': season_number,
-                                    'episodes': [],
-                                    'selected_episodes': set(episode_numbers)
-                                }
                                 break
                     except Exception as e:
                         logger.error(f"Error reading request file: {str(e)}")
+        
+        # Final fallback - get the latest season from Sonarr
+        if season_number is None:
+            seasons_response = requests.get(
+                f"{SONARR_URL}/api/v3/series/{series_id}",
+                headers=headers
+            )
             
-            # If still not found, try to get the current season
-            if str(series_id) not in pending_selections:
-                # Get the latest season
-                seasons_response = requests.get(
-                    f"{SONARR_URL}/api/v3/series/{series_id}",
-                    headers=headers
-                )
-                
-                if seasons_response.ok:
-                    series_data = seasons_response.json()
-                    if 'seasons' in series_data and series_data['seasons']:
-                        # Find the highest season number
-                        seasons = sorted([s.get('seasonNumber', 0) for s in series_data['seasons']])
-                        if seasons:
-                            season_number = seasons[-1]  # Get the highest season
-                            logger.info(f"Using latest season {season_number} for series {series_id}")
-                            
-                            # Store in pending selections
-                            pending_selections[str(series_id)] = {
-                                'title': series['title'],
-                                'season': season_number,
-                                'episodes': [],
-                                'selected_episodes': set(episode_numbers)
-                            }
-        if str(series_id) not in pending_selections:
-            logger.error(f"No pending selection found for series {series_id}")
+            if seasons_response.ok:
+                series_data = seasons_response.json()
+                if 'seasons' in series_data and series_data['seasons']:
+                    # Get the highest season number
+                    seasons = sorted([s.get('seasonNumber', 0) for s in series_data['seasons']])
+                    if seasons:
+                        season_number = seasons[-1]
+                        logger.info(f"Using latest season {season_number} for series {series_id}")
+        
+        if season_number is None:
+            logger.error(f"Could not determine season for series {series_id}")
             return False
-            
-        season_number = pending_selections[str(series_id)]['season']
         
         logger.info(f"Processing episode selection for {series['title']} Season {season_number}: {episode_numbers}")
         
-        # Get episode IDs for searching
+        # Store in pending_selections for processing
+        pending_selections[str(series_id)] = {
+            'title': series['title'],
+            'season': season_number,
+            'episodes': [],
+            'selected_episodes': set(episode_numbers)
+        }
+        
+        # Get episode IDs for the season and selected episodes
         episodes = get_series_episodes(series_id, season_number, headers)
         
         if not episodes:
             logger.error(f"No episodes found for series {series_id} season {season_number}")
             return False
         
-        # Filter to only valid episode numbers
+        # Filter to only selected episodes
         valid_episode_numbers = []
         for num in episode_numbers:
             if any(ep['episodeNumber'] == num for ep in episodes):
@@ -503,7 +568,7 @@ def process_episode_selection(series_id, episode_numbers):
         if not valid_episode_numbers:
             logger.error(f"No valid episodes found for selection {episode_numbers}")
             return False
-            
+        
         # Monitor selected episodes
         monitor_success = monitor_specific_episodes(
             series_id, 
@@ -515,7 +580,7 @@ def process_episode_selection(series_id, episode_numbers):
         if not monitor_success:
             logger.error(f"Failed to monitor episodes for series {series_id}")
             return False
-            
+        
         # Get episode IDs for searching
         episode_ids = [
             ep['id'] for ep in episodes 
@@ -525,9 +590,6 @@ def process_episode_selection(series_id, episode_numbers):
         if not episode_ids:
             logger.error(f"Failed to find episode IDs for {valid_episode_numbers}")
             return False
-        
-        # Log episode IDs for debugging
-        logger.info(f"Episode IDs for search: {episode_ids}")
         
         # Trigger search for the episodes
         search_success = search_episodes(series_id, episode_ids, headers)
@@ -543,14 +605,118 @@ def process_episode_selection(series_id, episode_numbers):
         logger.error(f"Error processing episode selection: {str(e)}", exc_info=True)
         return False
 
+# Add this new function to your episeerr_utils.py file:
+
+def process_episode_selection_with_season(series_id, season_number, episode_numbers):
+    """
+    Process episode selection with explicit season number - ENHANCED VERSION
+    
+    :param series_id: Sonarr series ID
+    :param season_number: Explicit season number
+    :param episode_numbers: List of episode numbers to monitor
+    :return: True if successful, False otherwise
+    """
+    try:
+        series_id = int(series_id)
+        season_number = int(season_number)
+        headers = get_sonarr_headers()
+        
+        logger.info(f"Processing episode selection for series {series_id}, season {season_number}, episodes {episode_numbers}")
+        
+        # Get series info
+        series_response = requests.get(
+            f"{SONARR_URL}/api/v3/series/{series_id}",
+            headers=headers
+        )
+        
+        if not series_response.ok:
+            logger.error(f"Failed to get series. Status: {series_response.status_code}")
+            return False
+            
+        series = series_response.json()
+        logger.info(f"Processing episodes for {series['title']} Season {season_number}: {episode_numbers}")
+        
+        # Store in pending_selections for processing
+        pending_selections[str(series_id)] = {
+            'title': series['title'],
+            'season': season_number,
+            'episodes': [],
+            'selected_episodes': set(episode_numbers)
+        }
+        
+        # Get episode IDs for the season and selected episodes
+        episodes = get_series_episodes(series_id, season_number, headers)
+        
+        if not episodes:
+            logger.error(f"No episodes found for series {series_id} season {season_number}")
+            return False
+        
+        # Filter to only selected episodes and log details
+        valid_episode_numbers = []
+        episode_ids_to_monitor = []
+        
+        for num in episode_numbers:
+            matching_episode = next((ep for ep in episodes if ep['episodeNumber'] == num), None)
+            if matching_episode:
+                valid_episode_numbers.append(num)
+                episode_ids_to_monitor.append(matching_episode['id'])
+                logger.info(f"Found episode {num}: ID {matching_episode['id']} - {matching_episode.get('title', 'Unknown')}")
+            else:
+                logger.warning(f"Episode {num} not found in {series['title']} Season {season_number}")
+        
+        if not valid_episode_numbers:
+            logger.error(f"No valid episodes found for selection {episode_numbers}")
+            return False
+        
+        logger.info(f"Monitoring episodes: {valid_episode_numbers} (IDs: {episode_ids_to_monitor})")
+        
+        # Monitor selected episodes
+        monitor_response = requests.put(
+            f"{SONARR_URL}/api/v3/episode/monitor",
+            headers=headers,
+            json={"episodeIds": episode_ids_to_monitor, "monitored": True}
+        )
+        
+        if not monitor_response.ok:
+            logger.error(f"Failed to monitor episodes. Status: {monitor_response.status_code}")
+            logger.error(f"Response: {monitor_response.text}")
+            return False
+        
+        logger.info(f"Successfully monitored {len(episode_ids_to_monitor)} episodes")
+        
+        # Trigger search for the episodes
+        search_payload = {
+            "name": "EpisodeSearch",
+            "episodeIds": episode_ids_to_monitor
+        }
+        
+        search_response = requests.post(
+            f"{SONARR_URL}/api/v3/command",
+            headers=headers,
+            json=search_payload
+        )
+        
+        if search_response.ok:
+            logger.info(f"Successfully triggered search for {len(episode_ids_to_monitor)} episodes")
+            return True
+        else:
+            logger.error(f"Failed to search for episodes. Status: {search_response.status_code}")
+            logger.error(f"Search response: {search_response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error processing episode selection: {str(e)}", exc_info=True)
+        return False
+
+
 def check_and_cancel_unmonitored_downloads():
     """
-    Check and cancel unmonitored episode downloads with enhanced logging.
+    Enhanced version with better episode selection awareness
     """
     headers = get_sonarr_headers()
     
     logger.info("Starting unmonitored download cancellation check")
-    logger.info(f"Episodes tag ID: {OCDARR_TAG_ID}")
+    logger.info(f"Episodes tag ID: {EPISEERR_DEFAULT_TAG_ID}")
     
     try:
         # Retrieve current queue
@@ -577,7 +743,7 @@ def check_and_cancel_unmonitored_downloads():
             
             # Check if this is a TV episode
             if item.get('seriesId') and item.get('episodeId'):
-                # Get series details to check for 'ocdarr' tag
+                # Get series details to check for episeerr tags
                 series_response = requests.get(
                     f"{SONARR_URL}/api/v3/series/{item['seriesId']}", 
                     headers=headers
@@ -592,66 +758,68 @@ def check_and_cancel_unmonitored_downloads():
                 # Log series tags
                 logger.info(f"Series tags: {series.get('tags', [])}")
                 
-                # Check if series has 'ocdarr' tag
-                if OCDARR_TAG_ID in series.get('tags', []):
+                # Check if series has episeerr tags
+                has_episeerr_tag = (
+                    EPISEERR_DEFAULT_TAG_ID in series.get('tags', []) or
+                    EPISEERR_SELECT_TAG_ID in series.get('tags', [])
+                )
+                
+                if has_episeerr_tag:
                     # Get episode details
                     episode_info = get_episode_info(item['episodeId'], headers)
                     
                     if episode_info:
-                        logger.info(f"Episode details: Number {episode_info.get('episodeNumber')}, Monitored: {episode_info.get('monitored')}")
+                        episode_number = episode_info.get('episodeNumber')
+                        season_number = episode_info.get('seasonNumber')
+                        logger.info(f"Episode details: S{season_number}E{episode_number}, Monitored: {episode_info.get('monitored')}")
                         
                         # Check pending_selections for this series first
                         series_id_str = str(item.get('seriesId'))
+                        should_cancel = False
+                        
                         if series_id_str in pending_selections:
                             series_info = pending_selections[series_id_str]
                             selected_episodes = series_info.get('selected_episodes', set())
-                            episode_number = episode_info.get('episodeNumber')
+                            selection_season = series_info.get('season')
                             
-                            # If this episode is not in selected episodes, cancel it
-                            if episode_number not in selected_episodes:
-                                logger.info(f"Episode {episode_number} not in selected episodes {selected_episodes}. Cancelling download.")
-                                cancel_success = cancel_download(item['id'], headers)
-                                
-                                if cancel_success:
-                                    series_title = series.get('title', 'Unknown Series')
-                                    logger.info(
-                                        f"Cancelled download for non-selected episode: "
-                                        f"{series_title} - Season {item.get('seasonNumber')} "
-                                        f"Episode {episode_info.get('episodeNumber')}"
-                                    )
-                                    cancelled_count += 1
-                                else:
-                                    logger.error(f"Failed to cancel download for {series.get('title')} - Episode ID {item['episodeId']}")
-                                continue
+                            # If this episode is not in selected episodes for the selected season, cancel it
+                            if season_number == selection_season and episode_number not in selected_episodes:
+                                logger.info(f"Episode S{season_number}E{episode_number} not in selected episodes {selected_episodes}. Cancelling download.")
+                                should_cancel = True
+                            elif season_number != selection_season:
+                                logger.info(f"Episode is from season {season_number}, but selection is for season {selection_season}. Cancelling download.")
+                                should_cancel = True
                         
-                        # If not in pending_selections or if the episode is selected, check monitored status
-                        if not episode_info.get('monitored', False):
-                            # Unmonitored episode - cancel download
+                        # If not in pending_selections, check monitored status
+                        elif not episode_info.get('monitored', False):
+                            logger.info(f"Episode S{season_number}E{episode_number} is unmonitored. Cancelling download.")
+                            should_cancel = True
+                        
+                        if should_cancel:
                             cancel_success = cancel_download(item['id'], headers)
                             
                             if cancel_success:
                                 series_title = series.get('title', 'Unknown Series')
                                 logger.info(
-                                    f"Cancelled unmonitored download for tagged series: "
-                                    f"{series_title} - Season {item.get('seasonNumber')} "
-                                    f"Episode {episode_info.get('episodeNumber')}"
+                                    f"Cancelled download for episeerr series: "
+                                    f"{series_title} - S{season_number}E{episode_number}"
                                 )
                                 cancelled_count += 1
                             else:
                                 logger.error(f"Failed to cancel download for {series.get('title')} - Episode ID {item['episodeId']}")
                         else:
-                            logger.info(f"Episode {episode_info.get('episodeNumber')} is monitored - keeping download")
+                            logger.info(f"Episode S{season_number}E{episode_number} is monitored/selected - keeping download")
                     else:
                         logger.warning(f"Could not get episode info for ID {item['episodeId']}")
                 else:
-                    logger.info(f"Series {series.get('title')} does not have the episodes tag - skipping")
+                    logger.info(f"Series {series.get('title')} does not have episeerr tags - skipping")
         
         # Log summary
-        logger.info(f"Cancellation check complete. Cancelled {cancelled_count} unmonitored downloads for tagged series")
+        logger.info(f"Cancellation check complete. Cancelled {cancelled_count} unmonitored downloads for episeerr series")
     
     except Exception as e:
         logger.error(f"Error in download queue monitoring: {str(e)}", exc_info=True)
-
+        
 def save_request(series_id, title, season, episodes, request_id=None):
     """
     Save a request for episode selection to the requests directory.
@@ -735,8 +903,8 @@ def process_series(tvdb_id, season_number, request_id=None):
             series_id = series['id']
             
             # Check if series has episodes tag
-            if OCDARR_TAG_ID not in series.get('tags', []):
-                logger.info(f"Series {series['title']} does not have 'ocdarr' tag. Skipping.")
+            if EPISEERR_DEFAULT_TAG_ID not in series.get('tags', []):
+                logger.info(f"Series {series['title']} does not have 'episeerr_default' tag. Skipping.")
                 return False
 
             logger.info(f"Found series: {series['title']} (ID: {series_id})")
@@ -791,5 +959,6 @@ def process_series(tvdb_id, season_number, request_id=None):
     logger.error(f"Series not found after 12 attempts")
     return False
 
-# Initialize on import
-create_ocdarr_tag()
+# Initialize tags on import
+create_episeerr_default_tag()
+create_episeerr_select_tag()

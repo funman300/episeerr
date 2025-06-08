@@ -18,7 +18,13 @@
                 "383": {
                     "activity_date": null
                 },
+                "411": {
+                    "activity_date": null
+                },
                 "76": {
+                    "activity_date": null
+                },
+                "66": {
                     "activity_date": null
                 },
                 "27": {
@@ -57,6 +63,9 @@
                 "31": {
                     "activity_date": null
                 },
+                "19": {
+                    "activity_date": null
+                },
                 "63": {
                     "activity_date": null
                 },
@@ -79,6 +88,9 @@
                     "activity_date": null
                 },
                 "29": {
+                    "activity_date": null
+                },
+                "440": {
                     "activity_date": null
                 },
                 "71": {
@@ -156,6 +168,9 @@
                 "32": {
                     "activity_date": null
                 },
+                "21": {
+                    "activity_date": null
+                },
                 "91": {
                     "activity_date": null
                 },
@@ -202,26 +217,19 @@
             "action_option": "monitor",
             "keep_watched": "1",
             "monitor_watched": false,
-            "grace_days": 1,
-            "dormant_days": 30,
-            "series": {
-                "411": {
-                    "activity_date": null
-                },
-                "66": {
-                    "activity_date": null
-                },
-                "19": {
-                    "activity_date": null
-                },
-                "440": {
-                    "activity_date": null
-                },
-                "21": {
-                    "activity_date": null
-                }
-            },
+            "grace_days": null,
+            "dormant_days": null,
+            "series": {},
             "dry_run": false
+        },
+        "mynewrule": {
+            "get_option": "2",
+            "action_option": "monitor",
+            "keep_watched": "0",
+            "monitor_watched": false,
+            "grace_days": 7,
+            "dormant_days": 30,
+            "series": {}
         }
     },
     "field_migration_complete": true,

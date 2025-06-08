@@ -34,9 +34,14 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-list me-2"></i>Rules</h5>
-                <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">
-                    <i class="fas fa-plus me-1"></i>New Rule
-                </a>
+                <div>
+                    <a href="{{ url_for('cleanup') }}" class="btn btn-outline-light btn-sm me-2" title="Clean up orphaned series from rules">
+                        <i class="fas fa-broom me-1"></i>Clean Config
+                    </a>
+                    <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus me-1"></i>New Rule
+                    </a>
+                </div>
             </div>
             <div class="card-body">
                 {% for rule_name, rule_details in config.rules.items() %}
@@ -91,7 +96,7 @@
     <div class="col-md-8">
         <div class="card">
             <div class="card-header">
-                <h5><i class="fas fa-tv me-2"></i>Series Assignment</h5>
+                <h5><i class="fas fa-tv me-2"></i>Series Management</h5>
             </div>
             <div class="card-body">
                 <!-- Rule Assignment Form -->
@@ -156,12 +161,17 @@
                         </table>
                     </div>
                 </form>
-
+               
                 <!-- Unassign Button -->
                 <form method="POST" action="{{ url_for('unassign_series') }}" class="mt-3" onsubmit="return copySelectedSeries(this)">
                     <button type="submit" class="btn btn-warning">
                         <i class="fas fa-unlink me-1"></i>Unassign Selected Series
                     </button>
+                    <a class="nav-link" href="{{ url_for('cleanup') }}">
+
+
+
+                
                 </form>
             </div>
         </div>
@@ -219,5 +229,128 @@ function copySelectedSeries(form) {
     
     return confirm(`Unassign ${selectedSeries.length} selected series from all rules?`);
 }
+</script>
+<script>
+// Auto-refresh rules page when series assignments change
+class RulesPageAutoRefresh {
+    constructor() {
+        this.lastSeriesCount = 0;
+        this.lastRuleAssignments = new Map();
+        this.checkInterval = 15000; // Check every 15 seconds
+        this.init();
+    }
+
+    init() {
+        // Only run on rules page
+        if (!window.location.pathname.match(/^\/(index)?$/)) {
+            return;
+        }
+
+        this.captureCurrentState();
+        this.startChecking();
+    }
+
+    captureCurrentState() {
+        // Count total series
+        const seriesRows = document.querySelectorAll('tbody tr');
+        this.lastSeriesCount = seriesRows.length;
+
+        // Capture rule assignments
+        this.lastRuleAssignments.clear();
+        seriesRows.forEach(row => {
+            const seriesId = row.querySelector('input[type="checkbox"]')?.value;
+            const ruleCell = row.querySelector('.rule-assignment');
+            if (seriesId && ruleCell) {
+                this.lastRuleAssignments.set(seriesId, ruleCell.textContent.trim());
+            }
+        });
+
+        console.log(`Captured state: ${this.lastSeriesCount} series, ${this.lastRuleAssignments.size} assignments`);
+    }
+
+    startChecking() {
+        setInterval(() => {
+            this.checkForChanges();
+        }, this.checkInterval);
+    }
+
+    async checkForChanges() {
+        try {
+            // Get current series data from server
+            const response = await fetch('/api/series-stats');
+            const stats = await response.json();
+
+            // Check if series count changed
+            if (stats.total_series !== this.lastSeriesCount) {
+                console.log(`Series count changed: ${this.lastSeriesCount} → ${stats.total_series}`);
+                this.refreshPage('New series detected');
+                return;
+            }
+
+            // Check if rule assignments changed by getting fresh data
+            const seriesResponse = await fetch('/api/current-assignments');
+            if (seriesResponse.ok) {
+                const assignments = await seriesResponse.json();
+                
+                // Compare assignments
+                let assignmentChanged = false;
+                for (const [seriesId, oldRule] of this.lastRuleAssignments) {
+                    const newRule = assignments[seriesId] || 'None';
+                    if (oldRule !== newRule) {
+                        console.log(`Rule assignment changed for series ${seriesId}: ${oldRule} → ${newRule}`);
+                        assignmentChanged = true;
+                        break;
+                    }
+                }
+
+                if (assignmentChanged) {
+                    this.refreshPage('Rule assignments updated');
+                }
+            }
+
+        } catch (error) {
+            console.error('Error checking for changes:', error);
+        }
+    }
+
+    refreshPage(reason) {
+        console.log(`Auto-refreshing page: ${reason}`);
+        
+        // Show brief notification
+        this.showRefreshNotification(reason);
+        
+        // Refresh after short delay
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500);
+    }
+
+    showRefreshNotification(reason) {
+        // Create temporary notification
+        const notification = document.createElement('div');
+        notification.innerHTML = `
+            <div class="alert alert-info alert-dismissible fade show position-fixed" 
+                 style="top: 20px; right: 20px; z-index: 1050; min-width: 300px;">
+                <i class="fas fa-sync-alt me-2"></i>
+                <strong>Auto-updating:</strong> ${reason}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 3000);
+    }
+}
+
+// Initialize auto-refresh
+document.addEventListener('DOMContentLoaded', function() {
+    new RulesPageAutoRefresh();
+});
 </script>
 {% endblock %}

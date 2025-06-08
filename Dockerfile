@@ -21,9 +21,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p /app/logs /app/config /app/data /app/temp
 
 # Copy application files
-COPY webhook_listener.py .
+COPY episeerr.py .
 COPY servertosonarr.py .
-COPY modified_episeerr.py .
+COPY episeerr_utils.py .
 COPY sonarr_utils.py .
 COPY templates/ templates/
 COPY static/ static/
@@ -36,4 +36,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 EXPOSE 5002
 
 # Use Gunicorn to serve the application
-CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:5002", "--access-logfile", "-", "--error-logfile", "-", "webhook_listener:app"]
+CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:5002", "--access-logfile", "-", "--error-logfile", "-", "episeerr:app"]

@@ -1,106 +1,93 @@
-# OCDarr: Smart Episode Management for Sonarr
 
-**Intelligent, time-aware episode management** that responds to your viewing habits and automatically maintains your library based on activity patterns.
+Support This Project If you find this project helpful, please consider supporting it. Your contributions help maintain and improve the project. Any support is greatly appreciated! ❤️ https://buymeacoffee.com/vansmak Thank you for your support!
 
-## What OCDarr Does
+# Episeerr
 
-OCDarr automatically manages your TV episodes based on **your viewing activity and time-based rules**. Watch an episode, and OCDarr intelligently prepares what you want next while cleaning up what you've already seen.
+**Backend episode management system for Sonarr** - Three independent automation solutions.
 
-### 🎯 **Perfect For:**
-- Users who **don't rewatch** episodes but want the next one ready
-- People who prefer a **curated, organized** library over massive collections
-- Anyone wanting **different management strategies** for different shows
-- Shows with **different viewing cadences** (daily, weekly, seasonal)
+## What Episeerr Does
 
----
+Episeerr gives you precise control over your TV episodes with three separate systems that can work together or independently:
 
-## 🔧 How It Works
+### 🎯 **Three Solutions, One App**
 
-### **Flexible Rule System:**
-Each rule defines exactly how episodes are handled:
+| Solution | Purpose | When to Use |
+|----------|---------|-------------|
+| **🎬 Granular Episode Requests** | Select exactly which episodes you want | Want specific episodes, not full seasons |
+| **⚡ Viewing-Based Rules** | Auto-manage episodes when you watch | Want next episode ready, cleanup watched ones |
+| **⏰ Time-Based Cleanup** | Clean up based on age and activity | Want automatic library maintenance |
 
-| Component | Purpose | Examples |
-|-----------|---------|----------|
-| **Get Option** | How many upcoming episodes to prepare | `1` (next episode), `season` (full season), `all` (everything) |
-| **Action Option** | How episodes are handled | `monitor` (passive), `search` (active download) |
-| **Keep Watched** | What to retain as a "keep block" | `1` (last episode), `season` (current season), `all` (everything) |
-| **Grace Period** | Days after watching before cleanup | `7` (cleanup after 1 week), `null` (never) |
-| **Dormant Timer** | Days without activity before aggressive cleanup | `90` (abandon after 3 months), `null` (never) |
-
-### **Two-Layer System:**
-**🚀 Webhook Layer:** Responds instantly to viewing activity
-- Tracks what you watched and when
-- Prepares next episodes immediately  
-- Cleans up old episodes (sliding window)
-
-**⏰ Scheduler Layer:** Handles time-based cleanup
-- **Grace Period:** Selective cleanup after X days (maintains continuity)
-- **Dormant Timer:** Aggressive cleanup after Y days (reclaims storage)
-
-### **Example: "Weekly Show with Buffer"**
-```
-Get: 3, Search, Keep: 3
-Grace Period: 7 days, Dormant Timer: 60 days
-```
-- **Watch S1E5** → Keeps E3,E4,E5, gets E6,E7,E8, deletes E1,E2
-- **7 days later** → Cleans up old episodes before keep block
-- **60 days no activity** → Nukes most episodes (show abandoned)
+**Use any combination** - or just one solution that fits your needs.
 
 ---
 
-## 🎛️ Use Cases
+## 🎬 Granular Episode Requests
 
-### **Grace/Dormant Cleanup Only** (No Webhooks)
-Perfect for users who just want time-based cleanup:
-```
-Grace Period: 14 days    → Clean up bi-weekly
-Dormant Timer: 90 days   → Abandon after 3 months
-```
-*OCDarr runs scheduled cleanup every 6 hours, no webhook setup needed*
+Select individual episodes across multiple seasons with precision.
 
-### **Webhook Only** (No Time Cleanup)
-Perfect for immediate episode management:
-```
-Get: 1, Search, Keep: 1
-Grace Period: null, Dormant Timer: null
-```
-*Sliding window of episodes, no automatic time-based deletion*
+**Perfect for:**
+- Getting just pilot episodes to try shows
+- Catching up on specific episodes you missed
+- Managing limited storage with surgical precision
 
-### **Full System** (Webhooks + Time Cleanup)
-Complete automation with both layers:
-```
-Get: 2, Search, Keep: 2
-Grace Period: 7 days, Dormant Timer: 30 days
-```
-*Immediate management + intelligent time-based cleanup*
+**How it works:**
+1. Request via Episeerr interface or use `episeerr_select` tag in Jellyseerr/Overseerr
+2. Choose seasons and specific episodes
+3. Only selected episodes are monitored and downloaded
 
-### **Archive Mode** (Keep Everything)
-For shows you want to preserve:
-```
-Get: all, Monitor, Keep: all
-Grace Period: null, Dormant Timer: null
-```
-*Downloads everything, never deletes anything*
+---
+
+## ⚡ Viewing-Based Rules
+
+Episodes automatically managed based on your viewing activity.
+
+**Perfect for:**
+- Always having the next episode ready
+- Automatic cleanup of watched episodes
+- Different strategies for different shows
+
+**Example rule:** *"Keep last 2 episodes, get next 3, search immediately"*
+- Watch S01E05 → Keeps E04+E05, gets E06+E07+E08, deletes E01+E02+E03
+
+**Requires:** Plex+Tautulli or Jellyfin webhook setup
+
+---
+
+## ⏰ Time-Based Cleanup
+
+Automatic cleanup based on time and viewing patterns.
+
+**Perfect for:**
+- Cleaning up shows you've abandoned
+- Maintaining library size automatically
+- Different retention for active vs dormant shows
+
+**Two timers:**
+- **Grace Period:** Cleanup after X days (keeps current viewing context)
+- **Dormant Timer:** Aggressive cleanup after Y days (reclaims storage from abandoned shows)
+
+**No webhooks required** - runs on schedule
 
 ---
 
 ## 🚀 Quick Start
 
-### **Docker Compose:**
+### Docker Compose
 ```yaml
 version: '3.8'
 services:
-  ocdarr:
-    image: vansmak/ocdarr-lite:latest
+  episeerr:
+    image: vansmak/episeerr:latest
     environment:
       - SONARR_URL=http://your-sonarr:8989
       - SONARR_API_KEY=your_api_key
-      - CLEANUP_INTERVAL_HOURS=6
-      - TAUTULLI_URL=http://your-TAUTULLI:XXXX
-      - TAUTULLI_API_KEY=your_api_key
-      #OR
-      - JELLYFIN_URL=http://your-JELLYFIN:XXXX
-      - JELLYFIN_API_KEY=your_api_key
+      - TMDB_API_KEY=your_tmdb_key # For episode selection UI
+      # Optional - for viewing-based rules
+      - TAUTULLI_URL=http://your-tautulli:8181
+      - TAUTULLI_API_KEY=your_tautulli_key
+      # Optional - for request integration  
+      - JELLYSEERR_URL=http://your-jellyseerr:5055
+      - JELLYSEERR_API_KEY=your_jellyseerr_key
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
@@ -109,170 +96,96 @@ services:
     restart: unless-stopped
 ```
 
-### **Setup:**
-1. **OCDarr Interface:** `http://your-server:5002`
-   - Create rules with your preferred settings
-   - Assign series to rules (unassigned = ignored)
+### Setup
+1. **Configure:** `http://your-server:5002` - Basic web interface for rule management
+2. **Create rules** for automated episode management  
+3. **Assign series** to rules (unassigned series are ignored)
+4. **Optional:** Set up webhooks for viewing-based automation
 
-2. **Optional Webhooks:** For instant response to viewing
-   - **Tautulli:** `http://your-ocdarr:5002/webhook`
-   - **Jellyfin:** `http://your-ocdarr:5002/jellyfin-webhook`
+---
 
-3. **Optional Sonarr Webhook:** For new series auto-assignment
-   - **URL:** `http://your-ocdarr:5002/sonarr-webhook`
+## 🎛️ Example Configurations
+
+### Episode Requests Only
+Perfect for trying new shows or specific episode management.
+```
+No rules needed - just use the episode selection interface
+```
+
+### Viewing Rules Only  
+Next episode always ready, automatic cleanup.
+```
+Rule: Get 1, Search, Keep 1
+Webhooks: Tautulli or Jellyfin
+Timers: Disabled
+```
+
+### Time Cleanup Only
+Hands-off library maintenance.
+```
+Rule: Get all, Monitor, Keep all  
+Grace: 30 days, Dormant: 90 days
+Webhooks: Not needed
+```
+
+### Full Automation
+Complete episode lifecycle management.
+```
+Rule: Get 2, Search, Keep 2
+Grace: 7 days, Dormant: 60 days  
+Webhooks: Enabled
+```
+
+---
+
+## 🔧 Integration
+
+### Sonarr Tags
+- `episeerr_default`: Auto-assigns to default rule when added
+- `episeerr_select`: Triggers episode selection workflow
+
+### Jellyseerr/Overseerr  
+- Request normally: Gets default rule
+- Request with `episeerr_select` tag: Triggers episode selection
+
+### Webhooks *(Optional)*
+- **Tautulli:** `http://your-episeerr:5002/webhook` 
+- **Jellyfin:** `http://your-episeerr:5002/jellyfin-webhook`  
+- **Sonarr:** `http://your-episeerr:5002/sonarr-webhook`
+
+*Setup guides with templates and screenshots: [OCDarr Webhook Documentation](link-to-ocdarr-guides)*
 
 ---
 
 ## 🎯 Key Benefits
 
-- **🔄 Flexible:** Use webhooks, time cleanup, or both
-- **⚡ Responsive:** Next episode ready when you need it
-- **🧹 Smart Cleanup:** Different strategies for active vs abandoned shows
-- **🎛️ Granular Control:** Per-series rules and timing
-- **📊 Transparent:** Full visibility into what's happening and why
-- **🏠 Respectful:** Only manages assigned series, ignores the rest
+- **🔧 Modular:** Use only the features you need
+- **🎯 Precise:** Episode-level control when you want it
+- **⚡ Responsive:** Next episode ready when you need it  
+- **🧹 Smart:** Different cleanup strategies for different shows
+- **🏠 Respectful:** Only manages assigned series
 
 ---
 
-## 🎛️ Advanced Examples
+## 📚 Documentation
 
-### **Daily Show Watcher**
-```
-Get: 1, Search, Keep: 1
-Grace Period: 3 days, Dormant Timer: 14 days
-```
-*Next episode always ready, quick cleanup, fast abandonment detection*
+**[Complete Documentation →](./docs/)**
 
-### **Weekly Show Follower**
-```
-Get: 3, Search, Keep: 2  
-Grace Period: 7 days, Dormant Timer: 60 days
-```
-*Small buffer of episodes, weekly cleanup, seasonal abandonment*
-
-### **Season Collector**
-```
-Get: season, Monitor, Keep: season
-Grace Period: 30 days, Dormant Timer: 365 days
-```
-*Get full seasons, keep current season, yearly cleanup cycles*
-
-### **Storage Optimizer**
-```
-Get: 1, Search, Keep: 1
-Grace Period: 1 day, Dormant Timer: 7 days  
-```
-*Minimal storage use, immediate cleanup, fast abandonment*
+**Quick Links:**
+- [Installation & Setup](./docs/installation.md)
+- [Rules System Guide](./docs/rules-guide.md) 
+- [Episode Selection](./docs/episode-selection.md)
+- [Webhook Setup](./docs/webhooks.md) - Links to OCDarr's detailed guides
 
 ---
 
-## 🔧 Configuration
+## 🚫 What Episeerr Won't Do
 
-### **Environment Variables:**
-```env
-# Required
-SONARR_URL=http://your-sonarr:8989
-SONARR_API_KEY=your_sonarr_api_key
-TAUTULLI_URL=http://your-TAUTULLI:XXXX
-TAUTULLI_API_KEY=your_api_key
-#OR
-JELLYFIN_URL=http://your-JELLYFIN:XXXX
-JELLYFIN_API_KEY=your_api_key
-# Optional
-CLEANUP_INTERVAL_HOURS=6    # How often to run time-based cleanup
-LOG_PATH=/app/logs/app.log
-PORT=5002
-
-# Webhooks (optional)
-TAUTULLI_URL=http://your-tautulli:8181
-JELLYFIN_URL=http://your-jellyfin:8096
-```
-
-### **Webhook Setup:**
-
-#### **Tautulli (Plex):**
-1. **Tautulli** → Settings → Notification Agents → Add Webhook
-2. **URL:** `http://your-ocdarr:5002/webhook`
-3. **Trigger:** Episode Watched  
-4. **JSON Data:**
-```json
-{
-  "plex_title": "{show_name}",
-  "plex_season_num": "{season_num}",
-  "plex_ep_num": "{episode_num}"
-}
-```
-
-#### **Jellyfin:**
-1. **Jellyfin** → Dashboard → Plugins → Webhooks
-2. **URL:** `http://your-ocdarr:5002/jellyfin-webhook`
-3. **Notification Type:** Playbook Progress
-4. **Item Type:** Episodes
+- Manage unassigned series (completely ignores them)
+- Interfere with your existing Sonarr setup
+- Force you to use features you don't want
+- Delete files without clear reasoning (all logged)
 
 ---
 
-## 🔍 Monitoring & Control
-
-### **OCDarr Interface Features:**
-- **Rule Management:** Create, edit, delete rules
-- **Series Assignment:** Assign shows to specific rules
-- **Scheduler Control:** View status, force cleanup, view logs
-- **Statistics:** Track assigned vs unassigned series
-- **Dry Run Mode:** Test cleanup without deleting files
-
-### **Time-Based Cleanup Control:**
-- **Grace Period Only:** Surgical cleanup for active shows
-- **Dormant Timer Only:** Nuclear cleanup for abandoned shows
-- **Both Timers:** Complete lifecycle management
-- **Neither Timer:** Webhook-only management
-
----
-
-## 🚫 What OCDarr Won't Do
-
-- **Manage unassigned series** - OCDarr completely ignores shows without rules
-- **Interfere with manual Sonarr settings** - Your existing configurations remain untouched
-- **Download without permission** - Only monitors/searches based on your rules
-- **Delete without reason** - All deletions are logged with clear reasoning
-
----
-
-## 💡 Philosophy
-
-> *"OCDarr isn't about having everything - it's about having exactly what you need, exactly when you need it, and automatically letting go of what you don't."*
-
-**Use as much or as little as you want:**
-- Just need time-based cleanup? Skip webhooks
-- Just want immediate episode management? Skip timers  
-- Want full automation? Use everything
-- Have some shows you want untouched? Don't assign them rules
-
-**The two-timer system reflects how we actually consume media:** we stay current with active shows (grace period cleanup) but eventually abandon series we lose interest in (dormant timer cleanup).
-
----
-
-## 🏗️ Technical Details
-
-- **Language:** Python 3.11+
-- **Framework:** Flask
-- **Architecture:** Dual-layer (webhook + scheduler)
-- **Webhooks:** Sonarr, Plex/Tautulli, Jellyfin
-- **Storage:** File-based configuration (JSON)
-- **Logging:** Rotating logs with detailed cleanup reasoning
-- **Scheduling:** Internal thread-based scheduler (no cron dependency)
-
----
-
-## 📝 License & Support
-
-**License:** MIT License  
-**Support:** GitHub Issues  
-**Documentation:** Interface help + detailed logs
-
----
-
-<<<<<<< HEAD
-*OCDarr: Because your media library should work for you, adapt to your viewing patterns, and clean up based on time, not the other way around.*
-=======
-*OCDarr: Because your media library should work for you, adapt to your viewing patterns, and clean up based on time, not the other way around.*
->>>>>>> 8a236cdaaa9851f503f3964bc31c0fb01b14af7f
+*Episeerr: Three solutions for episode management - use what you need, when you need it.*

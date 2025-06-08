@@ -944,7 +944,7 @@ def parse_date(date_str, context):
 def get_baseline_date(series_id, series_title=None):
     """
     Get baseline date using hierarchy:
-    1. OCDarr JSON activity tracking (most accurate recent activity)
+    1. Episeerr JSON activity tracking (most accurate recent activity)
     2. Tautulli last watch date (historical watch data)
     3. Jellyfin last watch date (historical watch data)
     4. Sonarr latest episode file date (when content was acquired)
@@ -955,15 +955,15 @@ def get_baseline_date(series_id, series_title=None):
     
     print(f"\n🔍 Getting baseline date for series {series_id} ({series_title})")
     
-    # 1. FIRST: Check OCDarr JSON activity tracking
+    # 1. FIRST: Check Episeerr JSON activity tracking
     if series_id_str in activity_data:
         last_watched = activity_data[series_id_str].get('last_watched', 0)
         if last_watched > 0:
-            print(f"✅ STEP 1: Using OCDarr JSON date: {last_watched}")
+            print(f"✅ STEP 1: Using Episeerr JSON date: {last_watched}")
             print(f"   📆 Date: {datetime.fromtimestamp(last_watched)}")
             return last_watched
     
-    print(f"⚠️  STEP 1: No OCDarr JSON data found")
+    print(f"⚠️  STEP 1: No Episeerr JSON data found")
     
     # 2. SECOND: Check Tautulli for historical watch data
     if series_title:
@@ -1638,7 +1638,7 @@ def main():
                 process_episodes_for_webhook(series_id, season_number, episode_number, rule)
             else:
                 logger.info(f"No rule found for series ID {series_id}. Only updating activity.")
-                update_last_watched(series_id, season_number, episode_number)  
+                update_activity_date(series_id, season_number, episode_number)  
         else:
             logger.error(f"Series ID not found for series: {series_name}")
     else:
