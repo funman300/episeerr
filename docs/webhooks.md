@@ -14,7 +14,7 @@ Episeerr supports webhooks from:
 
 **For complete webhook setup with screenshots and exact templates:**
 
-📖 **[OCDarr Webhook Documentation](https://github.com/Vansmak/OCDarr#webhook-setup)**
+📖 **[OCDarr Webhook Documentation](https://github.com/Vansmak/OCDarr/blob/dev/README.md)**
 
 The webhook configurations are identical between OCDarr and Episeerr. Use those detailed guides for:
 - Tautulli webhook setup with JSON templates
