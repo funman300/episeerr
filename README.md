@@ -79,15 +79,29 @@ services:
   episeerr:
     image: vansmak/episeerr:latest
     environment:
+      # Required
       - SONARR_URL=http://your-sonarr:8989
-      - SONARR_API_KEY=your_api_key
-      - TMDB_API_KEY=your_tmdb_key # For episode selection UI
-      # Optional - for viewing-based rules
+      - SONARR_API_KEY=your_sonarr_api_key
+      - TMDB_API_KEY=your_tmdb_api_key
+      
+      # Optional - Viewing-based rules
       - TAUTULLI_URL=http://your-tautulli:8181
       - TAUTULLI_API_KEY=your_tautulli_key
-      # Optional - for request integration  
+      # OR
+      - JELLYFIN_URL=http://your-jellyfin:8096
+      - JELLYFIN_API_KEY=your_jellyfin_key
+      
+      # Optional - Request integration
+      # Keep as jellyseer label but use overseer url and api
       - JELLYSEERR_URL=http://your-jellyseerr:5055
       - JELLYSEERR_API_KEY=your_jellyseerr_key
+      
+      
+      # Optional - Tag creation (defaults to false)
+      - EPISEERR_AUTO_CREATE_TAGS=false
+      
+      # Optional - Cleanup scheduling
+      - CLEANUP_INTERVAL_HOURS=6
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs

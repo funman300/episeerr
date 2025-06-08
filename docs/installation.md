@@ -66,9 +66,11 @@ TMDB_API_KEY=your_tmdb_api_key
 TAUTULLI_URL=http://your-tautulli:8181
 TAUTULLI_API_KEY=your_tautulli_key
 
-# Optional - Request integration  
-JELLYSEERR_URL=http://your-jellyseerr:5055
-JELLYSEERR_API_KEY=your_jellyseerr_key
+# Optional - Request integration  # Keep as jellyseer label but use overseer url and api
+JELLYSEERR_URL=http://your-seerr 
+JELLYSEERR_API_KEY=your_seerr_key
+
+# Optional - Tag creation (defaults to false) EPISEERR_AUTO_CREATE_TAGS=false
 
 # Optional - Cleanup
 CLEANUP_INTERVAL_HOURS=6

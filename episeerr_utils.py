@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+
+
 # In modified_episeerr.py
 REQUESTS_DIR = os.path.join(os.getcwd(), 'requests')
 # Create logs directory in the current working directory
@@ -59,7 +62,14 @@ os.makedirs(REQUESTS_DIR, exist_ok=True)
 # Store pending episode selections
 # Format: {series_id: {'title': 'Series Title', 'season': 1, 'episodes': [1, 2, 3, ...]}}
 pending_selections = {}
+# Optional tag creation - defaults to False for safety
+AUTO_CREATE_TAGS = os.getenv('EPISEERR_AUTO_CREATE_TAGS', 'false').lower() == 'true'
 
+# Log the setting at startup
+if AUTO_CREATE_TAGS:
+    logger.info("Auto-create tags ENABLED - will create episeerr_default and episeerr_select tags")
+else:
+    logger.info("Auto-create tags DISABLED - please create tags manually if using tag-based workflows")
 
 
 def get_sonarr_headers():
@@ -73,6 +83,28 @@ def create_episeerr_default_tag():
     """Create a single 'episeerr_default' tag in Sonarr and return its ID."""
     global EPISEERR_DEFAULT_TAG_ID
     
+    if not AUTO_CREATE_TAGS:
+        logger.debug("Tag auto-creation disabled, checking for existing episeerr_default tag")
+        # Still check if tag exists, just don't create it
+        try:
+            headers = get_sonarr_headers()
+            tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
+            
+            if tags_response.ok:
+                for tag in tags_response.json():
+                    if tag['label'].lower() == 'episeerr_default':
+                        EPISEERR_DEFAULT_TAG_ID = tag['id']
+                        logger.info(f"Found existing 'episeerr_default' tag with ID {EPISEERR_DEFAULT_TAG_ID}")
+                        return EPISEERR_DEFAULT_TAG_ID
+            
+            logger.warning("episeerr_default tag not found. Please create manually in Sonarr or set EPISEERR_AUTO_CREATE_TAGS=true")
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Could not check for existing tags: {str(e)}")
+            return None
+    
+    # Original auto-creation logic (when AUTO_CREATE_TAGS=true)
     if EPISEERR_DEFAULT_TAG_ID is not None:
         logger.debug(f"'episeerr_default' tag ID already set: {EPISEERR_DEFAULT_TAG_ID}")
         return EPISEERR_DEFAULT_TAG_ID
@@ -119,6 +151,28 @@ def create_episeerr_select_tag():
     """Create a single 'episeerr_select' tag in Sonarr and return its ID."""
     global EPISEERR_SELECT_TAG_ID
     
+    if not AUTO_CREATE_TAGS:
+        logger.debug("Tag auto-creation disabled, checking for existing episeerr_select tag")
+        # Still check if tag exists, just don't create it
+        try:
+            headers = get_sonarr_headers()
+            tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
+            
+            if tags_response.ok:
+                for tag in tags_response.json():
+                    if tag['label'].lower() == 'episeerr_select':
+                        EPISEERR_SELECT_TAG_ID = tag['id']
+                        logger.info(f"Found existing 'episeerr_select' tag with ID {EPISEERR_SELECT_TAG_ID}")
+                        return EPISEERR_SELECT_TAG_ID
+            
+            logger.warning("episeerr_select tag not found. Please create manually in Sonarr or set EPISEERR_AUTO_CREATE_TAGS=true")
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Could not check for existing tags: {str(e)}")
+            return None
+    
+    # Original auto-creation logic (when AUTO_CREATE_TAGS=true)  
     if EPISEERR_SELECT_TAG_ID is not None:
         logger.debug(f"'episeerr_select' tag ID already set: {EPISEERR_SELECT_TAG_ID}")
         return EPISEERR_SELECT_TAG_ID
@@ -162,22 +216,33 @@ def create_episeerr_select_tag():
         return None
 
 def initialize_episeerr():
-    
+    """Initialize Episeerr with optional tag creation"""
     logger.debug("Entering initialize_episeerr()")
     
-    logger.debug("Creating episeerr_default tag")
-    default_tag_id = create_episeerr_default_tag()
-    if default_tag_id is None:
-        logger.error("Failed to initialize 'episeerr_default' tag. Request system may not function correctly.")
-    else:
-        logger.info(f"Initialized 'episeerr_default' tag with ID {default_tag_id}")
+    if AUTO_CREATE_TAGS:
+        logger.info("Attempting to create/verify required tags...")
+        
+        logger.debug("Creating episeerr_default tag")
+        default_tag_id = create_episeerr_default_tag()
+        if default_tag_id is None:
+            logger.warning("Failed to initialize 'episeerr_default' tag. Tag-based workflows may not function.")
+        else:
+            logger.info(f"Initialized 'episeerr_default' tag with ID {default_tag_id}")
 
-    logger.debug("Creating episeerr_select tag")
-    select_tag_id = create_episeerr_select_tag()
-    if select_tag_id is None:
-        logger.error("Failed to initialize 'episeerr_select' tag. Request system may not function correctly.")
+        logger.debug("Creating episeerr_select tag")
+        select_tag_id = create_episeerr_select_tag()
+        if select_tag_id is None:
+            logger.warning("Failed to initialize 'episeerr_select' tag. Episode selection workflows may not function.")
+        else:
+            logger.info(f"Initialized 'episeerr_select' tag with ID {select_tag_id}")
     else:
-        logger.info(f"Initialized 'episeerr_select' tag with ID {select_tag_id}")
+        logger.info("Tag auto-creation disabled. Checking for existing tags...")
+        create_episeerr_default_tag()  # Just checks, doesn't create
+        create_episeerr_select_tag()   # Just checks, doesn't create
+        
+        if EPISEERR_DEFAULT_TAG_ID is None and EPISEERR_SELECT_TAG_ID is None:
+            logger.warning("No episeerr tags found. Please create 'episeerr_default' and 'episeerr_select' tags manually in Sonarr.")
+            logger.info("Or set EPISEERR_AUTO_CREATE_TAGS=true to auto-create them.")
 
     logger.debug("Checking unmonitored downloads")
     try:
@@ -185,7 +250,9 @@ def initialize_episeerr():
     except Exception as e:
         logger.error(f"Error in initial download check: {str(e)}")
 
+    logger.info("Episeerr initialization complete")
     logger.debug("Exiting initialize_episeerr()")
+
 
 def unmonitor_series(series_id, headers):
     """Unmonitor all episodes in a series."""
@@ -960,5 +1027,5 @@ def process_series(tvdb_id, season_number, request_id=None):
     return False
 
 # Initialize tags on import
-create_episeerr_default_tag()
-create_episeerr_select_tag()
+#create_episeerr_default_tag()
+#create_episeerr_select_tag()
