@@ -13,28 +13,13 @@ Perfect for:
 ## How Episode Selection Works
 
 ### Workflow Overview
-1. **Request initiated** (via Episeerr interface or Jellyseerr tag)
+1. **Request initiated** (via Sonarr, Jellyseerr, Overseerr ot other third party app using tag)
 2. **Series added to Sonarr** with `episeerr_select` tag
 3. **All episodes unmonitored** (prevents automatic downloads)
 4. **Selection interface appears** in Episeerr pending requests
 5. **User selects episodes** across any seasons
 6. **Only selected episodes monitored** and searched
 
-### Two Request Methods
-
-#### Method 1: Episeerr Interface
-1. Go to Episeerr → Pending Requests  
-2. Click "Request New Series" (if available)
-3. Search for and add series
-4. Series appears in pending requests
-5. Click "Select Seasons" → Choose seasons
-6. Click "Select Episodes" → Choose specific episodes
-
-#### Method 2: Jellyseerr/Overseerr Integration
-1. Request series in Jellyseerr/Overseerr
-2. **Add `episeerr_select` tag** to the request
-3. Series automatically appears in Episeerr pending requests
-4. Follow selection workflow as above
 
 ## Episode Selection Interface
 
