@@ -1,5 +1,5 @@
 #!/bin/bash
-# Combined build and release script for OCDarr with Beta Support
+# Combined build and release script for Episeerr with Beta Support
 # Get version from command line
 VERSION=${1}
 
@@ -7,10 +7,10 @@ VERSION=${1}
 if [ -z "$VERSION" ]; then
     echo "Usage: ./release.sh <version>"
     echo "Examples:"
-    echo "  ./release.sh 2.1.0          (stable release)"
-    echo "  ./release.sh beta-2.1.0     (beta release)"
-    echo "  ./release.sh 2.1.0-beta.1   (beta release)"
-    echo "  ./release.sh 2.1.0-rc.1     (release candidate)"
+    echo "  ./release.sh 1.0.0          (stable release)"
+    echo "  ./release.sh beta-1.0.0     (beta release)"
+    echo "  ./release.sh 1.0.0-beta.1   (beta release)"
+    echo "  ./release.sh 1.0.0-rc.1     (release candidate)"
     echo ""
     echo "This will:"
     echo "  1. Create git commit and tag"
@@ -27,7 +27,7 @@ if [[ $VERSION == *"beta"* ]] || [[ $VERSION == *"alpha"* ]] || [[ $VERSION == *
     IS_PRERELEASE=true
 fi
 
-echo "🚀 Starting OCDarr release process for version: $VERSION"
+echo "🚀 Starting Episeerr release process for version: $VERSION"
 if [ "$IS_PRERELEASE" = true ]; then
     echo "🧪 Pre-release detected - will NOT tag as 'latest'"
 else
@@ -50,21 +50,21 @@ fi
 echo "Updating VERSION file to $VERSION"
 echo "$VERSION" > VERSION
 
-# Update version in webhook_listener.py if it exists
-if [ -f "webhook_listener.py" ]; then
-    echo "Updating version in webhook_listener.py"
-    if ! grep -q "__version__" webhook_listener.py; then
-        sed -i '1i__version__ = "'$VERSION'"' webhook_listener.py
+# Update version in episeerr.py if it exists
+if [ -f "episeerr.py" ]; then
+    echo "Updating version in episeerr.py"
+    if ! grep -q "__version__" episeerr.py; then
+        sed -i '1i__version__ = "'$VERSION'"' episeerr.py
     else
-        sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" webhook_listener.py
+        sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" episeerr.py
     fi
 fi
 
-# Get current branch, prefer 'lite' branch for OCDarr Lite
+# Get current branch, should be 'main' for Episeerr
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-if [ "$BRANCH" != "lite" ] && [ "$BRANCH" != "main" ]; then
+if [ "$BRANCH" != "main" ]; then
     echo "⚠️  Warning: You're on branch '$BRANCH'"
-    echo "   Consider switching to 'lite' or 'main' branch for releases"
+    echo "   Consider switching to 'main' branch for releases"
 fi
 echo "Current branch: $BRANCH"
 
@@ -80,59 +80,63 @@ else
     # Create different commit messages for pre-release vs stable
     if [ "$IS_PRERELEASE" = true ]; then
         echo "Creating pre-release commit..."
-        git commit -m "OCDarr v$VERSION (Pre-release)
+        git commit -m "Episeerr v$VERSION (Pre-release)
 
 🧪 Beta/Testing Features:
-- Time-based cleanup system with dual timers
-- Surgical cleanup (grace period) vs Nuclear cleanup (abandonment)
-- Enhanced activity tracking with episode details
-- Improved webhook/scheduler separation
-- Block-based episode preservation logic
+- Granular episode selection across multiple seasons
+- Viewing-based episode automation with webhook integration
+- Time-based cleanup with grace periods and dormant timers
+- Rule-based episode management system
+- Integration with Jellyseerr/Overseerr and Sonarr
 
 ⚠️  This is a pre-release version - use for testing only"
     else
         echo "Creating stable release commit..."
-        git commit -m "OCDarr v$VERSION
+        git commit -m "Episeerr v$VERSION
 
 ✨ New Features:
-- Time-based cleanup system
-- Rule-based automation for TV series
-- Smart webhook processing
-- Enhanced episode management
-- Multi-architecture Docker support"
+- Episode selection system with multi-season support
+- Viewing-based automation for episode management
+- Time-based cleanup with dual timer system
+- Rule-based automation for different show types
+- Webhook integration for Tautulli, Jellyfin, and Sonarr
+- Tag-based workflow with Jellyseerr/Overseerr integration"
     fi
 fi
 
 # Create tag with appropriate message
 if [ "$IS_PRERELEASE" = true ]; then
     echo "Creating pre-release tag v$VERSION..."
-    git tag -a "v$VERSION" -m "OCDarr v$VERSION (Pre-release)
+    git tag -a "v$VERSION" -m "Episeerr v$VERSION (Pre-release)
 
 🧪 Beta Features:
-- Time-based cleanup with grace periods and abandonment timers
-- Surgical vs Nuclear cleanup strategies  
-- Enhanced activity tracking system
-- Webhook/scheduler architectural separation
-- Block-based episode preservation
+- Multi-season episode selection interface
+- Viewing-based episode automation with real-time webhook processing
+- Time-based cleanup with grace periods and dormant timers
+- Flexible rule system for different show management strategies
+- Integration with Jellyseerr/Overseerr request workflows
 
 ⚠️  Pre-release - recommended for testing environments only
 
 Testing Focus:
-- Time-based cleanup logic validation
-- Activity tracking accuracy
-- Rule processing with new timer fields
-- Scheduler status and manual controls"
+- Episode selection workflow validation
+- Webhook processing accuracy (Tautulli/Jellyfin)
+- Rule automation with timer-based cleanup
+- Multi-season selection interface
+- Tag-based request processing"
 else
     echo "Creating stable release tag v$VERSION..."
-    git tag -a "v$VERSION" -m "OCDarr v$VERSION
+    git tag -a "v$VERSION" -m "Episeerr v$VERSION
 
 Features:
-- Complete episode management system
-- Rule-based automation with time-based cleanup
-- Webhook processing for Sonarr, Tautulli, Jellyfin, Jellyseerr  
-- Smart episode selection based on viewing habits
-- Multi-architecture Docker support
-- Comprehensive logging and monitoring"
+- Complete episode management system with three independent solutions
+- Granular episode selection with multi-season support
+- Viewing-based automation with webhook integration
+- Time-based cleanup with configurable grace and dormant periods
+- Rule-based episode management for different show types
+- Sonarr integration with tag-based workflows
+- Webhook support for Tautulli, Jellyfin, Sonarr, and Jellyseerr/Overseerr
+- Multi-architecture Docker support"
 fi
 
 # Push commits and tags with force
@@ -156,35 +160,35 @@ echo "--------------------------------"
 
 # Set up buildx
 echo "Setting up Docker Buildx..."
-docker buildx create --name ocdarr-builder --use || true
+docker buildx create --name episeerr-builder --use || true
 
 # Ensure the builder is running
-docker buildx inspect ocdarr-builder --bootstrap
+docker buildx inspect episeerr-builder --bootstrap
 
 # Build with different tagging strategy based on release type
 if [ "$IS_PRERELEASE" = true ]; then
-    echo "Building OCDarr pre-release multi-arch image (no 'latest' tag)..."
+    echo "Building Episeerr pre-release multi-arch image (no 'latest' tag)..."
     docker buildx build \
       --platform linux/amd64,linux/arm64,linux/arm/v7 \
-      -t vansmak/ocdarr-lite:$VERSION \
+      -t vansmak/episeerr:$VERSION \
       --push \
       .
     
     echo "🧪 Pre-release image built and pushed:"
-    echo "  - vansmak/ocdarr-lite:$VERSION"
+    echo "  - vansmak/episeerr:$VERSION"
     echo "  - NOT tagged as 'latest' (pre-release)"
 else
-    echo "Building OCDarr stable multi-arch image..."
+    echo "Building Episeerr stable multi-arch image..."
     docker buildx build \
       --platform linux/amd64,linux/arm64,linux/arm/v7 \
-      -t vansmak/ocdarr-lite:$VERSION \
-      -t vansmak/ocdarr-lite:latest \
+      -t vansmak/episeerr:$VERSION \
+      -t vansmak/episeerr:latest \
       --push \
       .
     
     echo "✅ Stable release images built and pushed:"
-    echo "  - vansmak/ocdarr-lite:$VERSION"
-    echo "  - vansmak/ocdarr-lite:latest"
+    echo "  - vansmak/episeerr:$VERSION"
+    echo "  - vansmak/episeerr:latest"
 fi
 
 echo "✅ Docker operations completed"
@@ -202,14 +206,14 @@ fi
 echo "Git tag: v$VERSION"
 echo "Git branch: $BRANCH"
 echo "Docker images:"
-echo "  - vansmak/ocdarr-lite:$VERSION"
+echo "  - vansmak/episeerr:$VERSION"
 if [ "$IS_PRERELEASE" = false ]; then
-    echo "  - vansmak/ocdarr-lite:latest"
+    echo "  - vansmak/episeerr:latest"
 fi
 
 echo ""
 if [ "$IS_PRERELEASE" = true ]; then
-    echo "🧪 OCDarr v$VERSION (Pre-release) released successfully!"
+    echo "🧪 Episeerr v$VERSION (Pre-release) released successfully!"
     echo ""
     echo "⚠️  PRE-RELEASE NOTES:"
     echo "  - This version is for testing purposes"
@@ -217,18 +221,26 @@ if [ "$IS_PRERELEASE" = true ]; then
     echo "  - Please report issues and feedback"
     echo "  - NOT tagged as 'latest' to prevent accidental use"
 else
-    echo "🚀 OCDarr v$VERSION released successfully!"
+    echo "🚀 Episeerr v$VERSION released successfully!"
 fi
 
 echo ""
 echo "Next steps:"
-echo "  - Check GitHub: https://github.com/vansmak/ocdarr-lite"
+echo "  - Check GitHub: https://github.com/vansmak/episeerr"
 if [ "$IS_PRERELEASE" = true ]; then
-    echo "  - Check Docker Hub: https://hub.docker.com/r/vansmak/ocdarr-lite (pre-release tag)"
-    echo "  - Test with: docker pull vansmak/ocdarr-lite:$VERSION"
+    echo "  - Check Docker Hub: https://hub.docker.com/r/vansmak/episeerr (pre-release tag)"
+    echo "  - Test with: docker pull vansmak/episeerr:$VERSION"
     echo "  - 🧪 Report testing feedback on GitHub Issues"
 else
-    echo "  - Check Docker Hub: https://hub.docker.com/r/vansmak/ocdarr-lite"
-    echo "  - Test with: docker pull vansmak/ocdarr-lite:$VERSION"
+    echo "  - Check Docker Hub: https://hub.docker.com/r/vansmak/episeerr"
+    echo "  - Test with: docker pull vansmak/episeerr:$VERSION"
     echo "  - Update documentation if needed"
 fi
+
+echo ""
+echo "🎯 Episeerr Features Released:"
+echo "  - Episode selection system (granular control)"
+echo "  - Viewing-based automation (webhook-driven)"
+echo "  - Time-based cleanup (grace + dormant timers)"
+echo "  - Rule-based management (flexible automation)"
+echo "  - Multi-platform support (amd64, arm64, arm/v7)"
