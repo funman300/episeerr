@@ -12,7 +12,7 @@ Episeerr integrates deeply with Sonarr through tags, webhooks, and release profi
 2. **Add New Profile:**
    - **Name:** "Episeerr Episode Selection Delay"
    - **Delay:** Set to a very high number like `10519200` (about 20 years)
-   - **Tags:** Select `episeerr-select` and `episeerr-default tag
+   - **Tags:** Select `episeerr-select` tag
    - **Must Not Contain:** Leave empty
    - **Must Contain:** Leave empty
 
@@ -67,10 +67,16 @@ Episeerr uses specific tags to control automation:
 - Testing new shows with just pilot episodes
 
 ### No Tag
-**Purpose:** Standard automation
+**Purpose:** Standard Sonarr behavior
 **Behavior:** 
-- Series gets assigned to default rule (if webhook is set up)
-- Normal episode management applies
+- **No Episeerr management** - series is completely ignored
+- **Normal Sonarr automation** applies
+- **Must manually assign** in Episeerr if you want rule-based management
+
+**When to Use:**
+- Series you want managed purely by Sonarr
+- Shows you don't want Episeerr to touch
+- Standard media management without automation
 
 ## Sonarr Webhook Setup
 
@@ -98,12 +104,12 @@ When a series is added to Sonarr:
 
 ### Standard Request (No Tag)
 ```
-Jellyseerr Request → Sonarr → Webhook → Default Rule → Automation
+Jellyseerr Request → Sonarr → Normal Sonarr Behavior (No Episeerr Management)
 ```
 
 ### Forced Default (episeerr_default tag)  
 ```
-Tagged Request → Sonarr → Webhook → Default Rule → Immediate Automation
+Tagged Request → Sonarr → Webhook → Default Rule Assignment → Automation
 ```
 
 ### Episode Selection (episeerr_select tag)
