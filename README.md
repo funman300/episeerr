@@ -31,8 +31,8 @@ Select individual episodes across multiple seasons with precision.
 - Managing limited storage with surgical precision
 
 **How it works:**
-1. Request via Episeerr interface or use `episeerr_select` tag in Jellyseerr/Overseerr
-2. Choose seasons and specific episodes
+1.  Make request with `episeerr_select` tag in Jellyseerr/Overseerr/sonarr 
+2. Choose seasons and specific episodes in episeerr 
 3. Only selected episodes are monitored and downloaded
 
 ---
@@ -110,6 +110,8 @@ services:
 Perfect for trying new shows or specific episode management.
 ```
 No rules needed - just use the episode selection interface
+
+Webhooks: Tautulli or Jellyfin, Jellyseer or Overseer
 ```
 
 ### Viewing Rules Only  
@@ -117,13 +119,15 @@ Next episode always ready, automatic cleanup.
 ```
 Rule: Get 1, Search, Keep 1
 Webhooks: Tautulli or Jellyfin
-Timers: Disabled
+Timers: null
 ```
 
 ### Time Cleanup Only
 Hands-off library maintenance.
 ```
-Rule: Get all, Monitor, Keep all  
+Rule: Get blank, Monitor, Keep blank
+  - or leave like default sonarr 
+  - won't matter if no we hook setup  
 Grace: 30 days, Dormant: 90 days
 Webhooks: Not needed
 ```
@@ -131,6 +135,7 @@ Webhooks: Not needed
 ### Full Automation
 Complete episode lifecycle management.
 ```
+Intercept and manage requests
 Rule: Get 2, Search, Keep 2
 Grace: 7 days, Dormant: 60 days  
 Webhooks: Enabled
@@ -182,10 +187,6 @@ Webhooks: Enabled
 ## 🚫 What Episeerr Won't Do
 
 - Manage unassigned series (completely ignores them)
-- Interfere with your existing Sonarr setup
-- Force you to use features you don't want
-- Delete files without clear reasoning (all logged)
 
----
 
 *Episeerr: Three solutions for episode management - use what you need, when you need it.*
