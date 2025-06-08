@@ -148,9 +148,34 @@ Rules can include automatic cleanup based on time. **This is completely optional
 
 ## Rule Assignment
 
-### Automatic Assignment
-- **Default Rule:** Applied to new series automatically
-- **Sonarr Tags:** Use `episeerr_default` tag for auto-assignment
+### Default Rule (Very Important!)
+The **default rule** is automatically applied to any series that doesn't have a specific rule assigned. This is crucial because:
+
+- **New series** without tags get the default rule
+- **Sonarr webhook** assigns series with `episeerr_default` tag to default rule
+- **Fallback behavior** for any unassigned series
+
+**Setting the Default Rule:**
+1. Go to Rules section in Episeerr
+2. Use the "Default Rule" dropdown to select which rule should be default
+3. This rule will be applied automatically to new series
+
+### Automatic Assignment Methods
+
+#### No Tag (Most Common)
+- **Series added normally** → Gets **default rule**
+- **Jellyseerr/Overseerr requests** without tags → Gets **default rule**
+- **Manual Sonarr additions** → Gets **default rule** if Episeerr webhook is set up
+
+#### episeerr_default Tag
+- **Forces assignment** to default rule
+- **Immediate automation** - episodes managed according to default rule settings
+- **Webhook triggers** automatic processing when series is added to Sonarr
+
+#### episeerr_select Tag  
+- **Bypasses rules** - triggers episode selection workflow instead
+- **Manual control** - user chooses specific episodes
+- **No automatic rule assignment** until tag is removed
 
 ### Manual Assignment  
 - Use Episeerr interface to assign specific series to rules
