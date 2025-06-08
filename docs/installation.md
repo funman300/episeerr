@@ -115,7 +115,11 @@ docker run -d \
    - Create a "default" rule for most shows
    - Configure how you want episodes managed
 
-4. **Test the setup:**
+4. **Configure Sonarr delayed profile:** optional for making external requests that you want episeerr to hijack
+   - **Critical:** Set up delayed release profile to prevent unwanted downloads
+   - See [Sonarr Integration Guide](sonarr-integration.md#required-delayed-release-profile)
+
+5. **Test the setup:**
    - Assign a test series to your rule
    - Verify it appears in Sonarr correctly
 
