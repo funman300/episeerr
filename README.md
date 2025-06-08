@@ -149,17 +149,18 @@ Webhooks: Enabled
 ## 🔧 Integration
 
 ### Sonarr Tags
+When making requests
 - `episeerr_default`: Auto-assigns to default rule when added
 - `episeerr_select`: Triggers episode selection workflow
 
-### Jellyseerr/Overseerr  
-- Request normally: Gets default rule
-- Request with `episeerr_select` tag: Triggers episode selection
-
 ### Webhooks *(Optional)*
 - **Tautulli:** `http://your-episeerr:5002/webhook` 
-- **Jellyfin:** `http://your-episeerr:5002/jellyfin-webhook`  
+  or
+- **Jellyfin:** `http://your-episeerr:5002/jellyfin-webhook` 
+ 
 - **Sonarr:** `http://your-episeerr:5002/sonarr-webhook`
+
+- **jellyseer/overseer:** `http://your-episeerr:5002/seerr-webhook`
 
 *Setup guides with templates and screenshots: [OCDarr Webhook Documentation](link-to-ocdarr-guides)*
 
