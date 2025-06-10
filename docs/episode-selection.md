@@ -19,7 +19,7 @@ Perfect for:
 4. **Selection interface appears** in Episeerr pending requests
 5. **User selects episodes** across any seasons
 6. **Only selected episodes monitored** and searched
-
+**Note, if requested on jellyseer or overseer with an episeerr tag then the request will be deleted from seer after it is processed. rhis is necessary to prevent seer app from readding it.
 
 ## Episode Selection Interface
 
