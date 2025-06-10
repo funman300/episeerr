@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ocdarr-lite
+    container_name: episeerr
     env_file:
       - .env
     volumes:

@@ -21,8 +21,6 @@ OVERSEERR_API_KEY=your_overseerr_key
 # Optional - Tag creation (defaults to false)
 EPISEERR_AUTO_CREATE_TAGS=false
       
-# Optional - Cleanup scheduling
-CLEANUP_INTERVAL_HOURS=6
 
 LOG_PATH=logs/app.log
 FLASK_DEBUG=false

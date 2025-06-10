@@ -36,9 +36,6 @@
                 "73": {
                     "activity_date": null
                 },
-                "378": {
-                    "activity_date": null
-                },
                 "252": {
                     "activity_date": null
                 },
@@ -221,15 +218,6 @@
             "dormant_days": null,
             "series": {},
             "dry_run": false
-        },
-        "mynewrule": {
-            "get_option": "2",
-            "action_option": "monitor",
-            "keep_watched": "0",
-            "monitor_watched": false,
-            "grace_days": 7,
-            "dormant_days": 30,
-            "series": {}
         }
     },
     "field_migration_complete": true,

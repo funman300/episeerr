@@ -1,90 +1,174 @@
-<!-- templates/scheduler_admin.html - Enhanced with dry run management -->
+<!-- templates/scheduler_admin.html - Enhanced with global storage gate -->
 {% extends "base.html" %}
 
 {% block title %}Scheduler Admin - OCDarr{% endblock %}
 
 {% block content %}
 <div class="row">
-    <div class="col-md-8">
+    <!-- Global Storage Gate Settings -->
+    <div class="col-md-12 mb-4">
         <div class="card">
             <div class="card-header">
-                <h5><i class="fas fa-clock me-2"></i>Time-Based Cleanup Scheduler</h5>
+                <h5><i class="fas fa-globe me-2"></i>Global Storage Gate</h5>
             </div>
             <div class="card-body">
-                <div id="scheduler-status">
-                    <div class="text-center">
-                        <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                <form id="globalSettingsForm">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="globalStorageGate" class="form-label">
+                                    Storage Threshold (GB)
+                                    <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                       title="Global threshold - cleanup only runs when free space drops below this amount"></i>
+                                </label>
+                                <input type="number" class="form-control" id="globalStorageGate" 
+                                       name="global_storage_min_gb" min="1" placeholder="Leave empty to disable">
+                                <div class="form-text">
+                                    Example: "20" = Only run cleanup when less than 20GB free
+                                </div>
+                            </div>
                         </div>
-                        <p>Loading scheduler status...</p>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="cleanupInterval" class="form-label">
+                                    Cleanup Interval (hours)
+                                </label>
+                                <input type="number" class="form-control" id="cleanupInterval" 
+                                       name="cleanup_interval_hours" min="1" max="168" value="6">
+                                <div class="form-text">
+                                    How often to check for cleanup (1-168 hours)
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input" type="checkbox" id="dryRunMode" name="dry_run_mode">
+                                    <label class="form-check-label" for="dryRunMode">
+                                        <strong>Global Dry Run Mode</strong>
+                                    </label>
+                                    <div class="form-text">Show what would be deleted without actually deleting</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">&nbsp;</label>
+                                <div class="d-grid">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save me-1"></i>Save Global Settings
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Status Overview - Left Side -->
+    <div class="col-md-8">
+        <div class="row">
+            <!-- Scheduler Status -->
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h6><i class="fas fa-clock me-2"></i>Scheduler Status</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="scheduler-status">
+                            <div class="text-center">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="small mt-2">Loading...</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="mt-4">
-                    <h6>Manual Actions</h6>
-                    <div class="btn-group mb-3">
-                        <button type="button" class="btn btn-primary" onclick="forceCleanup()">
-                            <i class="fas fa-play me-1"></i>Clean Shows Now
-                        </button>
-                        <button type="button" class="btn btn-secondary" onclick="refreshStatus()">
-                            <i class="fas fa-refresh me-1"></i>Refresh Status
+            </div>
+            
+            <!-- Storage Status -->
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6><i class="fas fa-hard-drive me-2"></i>Storage Status</h6>
+                        <button class="btn btn-sm btn-outline-info" onclick="refreshStatus()">
+                            <i class="fas fa-sync-alt"></i>
                         </button>
                     </div>
-                    
-                    <h6>Safety & Testing</h6>
-                    <div class="btn-group">
-                        <a href="/dry-run-settings" class="btn btn-info">
-                            <i class="fas fa-flask me-1"></i>Dry Run Settings
-                        </a>
-                        <button type="button" class="btn btn-warning" onclick="viewCleanupLogs()">
-                            <i class="fas fa-file-alt me-1"></i>View Cleanup Logs
-                        </button>
+                    <div class="card-body">
+                        <div id="storage-status">
+                            <!-- Will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Manual Actions -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6><i class="fas fa-play me-2"></i>Manual Actions</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-primary" onclick="forceCleanup()">
+                                <i class="fas fa-play me-1"></i>Clean Shows Now
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="refreshStatus()">
+                                <i class="fas fa-refresh me-1"></i>Refresh Status
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-grid gap-2">
+                            <a href="/dry-run-settings" class="btn btn-info">
+                                <i class="fas fa-flask me-1"></i>Dry Run Settings
+                            </a>
+                            <button type="button" class="btn btn-warning" onclick="viewCleanupLogs()">
+                                <i class="fas fa-file-alt me-1"></i>View Cleanup Logs
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
     
+    <!-- Information Sidebar - Right Side -->
     <div class="col-md-4">
-        <div class="card">
+        <!-- Rules Summary -->
+        <div class="card mb-3">
             <div class="card-header">
-                <h6><i class="fas fa-info-circle me-2"></i>How It Works</h6>
+                <h6><i class="fas fa-list me-2"></i>Rules Summary</h6>
             </div>
             <div class="card-body">
-                <small>
-                    <p><strong>Your Two-Layer System:</strong></p>
-                    <ul>
-                        <li><strong>Webhook Layer:</strong> When you watch episodes, immediately manages next content and deletes old episodes</li>
-                        <li><strong>Scheduler Layer:</strong> Runs every 6 hours to handle time-based cleanup</li>
-                    </ul>
-                    
-                    <p><strong>Time-Based Cleanup:</strong></p>
-                    <ul>
-                        <li><strong>Grace Period:</strong> Delete watched content after X days of last activity</li>
-                        <li><strong>Dormant Timer:</strong> Delete everything and reset show after Y days of no activity</li>
-                        
-                    </ul>
-                    
-                    <p><strong>Configuration:</strong></p>
-                    <ul>
-                        <li>Set <code>CLEANUP_INTERVAL_HOURS</code> in .env</li>
-                        <li>Configure grace_days and dormant_days in rules</li>
-                        <li>Assign series to rules with time-based settings</li>
-                        <li><strong>Use dry run mode to test safely!</strong></li>
-                    </ul>
-                    
-                    <p><strong>⚠️ **USE AT YOUR OWN RISK** ⚠️</strong></p>
-                    <ul>
-                        <li>Will permanently delete your media files!</li>
-                        <li>Grace period deletes your watched content</li>
-                        <li>Dormant timer resets shows to clean slate</li>
-                        <li>Always test with dry run mode first</li>
-                    </ul>
-                </small>
+                <div id="rules-summary">
+                    <small class="text-muted">Loading rules summary...</small>
+                </div>
             </div>
         </div>
-        
-        <div class="card mt-3">
+
+        <!-- Current Status -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Current Status</h6>
+            </div>
+            <div class="card-body">
+                <div id="safety-status">
+                    <small class="text-muted">Loading safety status...</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card mb-3">
             <div class="card-header">
                 <h6><i class="fas fa-chart-line me-2"></i>Recent Activity</h6>
             </div>
@@ -95,14 +179,41 @@
             </div>
         </div>
 
-        <div class="card mt-3">
+        <!-- How It Works -->
+        <div class="card">
             <div class="card-header">
-                <h6><i class="fas fa-exclamation-triangle me-2"></i>Current Status</h6>
+                <h6><i class="fas fa-info-circle me-2"></i>How It Works</h6>
             </div>
             <div class="card-body">
-                <div id="safety-status">
-                    <small class="text-muted">Loading safety status...</small>
-                </div>
+                <small>
+                    <p><strong>Global Storage Gate:</strong></p>
+                    <ul>
+                        <li><strong>One Threshold:</strong> Set global GB limit (e.g., 20GB)</li>
+                        <li><strong>Smart Cleanup:</strong> Only runs when below threshold</li>
+                        <li><strong>Rule Protection:</strong> Rules without grace/dormant are never touched</li>
+                        <li><strong>Safe by Default:</strong> Global dry run mode available</li>
+                    </ul>
+                    
+                    <p><strong>Your Two-Layer System:</strong></p>
+                    <ul>
+                        <li><strong>Webhook Layer:</strong> When you watch episodes, immediately manages next content and deletes old episodes</li>
+                        <li><strong>Scheduler Layer:</strong> Runs every X hours to handle time-based cleanup</li>
+                    </ul>
+                    
+                    <p><strong>Time-Based Cleanup:</strong></p>
+                    <ul>
+                        <li><strong>Grace Period:</strong> Delete unwatched content after X days of last activity</li>
+                        <li><strong>Dormant Timer:</strong> Delete everything and reset show after Y days of no activity</li>
+                    </ul>
+                    
+                    <p><strong>⚠️ **USE AT YOUR OWN RISK** ⚠️</strong></p>
+                    <ul>
+                        <li>Will permanently delete your media files!</li>
+                        <li>Grace period deletes unwatched content</li>
+                        <li>Dormant timer resets shows to clean slate</li>
+                        <li>Always test with dry run mode first</li>
+                    </ul>
+                </small>
             </div>
         </div>
     </div>
@@ -112,17 +223,159 @@
 {% block scripts %}
 <script>
 let schedulerStatusInterval;
+let globalSettings = {};
 
+// Enhanced initialization
+document.addEventListener('DOMContentLoaded', function() {
+    loadGlobalSettings();
+    loadSchedulerStatus();
+    loadRecentActivity();
+    loadSafetyStatus();
+    loadRulesSummary();
+    
+    // Setup form submission
+    document.getElementById('globalSettingsForm').addEventListener('submit', saveGlobalSettings);
+    
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Refresh status every 30 seconds
+    schedulerStatusInterval = setInterval(() => {
+        loadSchedulerStatus();
+        loadRecentActivity();
+        loadStorageStatus();
+    }, 30000);
+});
+
+// Global settings functions
+async function loadGlobalSettings() {
+    try {
+        const response = await fetch('/api/global-settings');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            globalSettings = data.settings;
+            
+            // Populate form
+            document.getElementById('globalStorageGate').value = 
+                globalSettings.global_storage_min_gb || '';
+            document.getElementById('cleanupInterval').value = 
+                globalSettings.cleanup_interval_hours || 6;
+            document.getElementById('dryRunMode').checked = 
+                globalSettings.dry_run_mode || false;
+                
+            // Update storage status if we have disk info
+            if (data.disk_info) {
+                updateStorageStatus(data.disk_info, globalSettings);
+            }
+            
+            // Update safety status to match global settings
+            updateSafetyStatusFromGlobal(globalSettings);
+        } else {
+            console.warn('Global settings response:', data);
+            // Set defaults on error
+            document.getElementById('globalStorageGate').value = '';
+            document.getElementById('cleanupInterval').value = 6;
+            document.getElementById('dryRunMode').checked = false;
+        }
+    } catch (error) {
+        console.error('Error loading global settings:', error);
+        document.getElementById('globalStorageGate').value = '';
+        document.getElementById('cleanupInterval').value = 6;
+        document.getElementById('dryRunMode').checked = false;
+    }
+}
+
+function updateSafetyStatusFromGlobal(settings) {
+    const safetyDiv = document.getElementById('safety-status');
+    
+    let html = '<small>';
+    
+    if (settings.dry_run_mode) {
+        html += '<div class="alert alert-success alert-sm p-2 mb-2">';
+        html += '<i class="fas fa-shield-alt me-1"></i><strong>Global Dry Run: ENABLED</strong><br>';
+        html += 'No files will be deleted system-wide';
+        html += '</div>';
+    } else {
+        html += '<div class="alert alert-warning alert-sm p-2 mb-2">';
+        html += '<i class="fas fa-exclamation-triangle me-1"></i><strong>Live Mode: ACTIVE</strong><br>';
+        html += 'Cleanup will delete files unless overridden';
+        html += '</div>';
+    }
+    
+    html += '</small>';
+    safetyDiv.innerHTML = html;
+}
+
+async function saveGlobalSettings(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const settings = {
+        global_storage_min_gb: formData.get('global_storage_min_gb') || null,
+        cleanup_interval_hours: parseInt(formData.get('cleanup_interval_hours')) || 6,
+        dry_run_mode: formData.has('dry_run_mode')
+    };
+    
+    try {
+        const response = await fetch('/api/global-settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(settings)
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showMessage('Global settings saved successfully!', 'success');
+            globalSettings = data.settings;
+            loadStorageStatus(); // Refresh storage status
+            updateSafetyStatusFromGlobal(data.settings); // Update safety status
+        } else {
+            showMessage('Error: ' + data.message, 'error');
+        }
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        showMessage('Failed to save settings', 'error');
+    }
+}
+
+// Enhanced scheduler status loading
 function loadSchedulerStatus() {
-    fetch('/api/scheduler-status')
+    // Try enhanced status first, fallback to basic
+    fetch('/api/scheduler-status-global')
         .then(response => response.json())
         .then(data => {
-            updateSchedulerDisplay(data);
+            if (data.status === 'success' || data.status === 'running' || data.status === 'stopped') {
+                updateSchedulerDisplay(data);
+                if (data.disk_info) {
+                    updateStorageStatus(data.disk_info, data.global_settings);
+                }
+                if (data.rule_summary) {
+                    updateRulesSummary(data.rule_summary);
+                }
+            } else {
+                throw new Error('Enhanced status not available');
+            }
         })
         .catch(error => {
-            console.error('Error loading scheduler status:', error);
-            document.getElementById('scheduler-status').innerHTML = 
-                '<div class="alert alert-danger">Failed to load scheduler status</div>';
+            console.warn('Enhanced status failed, trying basic:', error);
+            // Fallback to basic status
+            fetch('/api/scheduler-status')
+                .then(response => response.json())
+                .then(data => {
+                    updateSchedulerDisplay(data);
+                })
+                .catch(error => {
+                    console.error('Error loading scheduler status:', error);
+                    document.getElementById('scheduler-status').innerHTML = 
+                        '<div class="alert alert-danger">Failed to load scheduler status</div>';
+                });
         });
 }
 
@@ -132,38 +385,149 @@ function updateSchedulerDisplay(status) {
     let statusBadge, statusText;
     if (status.status === 'running') {
         statusBadge = '<span class="badge bg-success">Running</span>';
-        statusText = 'Scheduler is active and monitoring for cleanup conditions.';
+        statusText = 'Active and monitoring';
     } else {
         statusBadge = '<span class="badge bg-danger">Stopped</span>';
-        statusText = 'Scheduler is not running. Cleanup must be performed manually.';
+        statusText = 'Not running';
+    }
+    
+    // Add global dry run indicator
+    let dryRunIndicator = '';
+    if (status.global_settings && status.global_settings.dry_run_mode) {
+        dryRunIndicator = '<div class="alert alert-info py-1 mt-2 mb-0"><small><i class="fas fa-info-circle me-1"></i><strong>Global Dry Run Active</strong></small></div>';
     }
     
     statusDiv.innerHTML = `
-        <div class="row">
-            <div class="col-md-6">
-                <h6>Status: ${statusBadge}</h6>
-                <p>${statusText}</p>
-            </div>
-            <div class="col-md-6">
-                <table class="table table-sm table-dark">
-                    <tr>
-                        <td>Cleanup Interval:</td>
-                        <td>${status.interval_hours || 'N/A'} hours</td>
-                    </tr>
-                    <tr>
-                        <td>Last Cleanup:</td>
-                        <td>${status.last_cleanup || 'Never'}</td>
-                    </tr>
-                    <tr>
-                        <td>Next Cleanup:</td>
-                        <td>${status.next_cleanup || 'Unknown'}</td>
-                    </tr>
-                </table>
-            </div>
+        <div class="mb-2">
+            <strong>Status:</strong> ${statusBadge}<br>
+            <small class="text-muted">${statusText}</small>
         </div>
+        <table class="table table-sm">
+            <tr>
+                <td><small>Interval:</small></td>
+                <td><small>${status.interval_hours || 'N/A'} hours</small></td>
+            </tr>
+            <tr>
+                <td><small>Last Run:</small></td>
+                <td><small>${status.last_cleanup || 'Never'}</small></td>
+            </tr>
+            <tr>
+                <td><small>Next Run:</small></td>
+                <td><small>${status.next_cleanup || 'Unknown'}</small></td>
+            </tr>
+        </table>
+        ${dryRunIndicator}
     `;
 }
 
+// Storage status functions
+function loadStorageStatus() {
+    fetch('/api/global-settings')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.disk_info) {
+                updateStorageStatus(data.disk_info, data.settings);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading storage status:', error);
+        });
+}
+
+function updateStorageStatus(diskInfo, settings) {
+    if (!diskInfo) {
+        document.getElementById('storage-status').innerHTML = '<div class="alert alert-warning py-2"><small>Storage information unavailable</small></div>';
+        return;
+    }
+    
+    const storageDiv = document.getElementById('storage-status');
+    
+    const freePercent = ((diskInfo.free_space_gb / diskInfo.total_space_gb) * 100).toFixed(1);
+    
+    let statusClass = 'success';
+    if (freePercent < 10) statusClass = 'danger';
+    else if (freePercent < 20) statusClass = 'warning';
+    
+    let html = `
+        <div class="mb-2">
+            <div class="d-flex justify-content-between">
+                <small>Free Space:</small>
+                <small class="text-${statusClass}"><strong>${diskInfo.free_space_gb}GB</strong></small>
+            </div>
+            <div class="progress mt-1" style="height: 6px;">
+                <div class="progress-bar bg-${statusClass}" style="width: ${freePercent}%"></div>
+            </div>
+            <small class="text-muted">${freePercent}% free of ${diskInfo.total_space_gb}GB</small>
+        </div>
+    `;
+    
+    if (settings && settings.global_storage_min_gb) {
+        const threshold = settings.global_storage_min_gb;
+        const gateOpen = diskInfo.free_space_gb < threshold;
+        const gateClass = gateOpen ? 'warning' : 'success';
+        
+        html += `
+            <div class="alert alert-${gateClass} py-1 mb-0">
+                <small><strong>Gate: ${gateOpen ? 'OPEN' : 'CLOSED'}</strong><br>
+                Threshold: ${threshold}GB</small>
+            </div>
+        `;
+    } else {
+        html += `
+            <div class="alert alert-info py-1 mb-0">
+                <small><strong>No Storage Gate</strong><br>
+                Cleanup runs on schedule</small>
+            </div>
+        `;
+    }
+    
+    storageDiv.innerHTML = html;
+}
+
+// Rules summary
+function loadRulesSummary() {
+    fetch('/api/scheduler-status-global')
+        .then(response => response.json())
+        .then(data => {
+            if (data.rule_summary) {
+                updateRulesSummary(data.rule_summary);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading rules summary:', error);
+        });
+}
+
+function updateRulesSummary(summary) {
+    const container = document.getElementById('rules-summary');
+    
+    let html = `
+        <div class="row text-center">
+            <div class="col-4">
+                <h6 class="text-primary">${summary.total_rules}</h6>
+                <small class="text-muted">Total</small>
+            </div>
+            <div class="col-4">
+                <h6 class="text-warning">${summary.cleanup_rules}</h6>
+                <small class="text-muted">Cleanup</small>
+            </div>
+            <div class="col-4">
+                <h6 class="text-success">${summary.protected_rules}</h6>
+                <small class="text-muted">Protected</small>
+            </div>
+        </div>
+        <hr class="my-2">
+        <div class="text-center">
+            <small class="text-muted">
+                Only rules with grace/dormant settings participate in cleanup
+            </small>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// Original functions with enhancements
 function forceCleanup() {
     const button = event.target;
     const originalText = button.innerHTML;
@@ -180,15 +544,15 @@ function forceCleanup() {
     .then(response => response.json())
     .then(data => {
         if (data.status === 'success') {
-            ocdarrBanner.show('Manual cleanup started successfully', 'success');
+            showMessage('Manual cleanup started successfully', 'success');
             setTimeout(refreshStatus, 2000);
         } else {
-            ocdarrBanner.show('Failed to start cleanup: ' + data.message, 'error');
+            showMessage('Failed to start cleanup: ' + data.message, 'error');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        ocdarrBanner.show('Failed to start cleanup', 'error');
+        showMessage('Failed to start cleanup', 'error');
     })
     .finally(() => {
         button.innerHTML = originalText;
@@ -200,7 +564,9 @@ function refreshStatus() {
     loadSchedulerStatus();
     loadRecentActivity();
     loadSafetyStatus();
-    ocdarrBanner.show('Status refreshed', 'info', true, 2000);
+    loadStorageStatus();
+    loadRulesSummary();
+    showMessage('Status refreshed', 'info', 2000);
 }
 
 function loadRecentActivity() {
@@ -227,60 +593,35 @@ function loadRecentActivity() {
 }
 
 function loadSafetyStatus() {
-    // Check if dry run is enabled globally
-    const safetyDiv = document.getElementById('safety-status');
-    
-    fetch('/api/safety-status')
-        .then(response => response.json())
-        .then(data => {
-            let html = '<small>';
-            
-            if (data.global_dry_run) {
-                html += '<div class="alert alert-success alert-sm p-2 mb-2">';
-                html += '<i class="fas fa-shield-alt me-1"></i><strong>Global Dry Run: ENABLED</strong><br>';
-                html += 'No files will be deleted system-wide';
-                html += '</div>';
-            } else {
-                html += '<div class="alert alert-warning alert-sm p-2 mb-2">';
-                html += '<i class="fas fa-exclamation-triangle me-1"></i><strong>Live Mode: ACTIVE</strong><br>';
-                html += 'Cleanup will delete files unless overridden by rules';
-                html += '</div>';
-            }
-            
-            if (data.rules_with_dry_run && data.rules_with_dry_run.length > 0) {
-                html += '<div class="mb-2">';
-                html += '<strong>Rules in Dry Run:</strong><br>';
-                data.rules_with_dry_run.forEach(rule => {
-                    html += `<span class="badge bg-info me-1">${rule}</span>`;
-                });
-                html += '</div>';
-            }
-            
-            html += '</small>';
-            safetyDiv.innerHTML = html;
-        })
-        .catch(error => {
-            safetyDiv.innerHTML = '<small class="text-muted">Unable to load safety status</small>';
-        });
+    // This function is now handled by updateSafetyStatusFromGlobal()
+    // which is called from loadGlobalSettings() to keep everything in sync
+    console.log('Safety status loaded via global settings');
 }
 
 function viewCleanupLogs() {
-    // Open cleanup logs in a new window/modal
     window.open('/cleanup-logs', '_blank');
 }
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    loadSchedulerStatus();
-    loadRecentActivity();
-    loadSafetyStatus();
+function showMessage(message, type, duration = 5000) {
+    // Create a temporary alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
     
-    // Refresh status every 30 seconds
-    schedulerStatusInterval = setInterval(() => {
-        loadSchedulerStatus();
-        loadRecentActivity();
-    }, 30000);
-});
+    // Insert at top of page
+    const container = document.querySelector('.container');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    // Auto-remove after duration
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, duration);
+}
 
 // Cleanup interval when leaving page
 window.addEventListener('beforeunload', function() {

@@ -8,7 +8,7 @@
     <div class="col-md-8">
         <div class="card">
             <div class="card-header">
-                <h5><i class="fas fa-flask me-2"></i>Dry Run Mode Settings</h5>
+                <h5><i class="fas fa-flask me-2"></i>Rule-Specific Dry Run Settings</h5>
             </div>
             <div class="card-body">
                 <form method="POST">
@@ -19,33 +19,17 @@
                            your time-based cleanup settings safely.</p>
                     </div>
 
-                    <div class="card bg-dark border-secondary mb-4">
-                        <div class="card-header bg-secondary">
-                            <h6><i class="fas fa-globe me-2"></i>Global Dry Run Setting</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="global_dry_run" 
-                                       name="global_dry_run" {% if global_dry_run %}checked{% endif %}>
-                                <label class="form-check-label" for="global_dry_run">
-                                    <strong>Enable Global Dry Run Mode</strong>
-                                </label>
-                            </div>
-                            <small class="text-muted">
-                                Note: This reflects the CLEANUP_DRY_RUN environment variable. 
-                                To change the global setting, update your .env file and restart the container.
-                            </small>
-
-                            {% if global_dry_run %}
-                            <div class="alert alert-success mt-2">
-                                <small><i class="fas fa-check me-1"></i>Global dry run is ENABLED - no files will be deleted system-wide</small>
-                            </div>
-                            {% else %}
-                            <div class="alert alert-warning mt-2">
-                                <small><i class="fas fa-exclamation-triangle me-1"></i>Global dry run is DISABLED - cleanup will delete files unless overridden by rule settings</small>
-                            </div>
-                            {% endif %}
-                        </div>
+                    <div class="alert alert-primary">
+                        <h6><i class="fas fa-globe me-2"></i>Global Dry Run Setting</h6>
+                        <p><strong>Global dry run is managed on the main Scheduler page.</strong></p>
+                        <p>
+                            <a href="{{ url_for('scheduler_admin') }}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-arrow-left me-1"></i>Go to Scheduler Page
+                            </a>
+                        </p>
+                        <small class="text-muted">
+                            The settings below are rule-specific overrides that work alongside the global setting.
+                        </small>
                     </div>
 
                     <div class="card bg-dark border-secondary">
@@ -53,7 +37,7 @@
                             <h6><i class="fas fa-cogs me-2"></i>Rule-Specific Dry Run Settings</h6>
                         </div>
                         <div class="card-body">
-                            <p><small>Rule-specific settings override the global setting for individual rules.</small></p>
+                            <p><small>Rule-specific settings work alongside the global setting. If either global OR rule-specific dry run is enabled, no files will be deleted for that rule.</small></p>
                             
                             {% for rule_name, rule_details in config.rules.items() %}
                             <div class="row mb-3 p-3 border rounded">
@@ -68,7 +52,7 @@
                                             name="rule_dry_run_{{ rule_name }}"
                                             {% if rule_details.get('dry_run', False) %}checked{% endif %}>
                                         <label class="form-check-label" for="rule_dry_run_{{ rule_name }}">
-                                            Enable Dry Run
+                                            Enable Dry Run for this Rule
                                         </label>
                                     </div>
                                 </div>
@@ -104,7 +88,7 @@
                             <i class="fas fa-arrow-left me-1"></i>Back to Scheduler
                         </a>
                         <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save me-1"></i>Save Dry Run Settings
+                            <i class="fas fa-save me-1"></i>Save Rule Settings
                         </button>
                     </div>
                 </form>
@@ -121,11 +105,13 @@
                 <p><small>Test cleanup logic for a specific series without affecting other series.</small></p>
                 
                 <div class="mb-3">
-                    <label for="test-series-id" class="form-label">Series ID</label>
-                    <input type="number" id="test-series-id" class="form-control" placeholder="Enter series ID">
+                    <label for="test-series-select" class="form-label">Select Series</label>
+                    <select id="test-series-select" class="form-control">
+                        <option value="">Loading series...</option>
+                    </select>
                 </div>
                 
-                <button type="button" class="btn btn-info w-100" onclick="testSeriesCleanup()">
+                <button type="button" class="btn btn-info w-100" onclick="testSeriesCleanup()" disabled id="test-button">
                     <i class="fas fa-play me-1"></i>Test This Series
                 </button>
                 
@@ -142,11 +128,11 @@
             <div class="card-body">
                 <small>
                     <ul>
+                        <li><strong>Two-level protection:</strong> Global setting on Scheduler page + rule-specific settings here</li>
                         <li><strong>Always test first:</strong> Enable dry run for new rules to see what would be deleted</li>
                         <li><strong>Check the logs:</strong> Look for "DRY RUN:" messages to see planned deletions</li>
                         <li><strong>Per-rule control:</strong> You can enable dry run for just specific rules</li>
-                        <li><strong>Safe testing:</strong> No files are ever deleted in dry run mode</li>
-                        <li><strong>Production ready:</strong> Disable dry run only when you're confident in your settings</li>
+                        <li><strong>Safe testing:</strong> No files are ever deleted when any dry run is enabled</li>
                     </ul>
                 </small>
             </div>
@@ -157,15 +143,112 @@
 
 {% block scripts %}
 <script>
+// Load series list on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadSeriesList();
+});
+
+function loadSeriesList() {
+    fetch('/api/series-with-titles')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                populateSeriesDropdown(data.series);
+            } else {
+                throw new Error(data.message || 'Failed to load series');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading series:', error);
+            const select = document.getElementById('test-series-select');
+            select.innerHTML = `
+                <option value="">Error loading series</option>
+                <option value="manual">Enter Series ID Manually</option>
+            `;
+            
+            select.addEventListener('change', function() {
+                if (this.value === 'manual') {
+                    const manualId = prompt('Enter series ID:');
+                    if (manualId && !isNaN(manualId)) {
+                        this.innerHTML = `
+                            <option value="">Select a series...</option>
+                            <option value="${manualId}" selected>Series ID: ${manualId} (Manual Entry)</option>
+                        `;
+                        document.getElementById('test-button').disabled = false;
+                    } else {
+                        this.value = '';
+                    }
+                }
+            });
+        });
+}
+
+function populateSeriesDropdown(seriesList) {
+    const select = document.getElementById('test-series-select');
+    const button = document.getElementById('test-button');
+    
+    let options = '<option value="">Select a series to test...</option>';
+    
+    // Group by rule assignment for better organization
+    const ruleGroups = {};
+    seriesList.forEach(series => {
+        const rule = series.rule || 'Unassigned';
+        if (!ruleGroups[rule]) {
+            ruleGroups[rule] = [];
+        }
+        ruleGroups[rule].push(series);
+    });
+    
+    // Add options grouped by rule
+    Object.keys(ruleGroups).sort().forEach(ruleName => {
+        if (ruleGroups[ruleName].length > 0) {
+            options += `<optgroup label="Rule: ${ruleName}">`;
+            ruleGroups[ruleName].forEach(series => {
+                options += `<option value="${series.id}">${series.title}</option>`;
+            });
+            options += '</optgroup>';
+        }
+    });
+    
+    // Add manual entry option
+    options += '<option value="manual">➕ Enter Series ID Manually</option>';
+    
+    select.innerHTML = options;
+    
+    select.addEventListener('change', function() {
+        if (this.value === 'manual') {
+            const manualId = prompt('Enter series ID:');
+            if (manualId && !isNaN(manualId)) {
+                // Add the manual entry to the dropdown
+                const option = document.createElement('option');
+                option.value = manualId;
+                option.textContent = `Series ID: ${manualId} (Manual Entry)`;
+                option.selected = true;
+                
+                // Insert before the manual option
+                const manualOption = this.querySelector('option[value="manual"]');
+                this.insertBefore(option, manualOption);
+                
+                button.disabled = false;
+            } else {
+                this.value = '';
+                button.disabled = true;
+            }
+        } else {
+            button.disabled = !this.value;
+        }
+    });
+}
+
 function testSeriesCleanup() {
-    const seriesId = document.getElementById('test-series-id').value;
+    const seriesId = document.getElementById('test-series-select').value;
     
     if (!seriesId) {
-        alert('Please enter a series ID');
+        alert('Please select a series');
         return;
     }
     
-    const button = event.target;
+    const button = document.getElementById('test-button');
     const originalText = button.innerHTML;
     const resultsDiv = document.getElementById('test-results');
     
@@ -192,12 +275,6 @@ function testSeriesCleanup() {
                         }
                     </div>
                 `;
-                
-                if (data.would_cleanup) {
-                    ocdarrBanner.show(`Test: Series ${seriesId} would trigger cleanup - ${data.reason}`, 'warning', true, 8000);
-                } else {
-                    ocdarrBanner.show(`Test: Series ${seriesId} passes cleanup check`, 'success', true, 5000);
-                }
             } else {
                 resultsDiv.innerHTML = `
                     <div class="alert alert-danger">
@@ -205,7 +282,6 @@ function testSeriesCleanup() {
                         <p>${data.message}</p>
                     </div>
                 `;
-                ocdarrBanner.show(`Test failed: ${data.message}`, 'error');
             }
         })
         .catch(error => {
@@ -217,7 +293,6 @@ function testSeriesCleanup() {
                 </div>
             `;
             resultsDiv.style.display = 'block';
-            ocdarrBanner.show('Test failed due to error', 'error');
         })
         .finally(() => {
             button.innerHTML = originalText;

@@ -61,12 +61,13 @@
                                         <label for="grace_days" class="form-label">
                                             Grace Period (days)
                                             <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                            title="After watching an episode, keep the watched content (keep block) for X days before deleting it. Leave empty to keep forever."></i>
+                                               title="Remove unwatched episodes after X days of series inactivity. Watched episodes are kept."></i>
                                         </label>
                                         <input type="number" class="form-control" id="grace_days" 
-                                            name="grace_days" min="1" placeholder="Leave empty to keep forever">
+                                               name="grace_days" min="1" 
+                                               placeholder="Leave empty to keep unwatched episodes">
                                         <div class="form-text text-muted">
-                                            <small>Example: "7" = Keep watched episodes for 7 days after watching, then delete them</small>
+                                            <small>Example: "14" = Remove unwatched episodes if series inactive for 14 days</small>
                                         </div>
                                     </div>
 
@@ -74,29 +75,35 @@
                                         <label for="dormant_days" class="form-label">
                                             Dormant Timer (days)
                                             <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                            title="If no episodes are watched for X days, delete ALL episodes and reset the show to clean slate. Leave empty to disable."></i>
+                                               title="Remove ALL episodes if series is inactive for X days (series abandoned)."></i>
                                         </label>
                                         <input type="number" class="form-control" id="dormant_days" 
-                                            name="dormant_days" min="1" placeholder="Leave empty to disable">
+                                               name="dormant_days" min="1" 
+                                               placeholder="Leave empty to never remove series">
                                         <div class="form-text text-muted">
-                                            <small>Example: "30" = If unwatched for 30 days, delete everything and reset show</small>
+                                            <small>Example: "60" = Remove entire series if inactive for 60 days</small>
                                         </div>
                                     </div>
+
+                                    
 
                                     <div class="alert alert-info alert-sm">
                                         <small>
                                             <p><strong>⚠️ **USE AT YOUR OWN RISK** ⚠️</strong></p>
                                             <p>This will permanently delete your media files!</p>
                                             
-                                            <strong>How Your Two-Timer System Works:</strong><br>
-                                            • <strong>Immediate Deletion:</strong> When you watch an episode, old episodes are deleted immediately based on your "keep watched" setting<br>
-                                            • <strong>Grace Period:</strong> After X days, delete the watched content (your keep block)<br>
-                                            • <strong>Dormant Timer:</strong> After Y days of no activity, delete everything and reset show to clean slate<br><br>
+                                            <strong>How Cleanup Works:</strong><br>
+                                            • <strong>Activity Tracking:</strong> Any episode watch resets both timers<br>
+                                            • <strong>Grace Period:</strong> Remove unwatched episodes after X days of inactivity<br>
+                                            • <strong>Dormant Timer:</strong> Remove ALL episodes after Y days of inactivity<br>
+                                            • <strong>Storage Gate:</strong> Only run cleanup when storage is low (optional)<br><br>
                                             
-                                            <strong>Example with keep: 3, grace: 7, dormant: 30:</strong><br>
-                                            1. Watch E5 → Keep E3,E4,E5 + Get E6,E7,E8 + Delete E1,E2 (immediate)<br>
-                                            2. After 7 days → Delete E3,E4,E5 (grace cleanup)<br>
-                                            3. After 30 days → Delete E6,E7,E8 + unmonitor everything (dormant cleanup)
+                                            <strong>Example with Grace: 14, Dormant: 60:</strong><br>
+                                            1. Watch episode → Resets both timers to 0<br>
+                                            2. After 14 days of inactivity → Remove unwatched episodes only<br>
+                                            3. After 60 days of inactivity → Remove entire series (all episodes)<br><br>
+                                            
+                                            <strong>Watching any episode keeps the series active!</strong>
                                         </small>
                                     </div>
                                 </div>

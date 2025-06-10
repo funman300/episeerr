@@ -230,6 +230,102 @@ body {
     background: var(--glass-bg);
 }
 
+/* Custom navbar toggler button */
+.navbar-toggler {
+    border: 1px solid var(--border-color) !important;
+    border-radius: 8px !important;
+    padding: 6px 8px !important;
+    background: var(--glass-bg) !important;
+    transition: all 0.3s ease !important;
+}
+
+.navbar-toggler:hover {
+    background: var(--bg-card) !important;
+    border-color: var(--accent-primary) !important;
+}
+
+.navbar-toggler:focus {
+    box-shadow: 0 0 0 0.2rem var(--shadow-light) !important;
+}
+
+.navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28245, 245, 247, 0.8%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='m4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
+    width: 20px !important;
+    height: 20px !important;
+}
+
+/* Enhanced mobile navbar dropdown */
+@media (max-width: 991.98px) {
+    .navbar-collapse {
+        position: absolute !important;
+        top: 100% !important;
+        right: 15px !important;
+        left: auto !important;
+        width: 250px !important;
+        background: var(--bg-card) !important;
+        backdrop-filter: blur(20px) !important;
+        border-radius: 12px !important;
+        border: 1px solid var(--border-color) !important;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+        padding: 15px !important;
+        margin-top: 10px !important;
+        z-index: 2000 !important; /* Much higher than stats cards */
+    }
+    
+    .navbar-nav {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+    
+    .navbar-nav .nav-link {
+        padding: 12px 16px !important;
+        border-radius: 8px !important;
+        margin-bottom: 8px !important;
+        transition: all 0.2s ease !important;
+        background: var(--glass-bg) !important;
+        border: 1px solid transparent !important;
+        color: var(--text-primary) !important;
+    }
+    
+    .navbar-nav .nav-link:hover {
+        background: var(--accent-primary) !important;
+        border-color: var(--accent-primary) !important;
+        transform: translateY(-1px) !important;
+        color: white !important;
+    }
+    
+    .navbar-nav .nav-link:last-child {
+        margin-bottom: 0 !important;
+    }
+    
+    /* Style the notification elements in mobile dropdown */
+    .navbar-nav .nav-link .badge {
+        position: relative !important;
+        top: auto !important;
+        right: auto !important;
+        transform: none !important;
+        margin-left: auto !important;
+    }
+    
+    .navbar-nav .nav-link i.text-warning {
+        margin-left: auto !important;
+    }
+}
+.stats-card {
+    z-index: 1 !important;
+    position: relative !important;
+}
+
+/* Theme selector should also be below navbar dropdown */
+.theme-selector {
+    z-index: 1500 !important;
+}
+
+/* Make sure navbar itself is high enough */
+.navbar {
+    z-index: 1100 !important;
+    position: relative !important;
+}
 /* === Card Styles === */
 .card {
     background: var(--bg-card);
@@ -818,7 +914,7 @@ document.addEventListener('DOMContentLoaded', function() {
         themeButton.className = 'nav-link';
         themeButton.href = '#';
         themeButton.setAttribute('data-theme-toggle', 'true'); // Add identifier
-        themeButton.innerHTML = '<i class="fas fa-palette"></i><span class="d-none d-md-inline ms-1">Theme</span>';
+        themeButton.innerHTML = '<i class="fas fa-palette me-1"></i><span class="d-none d-md-inline">Theme</span><span class="d-md-none">Color</span>';
         themeButton.addEventListener('click', function(e) {
             e.preventDefault();
             toggleThemeSelector();
@@ -885,23 +981,33 @@ function updateActiveTheme(activeTheme) {
             <img src="{{ url_for('static', filename='logo.png') }}" alt="Episeerr Logo" height="42">
             <span class="brand-text">Episeerr</span>
         </a>
-        <div class="navbar-nav ms-auto">
-            <a class="nav-link" href="{{ url_for('scheduler_admin') }}">
-                <i class="fas fa-clock me-1"></i>
-                <span class="d-none d-md-inline">Scheduler</span>
-                <span class="d-md-none">Timer</span>
-            </a>
-            <a class="nav-link position-relative" href="{{ url_for('episeerr_index') }}" id="episeerr-link">
-                <i class="fas fa-bell me-1"></i>
-                <span class="d-none d-md-inline">Pending Requests</span>
-                <span class="d-md-none">Pending</span>
-                <!-- Notification indicators -->
-                <i class="fas fa-exclamation-circle text-warning ms-1" id="notification-bell" style="display: none;" title="New episode selection requests"></i>
-                <span id="request-count-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display: none; font-size: 0.7em; margin-left: -10px;">
-                    0
-                </span>
-            </a>
-            <!-- Theme selector button will be added by JavaScript -->
+        
+        <!-- Mobile hamburger button -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        
+        <!-- Collapsible navbar content -->
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="{{ url_for('scheduler_admin') }}">
+                    <i class="fas fa-clock me-1"></i>
+                    <span class="d-none d-md-inline">Scheduler</span>
+                    <span class="d-md-none">Timer</span>
+                </a>
+                <a class="nav-link position-relative" href="{{ url_for('episeerr_index') }}" id="episeerr-link">
+                    <i class="fas fa-bell me-1"></i>
+                    <span class="d-none d-md-inline">Pending Requests</span>
+                    <span class="d-md-none">Pending</span>
+                    <!-- Notification indicators -->
+                    <i class="fas fa-exclamation-circle text-warning ms-1" id="notification-bell" style="display: none;" title="New episode selection requests"></i>
+                    <span id="request-count-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display: none; font-size: 0.7em; margin-left: -10px;">
+                        0
+                    </span>
+                </a>
+                <!-- Theme selector button will be added by JavaScript -->
+            </div>
         </div>
     </div>
 </nav>

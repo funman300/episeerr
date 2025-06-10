@@ -136,8 +136,17 @@ class OCDarrScheduler:
     def __init__(self):
         self.cleanup_thread = None
         self.running = False
-        self.cleanup_interval_hours = int(os.getenv('CLEANUP_INTERVAL_HOURS', '6'))
         self.last_cleanup = 0
+        self.update_interval_from_settings()
+    
+    def update_interval_from_settings(self):
+        """Update cleanup interval from global settings."""
+        try:
+            import servertosonarr
+            global_settings = servertosonarr.load_global_settings()
+            self.cleanup_interval_hours = global_settings.get('cleanup_interval_hours', 6)
+        except:
+            self.cleanup_interval_hours = 6  # Fallback
     
     def start_scheduler(self):
         if self.running:
@@ -145,19 +154,24 @@ class OCDarrScheduler:
         self.running = True
         self.cleanup_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.cleanup_thread.start()
-        print(f"✓ Internal scheduler started - cleanup every {self.cleanup_interval_hours} hours")
+        print(f"✓ Global storage gate scheduler started - cleanup every {self.cleanup_interval_hours} hours")
     
     def _scheduler_loop(self):
-        time.sleep(300)
+        time.sleep(300)  # Wait 5 minutes after startup
         while self.running:
             try:
+                # Update interval from settings each loop
+                self.update_interval_from_settings()
+                
                 current_time = time.time()
                 hours_since_last = (current_time - self.last_cleanup) / 3600
+                
                 if hours_since_last >= self.cleanup_interval_hours:
-                    print("⏰ Starting scheduled cleanup...")
+                    print("⏰ Starting scheduled global storage gate cleanup...")
                     self._run_cleanup()
                     self.last_cleanup = current_time
-                time.sleep(600)
+                    
+                time.sleep(600)  # Check every 10 minutes
             except Exception as e:
                 print(f"Scheduler error: {str(e)}")
                 time.sleep(300)
@@ -165,31 +179,90 @@ class OCDarrScheduler:
     def _run_cleanup(self):
         try:
             import servertosonarr
-            servertosonarr.run_periodic_cleanup()
-            print("✓ Scheduled cleanup completed")
+            # Use the new global storage gate cleanup
+            servertosonarr.run_global_storage_gate_cleanup()
+            print("✓ Scheduled global storage gate cleanup completed")
         except Exception as e:
             print(f"Cleanup failed: {str(e)}")
     
     def force_cleanup(self):
         cleanup_thread = threading.Thread(target=self._run_cleanup, daemon=True)
         cleanup_thread.start()
-        return "Cleanup started"
+        return "Global storage gate cleanup started"
     
     def get_status(self):
         if not self.running:
             return {"status": "stopped", "next_cleanup": None}
+        
         if self.last_cleanup == 0:
             next_cleanup = "5 minutes after startup"
         else:
             next_time = self.last_cleanup + (self.cleanup_interval_hours * 3600)
             next_cleanup = datetime.fromtimestamp(next_time).strftime("%Y-%m-%d %H:%M:%S")
+            
         return {
             "status": "running",
+            "type": "global_storage_gate",
             "interval_hours": self.cleanup_interval_hours,
             "last_cleanup": datetime.fromtimestamp(self.last_cleanup).strftime("%Y-%m-%d %H:%M:%S") if self.last_cleanup else "Never",
             "next_cleanup": next_cleanup
         }
+# Add this route to your episeerr.py
 
+@app.route('/api/series-with-titles')
+def get_series_with_titles():
+    """Get series list with titles and rule assignments for dropdowns."""
+    try:
+        config = load_config()
+        all_series = get_sonarr_series()
+        
+        # Build assignment mapping
+        assignments = {}
+        for rule_name, details in config['rules'].items():
+            series_dict = details.get('series', {})
+            for series_id in series_dict.keys():
+                assignments[str(series_id)] = rule_name
+        
+        # Format for dropdown
+        series_list = []
+        for series in all_series:
+            series_id = str(series['id'])
+            rule_name = assignments.get(series_id, 'Unassigned')
+            
+            # Add time-based cleanup info if assigned to a rule
+            cleanup_info = ""
+            if rule_name != 'Unassigned' and rule_name in config['rules']:
+                rule = config['rules'][rule_name]
+                grace_days = rule.get('grace_days')
+                dormant_days = rule.get('dormant_days')
+                
+                if grace_days or dormant_days:
+                    cleanup_parts = []
+                    if grace_days:
+                        cleanup_parts.append(f"Grace: {grace_days}d")
+                    if dormant_days:
+                        cleanup_parts.append(f"Dormant: {dormant_days}d")
+                    cleanup_info = f" ({', '.join(cleanup_parts)})"
+            
+            series_list.append({
+                'id': series_id,
+                'title': series['title'],
+                'rule': rule_name,
+                'display_text': f"{series['title']} - Rule: {rule_name}{cleanup_info}"
+            })
+        
+        # Sort by title
+        series_list.sort(key=lambda x: x['title'].lower())
+        
+        return jsonify({
+            'status': 'success',
+            'series': series_list,
+            'count': len(series_list)
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error getting series with titles: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 # Cleanup Logging
 def setup_cleanup_logging():
     LOG_PATH = os.getenv('LOG_PATH', '/app/logs/app.log')
@@ -403,7 +476,7 @@ def create_rule():
             'get_option': request.form.get('get_option', ''),
             'action_option': request.form.get('action_option', 'monitor'),
             'keep_watched': request.form.get('keep_watched', ''),
-            'monitor_watched': request.form.get('monitor_watched') == 'on',
+            'monitor_watched': 'monitor_watched' in request.form, 
             'grace_days': grace_days,
             'dormant_days': dormant_days,
             'series': {}
@@ -426,7 +499,7 @@ def edit_rule(rule_name):
             'get_option': request.form.get('get_option', ''),
             'action_option': request.form.get('action_option', 'monitor'),
             'keep_watched': request.form.get('keep_watched', ''),
-            'monitor_watched': request.form.get('monitor_watched', 'false').lower() == 'true',
+            'monitor_watched': 'monitor_watched' in request.form, 
             'grace_days': grace_days,
             'dormant_days': dormant_days
         })
@@ -572,6 +645,118 @@ def scheduler_status():
         return jsonify(cleanup_scheduler.get_status())
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+@app.route('/api/global-settings')
+def get_global_settings():
+    """Get global settings including storage gate."""
+    try:
+        import servertosonarr
+        settings = servertosonarr.load_global_settings()
+        
+        # Get current disk space for display
+        disk_info = servertosonarr.get_sonarr_disk_space()
+        
+        return jsonify({
+            "status": "success",
+            "settings": settings,
+            "disk_info": disk_info
+        })
+    except Exception as e:
+        app.logger.error(f"Error getting global settings: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/global-settings', methods=['POST'])
+def update_global_settings():
+    """Update global settings."""
+    try:
+        import servertosonarr
+        
+        data = request.json
+        storage_min_gb = data.get('global_storage_min_gb')
+        cleanup_interval_hours = data.get('cleanup_interval_hours', 6)
+        dry_run_mode = data.get('dry_run_mode', False)
+        
+        # Validate inputs
+        if storage_min_gb is not None:
+            storage_min_gb = int(storage_min_gb) if storage_min_gb else None
+        
+        settings = {
+            'global_storage_min_gb': storage_min_gb,
+            'cleanup_interval_hours': int(cleanup_interval_hours),
+            'dry_run_mode': bool(dry_run_mode)
+        }
+        
+        servertosonarr.save_global_settings(settings)
+        
+        app.logger.info(f"Global settings updated: {settings}")
+        
+        return jsonify({
+            "status": "success",
+            "message": "Global settings updated successfully",
+            "settings": settings
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error updating global settings: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/scheduler-status-global')
+def scheduler_status_global():
+    """Enhanced scheduler status with global settings."""
+    try:
+        import servertosonarr
+        
+        if 'cleanup_scheduler' not in globals():
+            return jsonify({"status": "error", "message": "Scheduler not initialized"}), 500
+        
+        # Get basic scheduler status
+        status = cleanup_scheduler.get_status()
+        
+        # Add global settings
+        global_settings = servertosonarr.load_global_settings()
+        status["global_settings"] = global_settings
+        
+        # Add disk info
+        disk_info = servertosonarr.get_sonarr_disk_space()
+        if disk_info:
+            status["disk_info"] = disk_info
+            
+            # Check if storage gate would trigger
+            storage_min_gb = global_settings.get('global_storage_min_gb')
+            if storage_min_gb:
+                gate_open = disk_info['free_space_gb'] < storage_min_gb
+                status["storage_gate"] = {
+                    "enabled": True,
+                    "threshold_gb": storage_min_gb,
+                    "current_free_gb": disk_info['free_space_gb'],
+                    "gate_open": gate_open,
+                    "status": "OPEN - Cleanup will run" if gate_open else "CLOSED - No cleanup needed"
+                }
+            else:
+                status["storage_gate"] = {
+                    "enabled": False,
+                    "status": "Disabled - Cleanup always runs on schedule"
+                }
+        
+        # Add configuration summary
+        config = load_config()
+        rule_summary = {
+            "total_rules": len(config['rules']),
+            "cleanup_rules": 0,
+            "protected_rules": 0
+        }
+        
+        for rule_name, rule in config['rules'].items():
+            has_cleanup = rule.get('grace_days') or rule.get('dormant_days')
+            if has_cleanup:
+                rule_summary["cleanup_rules"] += 1
+            else:
+                rule_summary["protected_rules"] += 1
+        
+        status["rule_summary"] = rule_summary
+        return jsonify(status)
+        
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/force-cleanup', methods=['POST'])
 def force_cleanup():
@@ -641,14 +826,20 @@ def test_cleanup(series_id):
                 rule = r_details
                 rule_name = r_name
                 break
+        
         if not rule:
             return jsonify({"status": "error", "message": "Series not assigned to any rule"}), 404
+        
         test_rule = rule.copy()
         test_rule['dry_run'] = True
-        from servertosonarr import check_time_based_cleanup, perform_time_based_cleanup
+        
+        # Use the correct function names
+        from servertosonarr import check_time_based_cleanup
+        
         should_cleanup, reason = check_time_based_cleanup(series_id, test_rule)
+        
         if should_cleanup:
-            perform_time_based_cleanup(series_id, test_rule, reason)
+            # For testing, we don't actually run cleanup, just show what would happen
             return jsonify({
                 "status": "success",
                 "message": f"Test completed: {reason}",
@@ -658,7 +849,7 @@ def test_cleanup(series_id):
             })
         else:
             return jsonify({
-                "status": "success",
+                "status": "success", 
                 "message": f"No cleanup needed: {reason}",
                 "would_cleanup": False,
                 "rule": rule_name,

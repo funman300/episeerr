@@ -57,34 +57,36 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="mb-3">
-                                        <label for="grace_days" class="form-label">
-                                            Grace Period (days)
-                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                            title="Keep content for X days after watching, then apply normal cleanup. Leave empty to keep forever."></i>
-                                        </label>
-                                        <input type="number" class="form-control" id="grace_days" 
-                                            name="grace_days" min="1" 
-                                            value="{% if rule.grace_days %}{{ rule.grace_days }}{% endif %}"
-                                            placeholder="Leave empty to keep forever">
-                                        <div class="form-text text-muted">
-                                            <small>Example: "7" = Keep for 7 days after watching</small>
-                                        </div>
-                                    </div>
+    <label for="grace_days" class="form-label">
+        Grace Period (days)
+        <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+           title="Remove unwatched episodes after X days of series inactivity. Watched episodes are kept."></i>
+    </label>
+    <input type="number" class="form-control" id="grace_days" 
+           name="grace_days" min="1" 
+           value="{% if rule.grace_days %}{{ rule.grace_days }}{% endif %}"
+           placeholder="Leave empty to keep unwatched episodes">
+    <div class="form-text text-muted">
+        <small>Example: "14" = Remove unwatched episodes if series inactive for 14 days</small>
+    </div>
+</div>
 
-                                    <div class="mb-3">
-                                        <label for="dormant_days" class="form-label">
-                                            Dormant Timer (days)
-                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                            title="Delete ALL content if no episodes are watched for X days. Leave empty to disable."></i>
-                                        </label>
-                                        <input type="number" class="form-control" id="dormant_days" 
-                                            name="dormant_days" min="1" 
-                                            value="{% if rule.dormant_days %}{{ rule.dormant_days }}{% endif %}"
-                                            placeholder="Leave empty to disable">
-                                        <div class="form-text text-muted">
-                                            <small>Example: "30" = Delete everything if unwatched for 30 days</small>
-                                        </div>
-                                    </div>
+<div class="mb-3">
+    <label for="dormant_days" class="form-label">
+        Dormant Timer (days)
+        <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+           title="Remove ALL episodes if series is inactive for X days (series abandoned)."></i>
+    </label>
+    <input type="number" class="form-control" id="dormant_days" 
+           name="dormant_days" min="1" 
+           value="{% if rule.dormant_days %}{{ rule.dormant_days }}{% endif %}"
+           placeholder="Leave empty to never remove series">
+    <div class="form-text text-muted">
+        <small>Example: "60" = Remove entire series if inactive for 60 days</small>
+    </div>
+</div>
+
+
 
                                     <div class="alert alert-info alert-sm">
                                         <small>

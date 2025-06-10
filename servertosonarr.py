@@ -1611,25 +1611,639 @@ def process_new_series_from_watchlist(series_id, rule):
     
     return episode_ids
 
-# =============================================================================
-# MAIN ENTRY POINTS
-# =============================================================================
+# Corrected Final Implementation for servertosonarr.py
 
+def get_watched_vs_unwatched_episodes(all_episodes, activity_data, series_id_str):
+    """Separate episodes into watched vs unwatched for proper grace/dormant logic."""
+    try:
+        watched_episodes = []
+        unwatched_episodes = []
+        
+        # Get series activity info
+        series_activity = activity_data.get(series_id_str, {})
+        last_season = series_activity.get('last_season', 0)
+        last_episode = series_activity.get('last_episode', 0)
+        
+        for episode in all_episodes:
+            if not episode.get('hasFile'):
+                continue  # Skip episodes without files
+                
+            season_num = episode.get('seasonNumber', 0)
+            episode_num = episode.get('episodeNumber', 0)
+            
+            # Determine if episode has been watched
+            # Logic: Episodes up to and including last watched episode are "watched"
+            if (season_num < last_season or 
+                (season_num == last_season and episode_num <= last_episode)):
+                watched_episodes.append(episode)
+            else:
+                unwatched_episodes.append(episode)
+        
+        logger.debug(f"Episode breakdown: {len(watched_episodes)} watched, {len(unwatched_episodes)} unwatched")
+        return watched_episodes, unwatched_episodes
+        
+    except Exception as e:
+        logger.error(f"Error separating watched/unwatched episodes: {str(e)}")
+        return [], all_episodes  # Fallback: treat all as unwatched
+
+def calculate_grace_deletable_episodes(all_episodes, activity_data, series_id_str):
+    """Calculate episodes to delete for GRACE cleanup - unwatched episodes only."""
+    try:
+        watched_episodes, unwatched_episodes = get_watched_vs_unwatched_episodes(
+            all_episodes, activity_data, series_id_str
+        )
+        
+        # Grace cleanup: Delete ONLY unwatched episodes
+        episodes_to_delete = unwatched_episodes
+        episode_file_ids = [ep['episodeFileId'] for ep in episodes_to_delete if 'episodeFileId' in ep]
+        
+        logger.info(f"Grace cleanup: Would delete {len(episode_file_ids)} unwatched episodes")
+        logger.info(f"Grace cleanup: Keeping {len(watched_episodes)} watched episodes")
+        
+        return {
+            'episode_file_ids': episode_file_ids,
+            'episode_count': len(episode_file_ids),
+            'cleanup_type': 'grace',
+            'description': f"Remove {len(episode_file_ids)} unwatched episodes, keep {len(watched_episodes)} watched"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating grace deletable episodes: {str(e)}")
+        return {'episode_file_ids': [], 'episode_count': 0, 'cleanup_type': 'grace', 'description': 'Error'}
+
+def calculate_dormant_deletable_episodes(all_episodes):
+    """Calculate episodes to delete for DORMANT cleanup - ALL episodes."""
+    try:
+        episodes_with_files = [ep for ep in all_episodes if ep.get('hasFile')]
+        episode_file_ids = [ep['episodeFileId'] for ep in episodes_with_files if 'episodeFileId' in ep]
+        
+        logger.info(f"Dormant cleanup: Would delete ALL {len(episode_file_ids)} episodes (series abandoned)")
+        
+        return {
+            'episode_file_ids': episode_file_ids,
+            'episode_count': len(episode_file_ids),
+            'cleanup_type': 'dormant',
+            'description': f"Remove ALL {len(episode_file_ids)} episodes (series dormant)"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating dormant deletable episodes: {str(e)}")
+        return {'episode_file_ids': [], 'episode_count': 0, 'cleanup_type': 'dormant', 'description': 'Error'}
+
+def check_cleanup_eligibility_corrected(series_id, rule):
+    """
+    Corrected cleanup eligibility check:
+    - Grace = Remove unwatched episodes after X days
+    - Dormant = Remove ALL episodes after Y days  
+    - Activity = Any episode watch resets both timers
+    """
+    try:
+        grace_days = rule.get('grace_days')
+        dormant_days = rule.get('dormant_days')
+        
+        if not grace_days and not dormant_days:
+            return False, "No time-based cleanup configured", None
+        
+        # Get series title
+        series_title = None
+        try:
+            headers = {'X-Api-Key': SONARR_API_KEY}
+            response = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers, timeout=5)
+            if response.ok:
+                series_title = response.json().get('title')
+        except Exception as e:
+            logger.warning(f"Failed to get series title: {str(e)}")
+        
+        # Get last watch activity date (single date for entire series)
+        activity_date = get_activity_date_with_hierarchy(series_id, series_title)
+        
+        if activity_date is None:
+            logger.debug(f"Series {series_id}: No activity date found")
+            return False, "No activity date available", None
+        
+        current_time = int(time.time())
+        days_since_activity = (current_time - activity_date) / (24 * 60 * 60)
+        
+        logger.info(f"Series {series_id} ({series_title}): {days_since_activity:.1f} days since last activity")
+        
+        # DORMANT CHECK FIRST: Past dormant threshold = nuke everything
+        if dormant_days and days_since_activity > dormant_days:
+            return True, f"DORMANT: {days_since_activity:.1f}d > {dormant_days}d (nuke all episodes)", {
+                'type': 'dormant',
+                'days_since_activity': days_since_activity,
+                'priority_score': 1000 + days_since_activity,  # Highest priority
+                'activity_date': activity_date
+            }
+        
+        # GRACE CHECK: Past grace but before dormant = remove unwatched only
+        if grace_days and days_since_activity > grace_days:
+            return True, f"GRACE: {days_since_activity:.1f}d > {grace_days}d (remove unwatched episodes)", {
+                'type': 'grace',
+                'days_since_activity': days_since_activity,
+                'priority_score': 500 + days_since_activity,  # Medium priority
+                'activity_date': activity_date
+            }
+        
+        # PROTECTED: Within grace period
+        return False, f"PROTECTED: {days_since_activity:.1f}d <= {grace_days or dormant_days}d since activity", None
+        
+    except Exception as e:
+        logger.error(f"Error checking cleanup eligibility: {str(e)}")
+        return False, f"Error: {str(e)}", None
+
+def get_cleanup_candidates_corrected(config, storage_gated=True):
+    """Get cleanup candidates with corrected grace/dormant logic."""
+    try:
+        if storage_gated:
+            # Check storage gate first
+            gate_open, target_gb, gate_reason = check_storage_gate_for_cleanup(config)
+            if not gate_open:
+                logger.info(f"🔒 Storage gate CLOSED: {gate_reason}")
+                return [], None, gate_reason
+            logger.info(f"🔓 Storage gate OPEN: {gate_reason}")
+        else:
+            target_gb = None
+            logger.info("⏰ Always-run mode: Processing time-based cleanup")
+        
+        # Get series from Sonarr
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
+        
+        if not response.ok:
+            logger.error("Failed to fetch series from Sonarr")
+            return [], target_gb, "Sonarr API error"
+        
+        all_series = response.json()
+        candidates = []
+        activity_data = load_activity_tracking()
+        
+        stats = {'grace': 0, 'dormant': 0, 'protected': 0, 'no_content': 0}
+        
+        logger.info("🔍 Checking rule-assigned series for corrected cleanup logic:")
+        
+        for rule_name, rule in config['rules'].items():
+            # Only check rules that have time cleanup OR storage cleanup
+            has_storage = rule.get('storage_cleanup_min_gb')
+            has_time = rule.get('grace_days') or rule.get('dormant_days')
+            
+            if storage_gated and not has_storage:
+                continue  # Skip rules without storage in storage-gated mode
+            if not storage_gated and not has_time:
+                continue  # Skip rules without time settings in always-run mode
+            
+            logger.info(f"📋 Rule '{rule_name}': Grace={rule.get('grace_days')}d, Dormant={rule.get('dormant_days')}d")
+            
+            series_dict = rule.get('series', {})
+            rule_candidates = 0
+            
+            for series_id_str, series_data in series_dict.items():
+                try:
+                    series_id = int(series_id_str)
+                    series_info = next((s for s in all_series if s['id'] == series_id), None)
+                    
+                    if not series_info:
+                        continue
+                    
+                    # Check cleanup eligibility with corrected logic
+                    eligible, reason, cleanup_info = check_cleanup_eligibility_corrected(series_id, rule)
+                    
+                    if eligible:
+                        # Get episodes using corrected logic
+                        all_episodes = fetch_all_episodes(series_id)
+                        episodes_with_files = [ep for ep in all_episodes if ep.get('hasFile', False)]
+                        
+                        if not episodes_with_files:
+                            stats['no_content'] += 1
+                            continue
+                        
+                        # Use corrected episode calculation based on cleanup type
+                        if cleanup_info['type'] == 'grace':
+                            deletable_episodes = calculate_grace_deletable_episodes(
+                                all_episodes, activity_data, series_id_str
+                            )
+                        else:  # dormant
+                            deletable_episodes = calculate_dormant_deletable_episodes(all_episodes)
+                        
+                        if deletable_episodes['episode_file_ids']:
+                            candidates.append({
+                                'series_id': series_id,
+                                'title': series_info['title'],
+                                'rule_name': rule_name,
+                                'cleanup_reason': reason,
+                                'cleanup_type': cleanup_info['type'],
+                                'days_since_activity': cleanup_info['days_since_activity'],
+                                'priority_score': cleanup_info['priority_score'],
+                                'deletable_episodes': deletable_episodes,
+                                'estimated_space_gb': 0  # Could calculate if needed
+                            })
+                            
+                            stats[cleanup_info['type']] += 1
+                            rule_candidates += 1
+                            logger.debug(f"   ✅ {series_info['title']}: {reason}")
+                        else:
+                            logger.debug(f"   ⏭️ {series_info['title']}: {reason} but no deletable episodes")
+                    else:
+                        if "PROTECTED" in reason:
+                            stats['protected'] += 1
+                        logger.debug(f"   🛡️ {series_info['title']}: {reason}")
+                        
+                except ValueError:
+                    continue
+            
+            logger.info(f"   📊 Rule '{rule_name}': {rule_candidates} candidates")
+        
+        # Sort by priority: Dormant first, then grace
+        candidates.sort(key=lambda x: x['priority_score'], reverse=True)
+        
+        logger.info("=" * 60)
+        logger.info(f"📋 CORRECTED CLEANUP CANDIDATES:")
+        logger.info(f"   🔴 Dormant (nuke all): {stats['dormant']}")
+        logger.info(f"   🟡 Grace (unwatched only): {stats['grace']}")
+        logger.info(f"   🛡️ Protected: {stats['protected']}")
+        logger.info(f"   📊 Total candidates: {len(candidates)}")
+        logger.info("=" * 60)
+        
+        return candidates, target_gb, f"Found {len(candidates)} candidates"
+        
+    except Exception as e:
+        logger.error(f"Error getting corrected cleanup candidates: {str(e)}")
+        return [], None, f"Error: {str(e)}"
+
+def run_corrected_cleanup():
+    """
+    Final corrected cleanup with proper grace/dormant logic:
+    - Grace = Remove unwatched episodes only
+    - Dormant = Remove ALL episodes  
+    - Storage-gated vs always-run modes
+    """
+    try:
+        cleanup_logger.info("=" * 80)
+        cleanup_logger.info("🚀 STARTING CORRECTED CLEANUP")
+        cleanup_logger.info("🟡 Grace = Remove unwatched episodes, keep watched")
+        cleanup_logger.info("🔴 Dormant = Remove ALL episodes (series abandoned)")
+        cleanup_logger.info("🔒 Only rule-assigned series")
+        
+        config = load_config()
+        dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        
+        # Determine cleanup mode
+        has_storage_gates = any(
+            rule.get('storage_cleanup_min_gb') 
+            for rule in config['rules'].values()
+        )
+        
+        if has_storage_gates:
+            cleanup_logger.info("🚪 STORAGE-GATED MODE")
+            candidates, target_gb, status = get_cleanup_candidates_corrected(config, storage_gated=True)
+        else:
+            cleanup_logger.info("⏰ ALWAYS-RUN MODE")
+            candidates, target_gb, status = get_cleanup_candidates_corrected(config, storage_gated=False)
+        
+        if not candidates:
+            cleanup_logger.info(f"✅ {status}")
+            return
+        
+        cleanup_logger.info(f"📋 {status}")
+        cleanup_logger.info(f"🔧 Mode: {'DRY RUN' if dry_run else 'LIVE'}")
+        
+        # Process candidates
+        processed_count = 0
+        stats = {'grace': 0, 'dormant': 0}
+        
+        for candidate in candidates:
+            series_title = candidate['title']
+            rule_name = candidate['rule_name']
+            cleanup_type = candidate['cleanup_type']
+            reason = candidate['cleanup_reason']
+            deletable = candidate['deletable_episodes']
+            
+            emoji = '🔴' if cleanup_type == 'dormant' else '🟡'
+            
+            cleanup_logger.info(f"{emoji} {series_title} (Rule: {rule_name})")
+            cleanup_logger.info(f"   📋 {reason}")
+            cleanup_logger.info(f"   📊 {deletable['description']}")
+            
+            if not dry_run and deletable['episode_file_ids']:
+                success = delete_episodes_in_sonarr_batch(deletable['episode_file_ids'])
+                if success:
+                    processed_count += 1
+                    stats[cleanup_type] += 1
+                    cleanup_logger.info(f"   ✅ Deleted {deletable['episode_count']} episodes")
+                else:
+                    cleanup_logger.error(f"   ❌ Delete failed")
+            elif dry_run:
+                processed_count += 1
+                stats[cleanup_type] += 1
+                cleanup_logger.info(f"   🔍 DRY RUN: Would delete {deletable['episode_count']} episodes")
+        
+        cleanup_logger.info("=" * 80)
+        cleanup_logger.info("✅ CORRECTED CLEANUP COMPLETED")
+        cleanup_logger.info(f"📊 Processed: {processed_count} series")
+        cleanup_logger.info(f"   🔴 Dormant (nuked): {stats['dormant']}")
+        cleanup_logger.info(f"   🟡 Grace (unwatched): {stats['grace']}")
+        cleanup_logger.info("=" * 80)
+        
+    except Exception as e:
+        cleanup_logger.error(f"Error in corrected cleanup: {str(e)}")
+
+# Global Storage Gate Implementation for servertosonarr.py
+
+def load_global_settings():
+    """Load global settings including storage gate."""
+    try:
+        settings_path = os.path.join(os.getcwd(), 'config', 'global_settings.json')
+        
+        if os.path.exists(settings_path):
+            with open(settings_path, 'r') as f:
+                return json.load(f)
+        else:
+            # Default settings
+            default_settings = {
+                'global_storage_min_gb': None,  # No storage gate by default
+                'cleanup_interval_hours': 6,
+                'dry_run_mode': False
+            }
+            save_global_settings(default_settings)
+            return default_settings
+    except Exception as e:
+        logger.error(f"Error loading global settings: {str(e)}")
+        return {'global_storage_min_gb': None}
+
+def save_global_settings(settings):
+    """Save global settings to file."""
+    try:
+        settings_path = os.path.join(os.getcwd(), 'config', 'global_settings.json')
+        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+        
+        with open(settings_path, 'w') as f:
+            json.dump(settings, f, indent=4)
+        logger.info("Global settings saved successfully")
+    except Exception as e:
+        logger.error(f"Error saving global settings: {str(e)}")
+
+def check_global_storage_gate():
+    """Check if global storage gate allows cleanup to proceed."""
+    try:
+        global_settings = load_global_settings()
+        storage_min_gb = global_settings.get('global_storage_min_gb')
+        
+        if not storage_min_gb:
+            # No storage gate configured - always allow cleanup
+            return True, None, "No global storage gate - cleanup always enabled"
+        
+        disk_info = get_sonarr_disk_space()
+        if not disk_info:
+            return False, storage_min_gb, "Could not get disk space information"
+        
+        current_free_gb = disk_info['free_space_gb']
+        
+        if current_free_gb < storage_min_gb:
+            return True, storage_min_gb, f"Storage gate OPEN: {current_free_gb:.1f}GB < {storage_min_gb}GB threshold"
+        else:
+            return False, storage_min_gb, f"Storage gate CLOSED: {current_free_gb:.1f}GB >= {storage_min_gb}GB threshold"
+        
+    except Exception as e:
+        logger.error(f"Error checking global storage gate: {str(e)}")
+        return False, None, f"Storage gate error: {str(e)}"
+
+def get_cleanup_candidates_global_gate(config):
+    """Get cleanup candidates using global storage gate."""
+    try:
+        # Check global storage gate first
+        gate_open, threshold_gb, gate_reason = check_global_storage_gate()
+        
+        if not gate_open:
+            logger.info(f"🔒 Global storage gate CLOSED: {gate_reason}")
+            return [], threshold_gb, gate_reason
+        
+        logger.info(f"🔓 Global storage gate OPEN: {gate_reason}")
+        
+        # Get series from Sonarr
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
+        
+        if not response.ok:
+            logger.error("Failed to fetch series from Sonarr")
+            return [], threshold_gb, "Sonarr API error"
+        
+        all_series = response.json()
+        candidates = []
+        activity_data = load_activity_tracking()
+        
+        stats = {'grace': 0, 'dormant': 0, 'protected': 0, 'no_cleanup': 0}
+        
+        logger.info("🔍 Checking rules with grace/dormant settings:")
+        
+        for rule_name, rule in config['rules'].items():
+            grace_days = rule.get('grace_days')
+            dormant_days = rule.get('dormant_days')
+            
+            # Skip rules without time-based cleanup
+            if not grace_days and not dormant_days:
+                stats['no_cleanup'] += len(rule.get('series', {}))
+                logger.info(f"⏭️  Rule '{rule_name}': No grace/dormant settings - skipped")
+                continue
+                
+            logger.info(f"📋 Rule '{rule_name}': Grace={grace_days}d, Dormant={dormant_days}d")
+            
+            series_dict = rule.get('series', {})
+            rule_candidates = 0
+            
+            for series_id_str, series_data in series_dict.items():
+                try:
+                    series_id = int(series_id_str)
+                    series_info = next((s for s in all_series if s['id'] == series_id), None)
+                    
+                    if not series_info:
+                        continue
+                    
+                    # Check cleanup eligibility
+                    eligible, reason, cleanup_info = check_cleanup_eligibility_corrected(series_id, rule)
+                    
+                    if eligible:
+                        # Get episodes using corrected logic
+                        all_episodes = fetch_all_episodes(series_id)
+                        episodes_with_files = [ep for ep in all_episodes if ep.get('hasFile', False)]
+                        
+                        if not episodes_with_files:
+                            continue
+                        
+                        # Use corrected episode calculation based on cleanup type
+                        if cleanup_info['type'] == 'grace':
+                            deletable_episodes = calculate_grace_deletable_episodes(
+                                all_episodes, activity_data, series_id_str
+                            )
+                        else:  # dormant
+                            deletable_episodes = calculate_dormant_deletable_episodes(all_episodes)
+                        
+                        if deletable_episodes['episode_file_ids']:
+                            candidates.append({
+                                'series_id': series_id,
+                                'title': series_info['title'],
+                                'rule_name': rule_name,
+                                'cleanup_reason': reason,
+                                'cleanup_type': cleanup_info['type'],
+                                'days_since_activity': cleanup_info['days_since_activity'],
+                                'priority_score': cleanup_info['priority_score'],
+                                'deletable_episodes': deletable_episodes
+                            })
+                            
+                            stats[cleanup_info['type']] += 1
+                            rule_candidates += 1
+                            logger.debug(f"   ✅ {series_info['title']}: {reason}")
+                        else:
+                            logger.debug(f"   ⏭️ {series_info['title']}: {reason} but no deletable episodes")
+                    else:
+                        if "PROTECTED" in reason:
+                            stats['protected'] += 1
+                        logger.debug(f"   🛡️ {series_info['title']}: {reason}")
+                        
+                except ValueError:
+                    continue
+            
+            logger.info(f"   📊 Rule '{rule_name}': {rule_candidates} candidates")
+        
+        # Sort by priority: Dormant first, then grace
+        candidates.sort(key=lambda x: x['priority_score'], reverse=True)
+        
+        logger.info("=" * 60)
+        logger.info(f"📋 GLOBAL STORAGE GATE CLEANUP:")
+        logger.info(f"   🔴 Dormant (nuke all): {stats['dormant']}")
+        logger.info(f"   🟡 Grace (unwatched only): {stats['grace']}")
+        logger.info(f"   🛡️ Protected: {stats['protected']}")
+        logger.info(f"   ⏭️ No cleanup rules: {stats['no_cleanup']}")
+        logger.info(f"   📊 Total candidates: {len(candidates)}")
+        logger.info("=" * 60)
+        
+        return candidates, threshold_gb, f"Found {len(candidates)} candidates"
+        
+    except Exception as e:
+        logger.error(f"Error getting global gate cleanup candidates: {str(e)}")
+        return [], None, f"Error: {str(e)}"
+def get_sonarr_disk_space():
+    """Get disk space information from Sonarr."""
+    try:
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        response = requests.get(f"{SONARR_URL}/api/v3/diskspace", headers=headers)
+        if response.ok:
+            diskspace_data = response.json()
+            
+            if diskspace_data:
+                main_disk = max(diskspace_data, key=lambda x: x.get('totalSpace', 0))
+                
+                total_space_bytes = main_disk.get('totalSpace', 0)
+                free_space_bytes = main_disk.get('freeSpace', 0)
+                
+                return {
+                    'total_space_gb': round(total_space_bytes / (1024**3), 1),
+                    'free_space_gb': round(free_space_bytes / (1024**3), 1),
+                    'path': main_disk.get('path', 'Unknown')
+                }
+        return None
+    except Exception as e:
+        logger.error(f"Error getting disk space: {str(e)}")
+        return None
+    
+def run_global_storage_gate_cleanup():
+    """
+    Main cleanup with global storage gate:
+    1. Check global storage threshold
+    2. If below threshold, run cleanup until back above threshold
+    3. Process in order: dormant (oldest first) → grace (oldest first)
+    4. Stop once back above threshold
+    """
+    try:
+        cleanup_logger.info("=" * 80)
+        cleanup_logger.info("🚀 STARTING GLOBAL STORAGE GATE CLEANUP")
+        cleanup_logger.info("🎯 Will stop cleanup once back above threshold")
+        
+        config = load_config()
+        global_settings = load_global_settings()
+        dry_run = global_settings.get('dry_run_mode', False) or os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        
+        # Get candidates (includes global storage gate check)
+        candidates, threshold_gb, status = get_cleanup_candidates_global_gate(config)
+        
+        if not candidates:
+            cleanup_logger.info(f"✅ {status}")
+            return
+        
+        cleanup_logger.info(f"📋 {status}")
+        cleanup_logger.info(f"🎯 Target: Get back above {threshold_gb}GB free space")
+        cleanup_logger.info(f"🔧 Mode: {'DRY RUN' if dry_run else 'LIVE'}")
+        
+        # Process candidates in priority order until threshold met
+        processed_count = 0
+        stats = {'grace': 0, 'dormant': 0}
+        
+        for candidate in candidates:
+            # Check if we're back above threshold (unless dry run)
+            if not dry_run and threshold_gb:
+                current_disk = get_sonarr_disk_space()
+                if current_disk and current_disk['free_space_gb'] >= threshold_gb:
+                    cleanup_logger.info(f"🎯 THRESHOLD MET: {current_disk['free_space_gb']:.1f}GB >= {threshold_gb}GB")
+                    cleanup_logger.info(f"✅ Stopping cleanup - storage gate now CLOSED")
+                    break
+            
+            series_title = candidate['title']
+            rule_name = candidate['rule_name']
+            cleanup_type = candidate['cleanup_type']
+            reason = candidate['cleanup_reason']
+            deletable = candidate['deletable_episodes']
+            
+            emoji = '🔴' if cleanup_type == 'dormant' else '🟡'
+            
+            cleanup_logger.info(f"{emoji} {series_title} (Rule: {rule_name})")
+            cleanup_logger.info(f"   📋 {reason}")
+            cleanup_logger.info(f"   📊 {deletable['description']}")
+            
+            if deletable['episode_file_ids']:
+                # Use your existing logging function
+                delete_episodes_in_sonarr_with_logging(deletable['episode_file_ids'], dry_run, series_title)
+                processed_count += 1
+                stats[cleanup_type] += 1
+                
+                if dry_run:
+                    cleanup_logger.info(f"   🔍 DRY RUN: Would delete {deletable['episode_count']} episodes")
+                else:
+                    cleanup_logger.info(f"   ✅ Deleted {deletable['episode_count']} episodes")
+                    
+                    # Log current free space after deletion
+                    current_disk = get_sonarr_disk_space()
+                    if current_disk:
+                        cleanup_logger.info(f"   💾 Free space now: {current_disk['free_space_gb']:.1f}GB")
+            else:
+                cleanup_logger.info(f"   ⏭️ No episodes to delete")
+        
+        # Final status
+        final_disk = get_sonarr_disk_space()
+        cleanup_logger.info("=" * 80)
+        cleanup_logger.info("✅ GLOBAL STORAGE GATE CLEANUP COMPLETED")
+        cleanup_logger.info(f"📊 Processed: {processed_count} series")
+        cleanup_logger.info(f"   🔴 Dormant (nuked): {stats['dormant']}")
+        cleanup_logger.info(f"   🟡 Grace (unwatched): {stats['grace']}")
+        if final_disk and threshold_gb:
+            gate_status = "CLOSED" if final_disk['free_space_gb'] >= threshold_gb else "OPEN"
+            cleanup_logger.info(f"🚪 Storage gate now: {gate_status} ({final_disk['free_space_gb']:.1f}GB free)")
+        cleanup_logger.info("=" * 80)
+        
+    except Exception as e:
+        cleanup_logger.error(f"Error in global storage gate cleanup: {str(e)}")
+
+# Update main function to use global gate
 def main():
-    """Main entry point - handles both webhook and periodic cleanup."""
+    """Main entry point with global storage gate."""
     series_name, season_number, episode_number = get_server_activity()
     
     if series_name:
-        # WEBHOOK MODE - Process watched episode
+        # WEBHOOK MODE - unchanged
         series_id = get_series_id(series_name)
         if series_id:
             config = load_config()
-            
-            # Find the rule for this series (NEW DICT STRUCTURE)
             rule = None
             for rule_name, rule_details in config['rules'].items():
-                series_dict = rule_details.get('series', {})  # Now it's a dict
-                if str(series_id) in series_dict:  # Check if series ID is a key
+                series_dict = rule_details.get('series', {})
+                if str(series_id) in series_dict:
                     rule = rule_details
                     break
             
@@ -1638,13 +2252,13 @@ def main():
                 process_episodes_for_webhook(series_id, season_number, episode_number, rule)
             else:
                 logger.info(f"No rule found for series ID {series_id}. Only updating activity.")
-                update_activity_date(series_id, season_number, episode_number)  
+                update_activity_date(series_id, season_number, episode_number)
         else:
             logger.error(f"Series ID not found for series: {series_name}")
     else:
-        # SCHEDULER MODE - Run periodic cleanup
-        logger.info("No server activity found - running periodic cleanup")
-        run_periodic_cleanup()
+        # SCHEDULER MODE - global storage gate cleanup
+        logger.info("Running global storage gate cleanup")
+        run_global_storage_gate_cleanup()
 
 if __name__ == "__main__":
     main()
