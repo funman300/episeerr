@@ -1142,11 +1142,18 @@ def select_seasons(tmdb_id):
 
 @app.route('/select-episodes/<tmdb_id>')
 def select_episodes(tmdb_id):
-    """Show episode selection page after season selection"""
+    """Show episode selection page after season selection - FIXED VERSION"""
     try:
         # Get selected seasons from URL parameter
         selected_seasons_param = request.args.get('seasons', '1')
-        selected_seasons = [int(s) for s in selected_seasons_param.split(',')]
+        try:
+            selected_seasons = [int(s.strip()) for s in selected_seasons_param.split(',') if s.strip()]
+        except ValueError:
+            app.logger.error(f"Invalid seasons parameter: {selected_seasons_param}")
+            selected_seasons = [1]  # Fallback to season 1
+            
+        if not selected_seasons:
+            selected_seasons = [1]  # Ensure we always have at least one season
         
         app.logger.info(f"Episode selection for TMDB ID {tmdb_id}, seasons: {selected_seasons}")
         
@@ -1194,25 +1201,27 @@ def select_episodes(tmdb_id):
                     'episodeCount': season.get('episode_count', '?')
                 })
         
+        app.logger.info(f"Rendering episode selection with selected_seasons: {selected_seasons}")
+        
         return render_template('episode_selection.html', 
                              show=formatted_show, 
                              request_id=request_id,
                              series_id=series_id,
-                             selected_seasons=selected_seasons)
+                             selected_seasons=selected_seasons)  # This will be properly JSON-encoded in template
     
     except Exception as e:
         app.logger.error(f"Error in select_episodes: {str(e)}", exc_info=True)
         return render_template('error.html', message=f"Error loading episode selection: {str(e)}")
-
 @app.route('/api/process-episode-selection', methods=['POST'])
 def process_episode_selection():
-    """Process episode selection with multi-season support - ENHANCED VERSION"""
+    """Process episode selection with multi-season support - FIXED VERSION"""
     try:
-        app.logger.info(f"Form data received: {dict(request.form)}")
+        app.logger.info(f"Raw form data: {dict(request.form)}")
+        app.logger.info(f"Form lists: episodes={request.form.getlist('episodes')}")
         
         # Get form data
         request_id = request.form.get('request_id')
-        episodes = request.form.getlist('episodes')  # Now contains "season:episode" format
+        episodes = request.form.getlist('episodes')  # Gets ALL values with name 'episodes'
         action = request.form.get('action')
         
         app.logger.info(f"Processing: request_id={request_id}, action={action}, episodes={episodes}")
@@ -1241,19 +1250,26 @@ def process_episode_selection():
             if not episodes:
                 return redirect(url_for('episeerr_index', message="Error: No episodes selected"))
             
+            app.logger.info(f"DEBUG: Processing {len(episodes)} episodes: {episodes}")
+            
             # Parse episodes by season: "season:episode" format
             episodes_by_season = {}
             for episode_str in episodes:
                 try:
-                    season_str, episode_str = episode_str.split(':')
+                    if ':' not in episode_str:
+                        app.logger.error(f"Invalid episode format (no colon): {episode_str}")
+                        continue
+                        
+                    season_str, episode_str = episode_str.split(':', 1)
                     season_num = int(season_str)
                     episode_num = int(episode_str)
                     
                     if season_num not in episodes_by_season:
                         episodes_by_season[season_num] = []
                     episodes_by_season[season_num].append(episode_num)
-                except ValueError:
-                    app.logger.warning(f"Invalid episode format: {episode_str}")
+                    
+                except ValueError as e:
+                    app.logger.warning(f"Invalid episode format: {episode_str} - {str(e)}")
                     continue
             
             if not episodes_by_season:
@@ -1264,9 +1280,9 @@ def process_episode_selection():
             # Store in pending_selections for processing
             episeerr_utils.pending_selections[str(series_id)] = {
                 'title': request_data.get('title', 'Unknown'),
-                'episodes_by_season': episodes_by_season,  # New format
-                'selected_episodes': set(),  # Keep for compatibility
-                'multi_season': True  # Flag for multi-season processing
+                'episodes_by_season': episodes_by_season,
+                'selected_episodes': set(),
+                'multi_season': True
             }
             
             # Process each season separately
@@ -1300,7 +1316,7 @@ def process_episode_selection():
                 return redirect(url_for('episeerr_index', message=message))
             else:
                 seasons_list = list(episodes_by_season.keys())
-                message = f"Successfully processing {total_processed} episodes across {len(seasons_list)} seasons"
+                message = f"Successfully processed {total_processed} episodes across {len(seasons_list)} seasons"
                 return redirect(url_for('episeerr_index', message=message))
         
         else:
@@ -1309,7 +1325,6 @@ def process_episode_selection():
     except Exception as e:
         app.logger.error(f"Error processing episode selection: {str(e)}", exc_info=True)
         return redirect(url_for('episeerr_index', message="An error occurred while processing episodes"))
-
 
 # Also add this enhanced function to episeerr_utils.py:
 
@@ -1587,55 +1602,31 @@ def process_sonarr_webhook():
         # ENHANCED: Check for pending Jellyseerr request with better matching
         jellyseerr_request_id = None
         tvdb_id_str = str(tvdb_id) if tvdb_id else None
-        
+
         app.logger.info(f"Looking for Jellyseerr request with TVDB ID: {tvdb_id_str}")
-        app.logger.info(f"Current pending requests: {list(jellyseerr_pending_requests.keys())}")
-        
-        # Try multiple approaches to find the matching request
+
         if tvdb_id_str:
-            # Direct TVDB ID match
-            if tvdb_id_str in jellyseerr_pending_requests:
-                jellyseerr_request = jellyseerr_pending_requests[tvdb_id_str]
-                jellyseerr_request_id = jellyseerr_request.get('request_id')
-                app.logger.info(f"✓ Found matching Jellyseerr request for {series_title}: {jellyseerr_request_id}")
+            request_file = os.path.join(REQUESTS_DIR, f"jellyseerr-{tvdb_id_str}.json")
+            if os.path.exists(request_file):
+                try:
+                    with open(request_file, 'r') as f:
+                        request_data = json.load(f)
+                    jellyseerr_request_id = request_data.get('request_id')
+                    app.logger.info(f"✓ Found Jellyseerr request file: {jellyseerr_request_id}")
+                    
+                    # Cancel the Jellyseerr request
+                    app.logger.info(f"Cancelling Jellyseerr request {jellyseerr_request_id}")
+                    cancel_result = episeerr_utils.delete_overseerr_request(jellyseerr_request_id)
+                    app.logger.info(f"Jellyseerr cancellation result: {cancel_result}")
+                    
+                    # Delete the file after processing
+                    os.remove(request_file)
+                    app.logger.info(f"✓ Removed Jellyseerr request file for TVDB ID {tvdb_id_str}")
+                    
+                except Exception as e:
+                    app.logger.error(f"Error processing Jellyseerr request file: {str(e)}")
             else:
-                # Try with different string formats
-                for stored_tvdb_id, request_info in jellyseerr_pending_requests.items():
-                    if str(stored_tvdb_id) == tvdb_id_str or int(stored_tvdb_id) == int(tvdb_id_str):
-                        jellyseerr_request_id = request_info.get('request_id')
-                        app.logger.info(f"✓ Found matching Jellyseerr request via alternate lookup: {jellyseerr_request_id}")
-                        # Move to correct key format
-                        jellyseerr_pending_requests[tvdb_id_str] = jellyseerr_pending_requests.pop(stored_tvdb_id)
-                        break
-                
-                # If still not found, try title-based matching as backup
-                if not jellyseerr_request_id:
-                    for stored_tvdb_id, request_info in jellyseerr_pending_requests.items():
-                        stored_title = request_info.get('title', '').lower().strip()
-                        current_title = series_title.lower().strip()
-                        
-                        # Fuzzy title matching
-                        if stored_title == current_title or stored_title in current_title or current_title in stored_title:
-                            jellyseerr_request_id = request_info.get('request_id')
-                            app.logger.info(f"✓ Found matching Jellyseerr request via title match: {jellyseerr_request_id}")
-                            # Update the mapping for future use
-                            jellyseerr_pending_requests[tvdb_id_str] = jellyseerr_pending_requests.pop(stored_tvdb_id)
-                            break
-        
-        # Cancel the Jellyseerr request if found
-        if jellyseerr_request_id:
-            app.logger.info(f"Cancelling Jellyseerr request {jellyseerr_request_id}")
-            cancel_result = episeerr_utils.delete_overseerr_request(jellyseerr_request_id)
-            app.logger.info(f"Jellyseerr cancellation result: {cancel_result}")
-            
-            # Remove from pending requests
-            if tvdb_id_str in jellyseerr_pending_requests:
-                del jellyseerr_pending_requests[tvdb_id_str]
-                app.logger.info(f"✓ Removed TVDB ID {tvdb_id_str} from pending requests")
-        else:
-            app.logger.info(f"No matching Jellyseerr request found for TVDB ID: {tvdb_id_str}")
-            app.logger.info(f"Available pending requests: {jellyseerr_pending_requests}")
-        
+                app.logger.info(f"No Jellyseerr request file found for TVDB ID: {tvdb_id_str}")
         # ALWAYS: Unmonitor all episodes and remove episeerr tags
         app.logger.info(f"Unmonitoring all episodes for {series_title}")
         unmonitor_success = episeerr_utils.unmonitor_series(series_id, headers)
@@ -1917,43 +1908,25 @@ def process_seerr_webhook():
         app.logger.info(f"TVDB ID: {tvdb_id}, TMDB ID: {tmdb_id}, Title: {title}")
         
         if tvdb_id and request_id:
-            # Store the request info for later use by the Sonarr webhook
-            global jellyseerr_pending_requests
-            
-            # Normalize TVDB ID to string for consistent lookup
             tvdb_id_str = str(tvdb_id)
+            request_file = os.path.join(REQUESTS_DIR, f"jellyseerr-{tvdb_id_str}.json")
             
-            jellyseerr_pending_requests[tvdb_id_str] = {
+            request_data = {
                 'request_id': request_id,
                 'title': title,
                 'tmdb_id': tmdb_id,
-                'tvdb_id': tvdb_id,  # Store original for reference
+                'tvdb_id': tvdb_id,
                 'timestamp': int(time.time())
             }
             
+            os.makedirs(REQUESTS_DIR, exist_ok=True)
+            with open(request_file, 'w') as f:
+                json.dump(request_data, f)
+            
             app.logger.info(f"✓ Stored Jellyseerr request {request_id} for TVDB ID {tvdb_id_str} ({title})")
-            
-            # Clean up old requests (older than 10 minutes)
-            current_time = int(time.time())
-            expired_tvdb_ids = []
-            
-            for tid, info in jellyseerr_pending_requests.items():
-                if current_time - info.get('timestamp', 0) > 600:  # 10 minutes
-                    expired_tvdb_ids.append(tid)
-            
-            for tid in expired_tvdb_ids:
-                expired_request = jellyseerr_pending_requests.pop(tid, {})
-                app.logger.info(f"Cleaned up expired request for TVDB ID {tid} (request {expired_request.get('request_id')})")
-                
-            app.logger.info(f"Current pending requests: {list(jellyseerr_pending_requests.keys())}")
-            
-            # Also log the mapping for debugging
-            for stored_id, stored_info in jellyseerr_pending_requests.items():
-                app.logger.debug(f"  - TVDB {stored_id}: Request {stored_info.get('request_id')} ({stored_info.get('title')})")
-                
         else:
             app.logger.warning(f"Missing required data - TVDB ID: {tvdb_id}, Request ID: {request_id}")
-        
+
         return jsonify({"status": "success"}), 200
         
     except Exception as e:

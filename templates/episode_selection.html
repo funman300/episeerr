@@ -179,196 +179,253 @@
         </form>
     </div>
 
-    <script>
-        let currentSeasonNumber = {% if selected_seasons %}{{ selected_seasons[0] }}{% else %}1{% endif %};
-        let selectedSeasons = [{% if selected_seasons %}{% for season in selected_seasons %}{{ season }}{% if not loop.last %},{% endif %}{% endfor %}{% else %}1{% endif %}];
-        let episodeSelections = {}; // Track selections by season: {season: Set(episodes)}
+    <!-- Replace the problematic script section with this: -->
+
+<script>
+    // Use JSON encoding for safer data passing
+    let selectedSeasonsData = {{ selected_seasons | tojson | safe }};
+    let currentSeasonNumber = selectedSeasonsData && selectedSeasonsData.length > 0 ? selectedSeasonsData[0] : 1;
+    let selectedSeasons = selectedSeasonsData && selectedSeasonsData.length > 0 ? selectedSeasonsData : [1];
+    let episodeSelections = {}; // Track selections by season: {season: Set(episodes)}
+    
+    // Debug logging
+    console.log('Selected seasons data:', selectedSeasonsData);
+    console.log('Current season number:', currentSeasonNumber);
+    console.log('Selected seasons:', selectedSeasons);
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Selected seasons:', selectedSeasons);
         
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Selected seasons:', selectedSeasons);
-            
-            // Initialize episode selections tracking
-            selectedSeasons.forEach(season => {
-                episodeSelections[season] = new Set();
-            });
-            
-            // Hide tabs and episode lists for non-selected seasons
-            document.querySelectorAll('.season-tab').forEach(tab => {
-                const seasonNumber = parseInt(tab.dataset.season);
-                if (!selectedSeasons.includes(seasonNumber)) {
-                    tab.style.display = 'none';
-                }
-            });
-            
-            document.querySelectorAll('.episode-list').forEach(list => {
-                const seasonId = list.id;
-                const seasonNumber = parseInt(seasonId.replace('season-', ''));
-                if (!selectedSeasons.includes(seasonNumber)) {
-                    list.style.display = 'none';
-                }
-            });
-            
-            // Set first selected season as current
-            if (selectedSeasons.length > 0) {
-                currentSeasonNumber = selectedSeasons[0];
-                const firstVisibleTab = document.querySelector(`.season-tab[data-season="${selectedSeasons[0]}"]`);
-                if (firstVisibleTab) {
-                    firstVisibleTab.classList.add('active');
-                }
-            }
-            
-            // Set up tab click handlers
-            document.querySelectorAll('.season-tab').forEach(tab => {
-                tab.addEventListener('click', function() {
-                    document.querySelectorAll('.season-tab').forEach(t => t.classList.remove('active'));
-                    this.classList.add('active');
-                    const seasonNumber = parseInt(this.dataset.season);
-                    
-                    currentSeasonNumber = seasonNumber;
-                    
-                    document.querySelectorAll('.episode-list').forEach(s => s.style.display = 'none');
-                    const seasonElement = document.getElementById(`season-${seasonNumber}`);
-                    seasonElement.style.display = 'block';
-                    if (seasonElement.querySelector('.loading-indicator')) {
-                        fetchEpisodesForSeason(seasonNumber, seasonElement);
-                    }
-                });
-            });
-            
-            // Load episodes for the first active season
-            const activeTab = document.querySelector('.season-tab.active');
-            if (activeTab) {
-                const seasonNumber = parseInt(activeTab.dataset.season);
-                currentSeasonNumber = seasonNumber;
-                const seasonElement = document.getElementById(`season-${seasonNumber}`);
-                fetchEpisodesForSeason(seasonNumber, seasonElement);
+        // Initialize episode selections tracking
+        selectedSeasons.forEach(season => {
+            episodeSelections[season] = new Set();
+        });
+        
+        // Hide tabs and episode lists for non-selected seasons
+        document.querySelectorAll('.season-tab').forEach(tab => {
+            const seasonNumber = parseInt(tab.dataset.season);
+            if (!selectedSeasons.includes(seasonNumber)) {
+                tab.style.display = 'none';
             }
         });
-            
-        function fetchEpisodesForSeason(seasonNumber, container) {
-            console.log(`Fetching episodes for season ${seasonNumber}`);
-            fetch(`/api/tmdb/season/{{ show.id }}/${seasonNumber}`)
-                .then(response => {
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.episodes && data.episodes.length > 0) {
-                        let episodeHtml = '';
-                        data.episodes.forEach(episode => {
-                            const isSelected = episodeSelections[seasonNumber] && episodeSelections[seasonNumber].has(episode.episode_number);
-                            episodeHtml += `
-                                <div class="episode-item">
-                                    <div class="episode-number">${episode.episode_number}</div>
-                                    <div class="episode-info">
-                                        <div class="episode-title">${episode.name}</div>
-                                        <div class="episode-overview">${episode.overview || 'No description available'}</div>
-                                    </div>
-                                    <input type="checkbox" name="episodes" value="${seasonNumber}:${episode.episode_number}" 
-                                           class="episode-check" data-season="${seasonNumber}" data-episode="${episode.episode_number}"
-                                           ${isSelected ? 'checked' : ''} onchange="updateSelections()">
-                                </div>
-                            `;
-                        });
-                        container.innerHTML = episodeHtml;
-                        updateSelections(); // Update counts after loading
-                    } else {
-                        container.innerHTML = '<div class="alert alert-info">No episodes found for this season</div>';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching episodes:', error);
-                    container.innerHTML = '<div class="alert alert-danger">Error loading episodes. Please try again.</div>';
-                });
-        }
         
-        function updateSelections() {
-            // Update episodeSelections tracking
-            selectedSeasons.forEach(season => {
-                episodeSelections[season] = new Set();
-            });
-            
-            // Collect all checked episodes
-            document.querySelectorAll('.episode-check:checked').forEach(checkbox => {
-                const season = parseInt(checkbox.dataset.season);
-                const episode = parseInt(checkbox.dataset.episode);
-                if (episodeSelections[season]) {
-                    episodeSelections[season].add(episode);
-                }
-            });
-            
-            // Update tab indicators
-            selectedSeasons.forEach(season => {
-                const tab = document.querySelector(`.season-tab[data-season="${season}"]`);
-                const countElement = tab.querySelector('.selection-count');
-                const count = episodeSelections[season] ? episodeSelections[season].size : 0;
-                
-                if (count > 0) {
-                    tab.classList.add('has-selections');
-                    countElement.textContent = count;
-                    countElement.style.display = 'flex';
-                } else {
-                    tab.classList.remove('has-selections');
-                    countElement.style.display = 'none';
-                }
-            });
-            
-            // Update selection summary
-            updateSelectionSummary();
-            
-            // Update submit button
-            const totalSelected = Object.values(episodeSelections).reduce((total, set) => total + set.size, 0);
-            const submitBtn = document.getElementById('submit-btn');
-            const totalCount = document.getElementById('total-count');
-            
-            totalCount.textContent = totalSelected;
-            submitBtn.disabled = totalSelected === 0;
-        }
+        document.querySelectorAll('.episode-list').forEach(list => {
+            const seasonId = list.id;
+            const seasonNumber = parseInt(seasonId.replace('season-', ''));
+            if (!selectedSeasons.includes(seasonNumber)) {
+                list.style.display = 'none';
+            }
+        });
         
-        function updateSelectionSummary() {
-            const summary = document.getElementById('selection-summary');
-            const content = document.getElementById('summary-content');
-            
-            let hasSelections = false;
-            let summaryText = '';
-            
-            selectedSeasons.forEach(season => {
-                const episodes = episodeSelections[season];
-                if (episodes && episodes.size > 0) {
-                    hasSelections = true;
-                    const episodeList = Array.from(episodes).sort((a, b) => a - b);
-                    summaryText += `<strong>Season ${season}:</strong> Episodes ${episodeList.join(', ')}<br>`;
-                }
-            });
-            
-            if (hasSelections) {
-                content.innerHTML = summaryText;
-                summary.style.display = 'block';
-            } else {
-                summary.style.display = 'none';
+        // Set first selected season as current
+        if (selectedSeasons.length > 0) {
+            currentSeasonNumber = selectedSeasons[0];
+            const firstVisibleTab = document.querySelector(`.season-tab[data-season="${selectedSeasons[0]}"]`);
+            if (firstVisibleTab) {
+                firstVisibleTab.classList.add('active');
             }
         }
         
-        function selectAllCurrent() {
-            document.querySelectorAll(`.episode-check[data-season="${currentSeasonNumber}"]`).forEach(check => {
-                check.checked = true;
+        // Set up tab click handlers
+        document.querySelectorAll('.season-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.season-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                const seasonNumber = parseInt(this.dataset.season);
+                
+                currentSeasonNumber = seasonNumber;
+                
+                document.querySelectorAll('.episode-list').forEach(s => s.style.display = 'none');
+                const seasonElement = document.getElementById(`season-${seasonNumber}`);
+                seasonElement.style.display = 'block';
+                if (seasonElement.querySelector('.loading-indicator')) {
+                    fetchEpisodesForSeason(seasonNumber, seasonElement);
+                }
             });
-            updateSelections();
-        }
+        });
         
-        function selectNoneCurrent() {
-            document.querySelectorAll(`.episode-check[data-season="${currentSeasonNumber}"]`).forEach(check => {
-                check.checked = false;
-            });
-            updateSelections();
+        // Load episodes for the first active season
+        const activeTab = document.querySelector('.season-tab.active');
+        if (activeTab) {
+            const seasonNumber = parseInt(activeTab.dataset.season);
+            currentSeasonNumber = seasonNumber;
+            const seasonElement = document.getElementById(`season-${seasonNumber}`);
+            fetchEpisodesForSeason(seasonNumber, seasonElement);
         }
+    });
+    
+    // Add form submission debugging
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('episode-form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                console.log('=== FORM SUBMISSION DEBUG ===');
+                
+                // Log all checked episodes
+                const checkedEpisodes = document.querySelectorAll('.episode-check:checked');
+                console.log(`Found ${checkedEpisodes.length} checked episodes:`);
+                
+                checkedEpisodes.forEach((checkbox, index) => {
+                    console.log(`  ${index + 1}: ${checkbox.value} (season: ${checkbox.dataset.season}, episode: ${checkbox.dataset.episode})`);
+                });
+                
+                // Check FormData
+                const formData = new FormData(this);
+                const episodes = formData.getAll('episodes');
+                console.log('Episodes from FormData.getAll():', episodes);
+                
+                // Additional debug - check the raw form
+                const episodeInputs = this.querySelectorAll('input[name="episodes"]:checked');
+                console.log(`Direct input query found ${episodeInputs.length} checked inputs`);
+                
+                if (episodes.length === 0) {
+                    console.error('ERROR: No episodes in form data!');
+                    alert('No episodes selected! Check console for debugging info.');
+                    e.preventDefault();
+                    return false;
+                }
+                
+                if (episodes.length !== checkedEpisodes.length) {
+                    console.warn(`Mismatch: ${checkedEpisodes.length} visually checked vs ${episodes.length} in form data`);
+                }
+                
+                console.log('Form submission proceeding...');
+            });
+        }
+    });
         
-        function clearAll() {
-            document.querySelectorAll('.episode-check').forEach(check => {
-                check.checked = false;
+    function fetchEpisodesForSeason(seasonNumber, container) {
+        console.log(`Fetching episodes for season ${seasonNumber}`);
+        fetch(`/api/tmdb/season/{{ show.id }}/${seasonNumber}`)
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response.json();
+            })
+            .then(data => {
+                if (data.episodes && data.episodes.length > 0) {
+                    let episodeHtml = '';
+                    data.episodes.forEach(episode => {
+                        const isSelected = episodeSelections[seasonNumber] && episodeSelections[seasonNumber].has(episode.episode_number);
+                        episodeHtml += `
+                            <div class="episode-item">
+                                <div class="episode-number">${episode.episode_number}</div>
+                                <div class="episode-info">
+                                    <div class="episode-title">${episode.name}</div>
+                                    <div class="episode-overview">${episode.overview || 'No description available'}</div>
+                                </div>
+                                <input type="checkbox" name="episodes" value="${seasonNumber}:${episode.episode_number}" 
+                                       class="episode-check" data-season="${seasonNumber}" data-episode="${episode.episode_number}"
+                                       ${isSelected ? 'checked' : ''} onchange="updateSelections()">
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = episodeHtml;
+                    updateSelections(); // Update counts after loading
+                } else {
+                    container.innerHTML = '<div class="alert alert-info">No episodes found for this season</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching episodes:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading episodes. Please try again.</div>';
             });
-            updateSelections();
+    }
+    
+    function updateSelections() {
+        // Update episodeSelections tracking
+        selectedSeasons.forEach(season => {
+            episodeSelections[season] = new Set();
+        });
+        
+        // Collect all checked episodes
+        document.querySelectorAll('.episode-check:checked').forEach(checkbox => {
+            const season = parseInt(checkbox.dataset.season);
+            const episode = parseInt(checkbox.dataset.episode);
+            if (episodeSelections[season]) {
+                episodeSelections[season].add(episode);
+            }
+        });
+        
+        // Update tab indicators
+        selectedSeasons.forEach(season => {
+            const tab = document.querySelector(`.season-tab[data-season="${season}"]`);
+            const countElement = tab.querySelector('.selection-count');
+            const count = episodeSelections[season] ? episodeSelections[season].size : 0;
+            
+            if (count > 0) {
+                tab.classList.add('has-selections');
+                countElement.textContent = count;
+                countElement.style.display = 'flex';
+            } else {
+                tab.classList.remove('has-selections');
+                countElement.style.display = 'none';
+            }
+        });
+        
+        // Update selection summary
+        updateSelectionSummary();
+        
+        // Update submit button
+        const totalSelected = Object.values(episodeSelections).reduce((total, set) => total + set.size, 0);
+        const submitBtn = document.getElementById('submit-btn');
+        const totalCount = document.getElementById('total-count');
+        
+        totalCount.textContent = totalSelected;
+        submitBtn.disabled = totalSelected === 0;
+        
+        // Debug logging
+        console.log('Selection updated:', {
+            totalSelected,
+            episodeSelections: Object.fromEntries(
+                Object.entries(episodeSelections).map(([season, set]) => [season, Array.from(set)])
+            )
+        });
+    }
+    
+    function updateSelectionSummary() {
+        const summary = document.getElementById('selection-summary');
+        const content = document.getElementById('summary-content');
+        
+        let hasSelections = false;
+        let summaryText = '';
+        
+        selectedSeasons.forEach(season => {
+            const episodes = episodeSelections[season];
+            if (episodes && episodes.size > 0) {
+                hasSelections = true;
+                const episodeList = Array.from(episodes).sort((a, b) => a - b);
+                summaryText += `<strong>Season ${season}:</strong> Episodes ${episodeList.join(', ')}<br>`;
+            }
+        });
+        
+        if (hasSelections) {
+            content.innerHTML = summaryText;
+            summary.style.display = 'block';
+        } else {
+            summary.style.display = 'none';
         }
-    </script>
+    }
+    
+    function selectAllCurrent() {
+        document.querySelectorAll(`.episode-check[data-season="${currentSeasonNumber}"]`).forEach(check => {
+            check.checked = true;
+        });
+        updateSelections();
+    }
+    
+    function selectNoneCurrent() {
+        document.querySelectorAll(`.episode-check[data-season="${currentSeasonNumber}"]`).forEach(check => {
+            check.checked = false;
+        });
+        updateSelections();
+    }
+    
+    function clearAll() {
+        document.querySelectorAll('.episode-check').forEach(check => {
+            check.checked = false;
+        });
+        updateSelections();
+    }
+</script>
 </body>
 </html>
