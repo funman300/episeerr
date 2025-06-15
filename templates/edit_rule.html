@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-md-10">
         <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-edit me-2"></i>Edit Rule: {{ rule_name.replace('_', ' ').title() }}</h5>
@@ -13,11 +13,58 @@
                 <form method="POST">
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="get_option" class="form-label">How many episodes to get?</label>
-                                <input type="text" class="form-control" id="get_option" name="get_option" 
-                                       value="{{ rule.get_option }}" placeholder="season, all, or a number" required>
-                                <div class="form-text">Examples: "season", "all", "5"</div>
+                            <!-- NEW: Get Episodes Section -->
+                            <div class="card border-primary mb-3">
+                                <div class="card-header bg-primary text-white">
+                                    <h6 class="mb-0"><i class="fas fa-download me-2"></i>Get Episodes (Next Content)</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="get_type" class="form-label">Type</label>
+                                            <select class="form-select" id="get_type" name="get_type" required onchange="toggleGetCount()">
+                                                <option value="episodes" {% if rule.get('get_type') == 'episodes' %}selected{% endif %}>Episodes</option>
+                                                <option value="seasons" {% if rule.get('get_type') == 'seasons' %}selected{% endif %}>Seasons</option>
+                                                <option value="all" {% if rule.get('get_type') == 'all' %}selected{% endif %}>All Available</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6" id="get_count_container">
+                                            <label for="get_count" class="form-label">Count</label>
+                                            <input type="number" class="form-control" id="get_count" name="get_count" 
+                                                   min="1" value="{{ rule.get('get_count', 1) }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-text mt-2">
+                                        <span id="get_explanation"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- NEW: Keep Episodes Section -->
+                            <div class="card border-success mb-3">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Keep Episodes (Retention)</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="keep_type" class="form-label">Type</label>
+                                            <select class="form-select" id="keep_type" name="keep_type" required onchange="toggleKeepCount()">
+                                                <option value="episodes" {% if rule.get('keep_type') == 'episodes' %}selected{% endif %}>Episodes</option>
+                                                <option value="seasons" {% if rule.get('keep_type') == 'seasons' %}selected{% endif %}>Seasons</option>
+                                                <option value="all" {% if rule.get('keep_type') == 'all' %}selected{% endif %}>All Episodes</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6" id="keep_count_container">
+                                            <label for="keep_count" class="form-label">Count</label>
+                                            <input type="number" class="form-control" id="keep_count" name="keep_count" 
+                                                   min="1" value="{{ rule.get('keep_count', 1) }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-text mt-2">
+                                        <span id="keep_explanation"></span>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -26,13 +73,6 @@
                                     <option value="monitor" {% if rule.action_option == 'monitor' %}selected{% endif %}>Monitor</option>
                                     <option value="search" {% if rule.action_option == 'search' %}selected{% endif %}>Search</option>
                                 </select>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="keep_watched" class="form-label">How many episodes to keep?</label>
-                                <input type="text" class="form-control" id="keep_watched" name="keep_watched" 
-                                       value="{{ rule.keep_watched }}" placeholder="season, all, or a number">
-                                <div class="form-text">Examples: "season", "all", "3"</div>
                             </div>
 
                             <div class="mb-3">
@@ -57,40 +97,46 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="mb-3">
-    <label for="grace_days" class="form-label">
-        Grace Period (days)
-        <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-           title="Remove unwatched episodes after X days of series inactivity. Watched episodes are kept."></i>
-    </label>
-    <input type="number" class="form-control" id="grace_days" 
-           name="grace_days" min="1" 
-           value="{% if rule.grace_days %}{{ rule.grace_days }}{% endif %}"
-           placeholder="Leave empty to keep unwatched episodes">
-    <div class="form-text text-muted">
-        <small>Example: "14" = Remove unwatched episodes if series inactive for 14 days</small>
-    </div>
-</div>
+                                        <label for="grace_days" class="form-label">
+                                            Grace Period (days)
+                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                               title="After grace expires, episodes get deleted leaving only the keep content."></i>
+                                        </label>
+                                        <input type="number" class="form-control" id="grace_days" 
+                                               name="grace_days" min="1" 
+                                               value="{% if rule.grace_days %}{{ rule.grace_days }}{% endif %}"
+                                               placeholder="Leave empty to keep watched episodes forever">
+                                        <div class="form-text text-muted">
+                                            <small>NEW: Keep watched episodes before 'keep block' for X days after watching</small>
+                                        </div>
+                                    </div>
 
-<div class="mb-3">
-    <label for="dormant_days" class="form-label">
-        Dormant Timer (days)
-        <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-           title="Remove ALL episodes if series is inactive for X days (series abandoned)."></i>
-    </label>
-    <input type="number" class="form-control" id="dormant_days" 
-           name="dormant_days" min="1" 
-           value="{% if rule.dormant_days %}{{ rule.dormant_days }}{% endif %}"
-           placeholder="Leave empty to never remove series">
-    <div class="form-text text-muted">
-        <small>Example: "60" = Remove entire series if inactive for 60 days</small>
-    </div>
-</div>
-
-
+                                    <div class="mb-3">
+                                        <label for="dormant_days" class="form-label">
+                                            Dormant Timer (days)
+                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                               title="Remove content if series is completely inactive for X days. With storage gate: removes oldest first until space target met. Without storage gate: removes everything."></i>
+                                        </label>
+                                        <input type="number" class="form-control" id="dormant_days" 
+                                               name="dormant_days" min="1" 
+                                               value="{% if rule.dormant_days %}{{ rule.dormant_days }}{% endif %}"
+                                               placeholder="Leave empty to never remove dormant series">
+                                        <div class="form-text text-muted">
+                                            <small>NEW: Storage-aware cleanup for abandoned series</small>
+                                        </div>
+                                    </div>
 
                                     <div class="alert alert-info alert-sm">
                                         <small>
-                                            <strong>Current Status:</strong><br>
+                                            <strong>Current Configuration:</strong><br>
+                                            {% if rule.get('get_type') %}
+                                                • Get: {{ rule.get('get_count', '?') }} {{ rule.get('get_type', 'episodes') }}<br>
+                                                • Keep: {{ rule.get('keep_count', '?') }} {{ rule.get('keep_type', 'episodes') }}<br>
+                                            {% else %}
+                                                • <span class="text-warning">⚠️ Using legacy format - save to upgrade</span><br>
+                                                • Get: {{ rule.get('get_option', 'unknown') }}<br>
+                                                • Keep: {{ rule.get('keep_watched', 'unknown') }}<br>
+                                            {% endif %}
                                             {% if rule.grace_days %}
                                                 • Grace Period: {{ rule.grace_days }} days<br>
                                             {% else %}
@@ -129,11 +175,76 @@
 
 {% block scripts %}
 <script>
-// Initialize Bootstrap tooltips
+function updateExplanation(type, count, targetId) {
+    const explanation = document.getElementById(targetId);
+    if (!explanation) return;
+    
+    if (type === 'all') {
+        explanation.textContent = targetId.includes('get') ? 'Get all available episodes' : 'Keep all episodes forever';
+    } else if (type === 'episodes') {
+        explanation.textContent = `${targetId.includes('get') ? 'Get' : 'Keep'} ${count} episode${count > 1 ? 's' : ''}`;
+    } else if (type === 'seasons') {
+        explanation.textContent = `${targetId.includes('get') ? 'Get' : 'Keep'} ${count} season${count > 1 ? 's' : ''}`;
+    }
+}
+
+function toggleGetCount() {
+    const getType = document.getElementById('get_type').value;
+    const getCountContainer = document.getElementById('get_count_container');
+    const getCountInput = document.getElementById('get_count');
+    
+    if (getType === 'all') {
+        getCountContainer.style.display = 'none';
+        getCountInput.required = false;
+        getCountInput.value = '';
+    } else {
+        getCountContainer.style.display = 'block';
+        getCountInput.required = true;
+        if (!getCountInput.value) getCountInput.value = '1';
+    }
+    
+    updateExplanation(getType, getCountInput.value || 0, 'get_explanation');
+}
+
+function toggleKeepCount() {
+    const keepType = document.getElementById('keep_type').value;
+    const keepCountContainer = document.getElementById('keep_count_container');
+    const keepCountInput = document.getElementById('keep_count');
+    
+    if (keepType === 'all') {
+        keepCountContainer.style.display = 'none';
+        keepCountInput.required = false;
+        keepCountInput.value = '';
+    } else {
+        keepCountContainer.style.display = 'block';
+        keepCountInput.required = true;
+        if (!keepCountInput.value) keepCountInput.value = '1';
+    }
+    
+    updateExplanation(keepType, keepCountInput.value || 0, 'keep_explanation');
+}
+
+// Initialize Bootstrap tooltips and form state
 document.addEventListener('DOMContentLoaded', function() {
+    // Tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Initialize form state
+    toggleGetCount();
+    toggleKeepCount();
+    
+    // Add event listeners for count changes
+    document.getElementById('get_count').addEventListener('input', function() {
+        const getType = document.getElementById('get_type').value;
+        updateExplanation(getType, this.value, 'get_explanation');
+    });
+    
+    document.getElementById('keep_count').addEventListener('input', function() {
+        const keepType = document.getElementById('keep_type').value;
+        updateExplanation(keepType, this.value, 'keep_explanation');
     });
 });
 </script>

@@ -190,7 +190,11 @@
                     "activity_date": null
                 }
             },
-            "dry_run": false
+            "dry_run": false,
+            "get_type": "episodes",
+            "get_count": 1,
+            "keep_type": "episodes",
+            "keep_count": 1
         },
         "season": {
             "get_option": "season",

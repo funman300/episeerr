@@ -135,16 +135,6 @@ def load_config():
         config['rules'] = {}
     return config
 
-def load_activity_tracking():
-    """Load activity tracking data."""
-    try:
-        if os.path.exists(ACTIVITY_TRACKING_FILE):
-            with open(ACTIVITY_TRACKING_FILE, 'r') as f:
-                return json.load(f)
-        return {}
-    except Exception as e:
-        logger.error(f"Error loading activity tracking: {str(e)}")
-        return {}
 
 def save_activity_tracking(data):
     """Save activity tracking data."""
@@ -155,12 +145,16 @@ def save_activity_tracking(data):
         logger.error(f"Error saving activity tracking: {str(e)}")
 
 def update_activity_date(series_id, season_number=None, episode_number=None, timestamp=None):
-    """Update activity date for a series in config.json (NEW APPROACH)."""
+    """
+    Update activity date in config.json (PRIMARY SOURCE).
+    This becomes the authoritative date that overrides external services.
+    """
     try:
         config = load_config()
         current_time = timestamp or int(time.time())
         
         # Find the series in rules and update activity_date
+        updated = False
         for rule_name, rule_details in config['rules'].items():
             series_dict = rule_details.get('series', {})
             if str(series_id) in series_dict:
@@ -170,14 +164,54 @@ def update_activity_date(series_id, season_number=None, episode_number=None, tim
                     # Convert old format to new format
                     series_dict[str(series_id)] = {'activity_date': current_time}
                 
-                save_config(config)
-                logger.info(f"📺 Updated activity date for series {series_id}: {datetime.fromtimestamp(current_time)}")
-                return
+                updated = True
+                logger.info(f"📺 Updated CONFIG activity date for series {series_id}: {datetime.fromtimestamp(current_time)}")
+                break
         
-        logger.warning(f"Series {series_id} not found in any rule for activity update")
+        if updated:
+            save_config(config)
+            logger.info(f"✅ Config saved - series {series_id} now has authoritative activity date")
+        else:
+            logger.warning(f"Series {series_id} not found in any rule for activity update")
         
     except Exception as e:
         logger.error(f"Error updating activity date for series {series_id}: {str(e)}")
+
+# Add documentation for rule setup
+def validate_rule_for_viewing_pattern(rule):
+    """
+    Validate rule configuration against intended viewing pattern.
+    Returns warnings for configurations that might not work well.
+    """
+    warnings = []
+    
+    grace_days = rule.get('grace_days')
+    dormant_days = rule.get('dormant_days')
+    get_type = rule.get('get_type')
+    keep_type = rule.get('keep_type')
+    
+    # Check for non-linear viewing patterns
+    if grace_days and (get_type in ['episodes', 'seasons'] or keep_type in ['episodes', 'seasons']):
+        warnings.append(
+            "⚠️  Grace period cleanup assumes LINEAR viewing. "
+            "If you watch episodes out of order, consider using DORMANT-ONLY cleanup."
+        )
+    
+    # Check for reasonable grace vs dormant timing
+    if grace_days and dormant_days and grace_days >= dormant_days:
+        warnings.append(
+            "⚠️  Grace period should be shorter than dormant period. "
+            f"Current: Grace={grace_days}d >= Dormant={dormant_days}d"
+        )
+    
+    # Check for storage gate compatibility
+    if dormant_days and not os.getenv('GLOBAL_STORAGE_MIN_GB'):
+        warnings.append(
+            "💡 Consider setting global storage gate to protect against "
+            "unnecessary dormant cleanup when storage is adequate."
+        )
+    
+    return warnings
 
 ## new activity date methods
 def get_activity_date_with_hierarchy(series_id, series_title=None):
@@ -210,12 +244,31 @@ def get_activity_date_with_hierarchy(series_id, series_title=None):
     
     # Step 2: Check Tautulli (only once)
     if series_title:
-        logger.info(f"🔍 Checking Tautulli for '{series_title}'")
-        tautulli_date = get_tautulli_last_watched(series_title)
-        if tautulli_date:
-            logger.info(f"✅ Using Tautulli date for series {series_id}: {datetime.fromtimestamp(tautulli_date)}")
-            return tautulli_date
-        logger.info(f"⚠️  No Tautulli date found for series {series_id}")
+        # Check which external service is configured (user typically has one, not both)
+        tautulli_url = os.getenv('TAUTULLI_URL')
+        tautulli_api_key = os.getenv('TAUTULLI_API_KEY')
+        jellyfin_url = os.getenv('JELLYFIN_URL')
+        jellyfin_api_key = os.getenv('JELLYFIN_API_KEY')
+        
+        # Prefer Tautulli if both are configured (since it's more accurate for watch tracking)
+        if tautulli_url and tautulli_api_key:
+            logger.info(f"🔍 Checking Tautulli for '{series_title}'")
+            tautulli_date = get_tautulli_last_watched(series_title)
+            if tautulli_date:
+                logger.info(f"✅ Using Tautulli date for series {series_id}: {datetime.fromtimestamp(tautulli_date)}")
+                return tautulli_date
+            logger.info(f"⚠️  No Tautulli date found for series {series_id}")
+            
+        elif jellyfin_url and jellyfin_api_key:
+            logger.info(f"🔍 Checking Jellyfin for '{series_title}'")
+            jellyfin_date = get_jellyfin_last_watched(series_title)
+            if jellyfin_date:
+                logger.info(f"✅ Using Jellyfin date for series {series_id}: {datetime.fromtimestamp(jellyfin_date)}")
+                return jellyfin_date
+            logger.info(f"⚠️  No Jellyfin date found for series {series_id}")
+            
+        else:
+            logger.info(f"⚠️  No external watch tracking configured (Tautulli/Jellyfin)")
     
     # Step 3: Check Jellyfin (only once)
     if series_title:
@@ -293,8 +346,193 @@ def find_episodes_to_delete_immediate(all_episodes, keep_watched, last_watched_s
         logger.error(f"Error in immediate deletion logic: {str(e)}")
         return []
 
+def load_activity_tracking():
+    """
+    Load activity tracking data with automatic recycle bin migration.
+    EXTENDS EXISTING FUNCTION - just add recycle bin structure if missing.
+    """
+    try:
+        if os.path.exists(ACTIVITY_TRACKING_FILE):
+            with open(ACTIVITY_TRACKING_FILE, 'r') as f:
+                data = json.load(f)
+        else:
+            data = {}
+        
+        # MIGRATION: Add recycle_bin structure to existing series data
+        migrated = False
+        for series_id, series_data in data.items():
+            if isinstance(series_data, dict) and 'recycle_bin' not in series_data:
+                series_data['recycle_bin'] = {}
+                migrated = True
+        
+        # Save if migration occurred
+        if migrated:
+            save_activity_tracking(data)
+            logger.info(f"✅ Added recycle_bin structure to {len([k for k, v in data.items() if isinstance(v, dict)])} series")
+        
+        return data
+        
+    except Exception as e:
+        logger.error(f"Error loading activity tracking: {str(e)}")
+        return {}
+
+# =============================================================================
+# NEW RECYCLE BIN FUNCTIONS 
+# =============================================================================
+
+def add_episodes_to_recycle_bin(series_id, episodes, grace_days):
+    """Add episodes to recycle bin with expiration time."""
+    if not episodes or grace_days <= 0:
+        return
+        
+    try:
+        activity_data = load_activity_tracking()
+        series_id_str = str(series_id)
+        current_time = int(time.time())
+        expires_at = current_time + (grace_days * 24 * 60 * 60)
+        
+        if series_id_str not in activity_data:
+            activity_data[series_id_str] = {}
+        
+        if 'recycle_bin' not in activity_data[series_id_str]:
+            activity_data[series_id_str]['recycle_bin'] = {}
+        
+        recycle_bin = activity_data[series_id_str]['recycle_bin']
+        
+        # Add each episode to recycle bin (don't overwrite existing)
+        new_episodes = 0
+        for episode in episodes:
+            ep_id = str(episode['id'])
+            if ep_id not in recycle_bin:  # Don't reset existing timers
+                recycle_bin[ep_id] = {
+                    'episode_file_id': episode.get('episodeFileId'),
+                    'season_number': episode['seasonNumber'],
+                    'episode_number': episode['episodeNumber'],
+                    'added_at': current_time,
+                    'expires_at': expires_at,
+                    'grace_days': grace_days
+                }
+                new_episodes += 1
+        
+        if new_episodes > 0:
+            save_activity_tracking(activity_data)
+            logger.info(f"Added {new_episodes} episodes to recycle bin ({grace_days} days)")
+        
+    except Exception as e:
+        logger.error(f"Error adding episodes to recycle bin: {str(e)}")
+
+def check_recycle_bin_expiry(series_id):
+    """Check for episodes whose recycle bin time has expired."""
+    try:
+        activity_data = load_activity_tracking()
+        series_id_str = str(series_id)
+        current_time = int(time.time())
+        
+        if series_id_str not in activity_data:
+            return []
+        
+        recycle_bin = activity_data[series_id_str].get('recycle_bin', {})
+        expired_episodes = []
+        episodes_to_remove = []
+        
+        for ep_id, episode_data in recycle_bin.items():
+            if current_time >= episode_data['expires_at']:
+                expired_episodes.append(episode_data)
+                episodes_to_remove.append(ep_id)
+        
+        # Remove expired episodes from recycle bin
+        if episodes_to_remove:
+            for ep_id in episodes_to_remove:
+                del recycle_bin[ep_id]
+            save_activity_tracking(activity_data)
+        
+        return expired_episodes
+        
+    except Exception as e:
+        logger.error(f"Error checking recycle bin expiry: {str(e)}")
+        return []
+
+def is_episode_in_recycle_bin(series_id, episode_id):
+    """Check if episode is already in recycle bin."""
+    try:
+        activity_data = load_activity_tracking()
+        series_id_str = str(series_id)
+        
+        if series_id_str not in activity_data:
+            return False
+        
+        recycle_bin = activity_data[series_id_str].get('recycle_bin', {})
+        return str(episode_id) in recycle_bin
+        
+    except Exception as e:
+        logger.error(f"Error checking recycle bin: {str(e)}")
+        return False
 
 
+# =============================================================================
+# ADD TO EXISTING CLEANUP FUNCTIONS
+# =============================================================================
+
+def run_recycle_bin_cleanup():
+    """
+    ADD THIS to existing cleanup routines.
+    Call this from main cleanup or as separate scheduled task.
+    """
+    try:
+        cleanup_logger.info("🗑️  RECYCLE BIN CLEANUP: Processing expired episodes")
+        
+        config = load_config()
+        activity_data = load_activity_tracking()
+        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true' 
+        total_deleted = 0
+        
+        # Process each series that has a recycle bin
+        for series_id_str, series_data in activity_data.items():
+            recycle_bin = series_data.get('recycle_bin', {})
+            if not recycle_bin:
+                continue
+            
+            try:
+                series_id = int(series_id_str)
+                expired_episodes = check_recycle_bin_expiry(series_id)
+                
+                if expired_episodes:
+                    # Get series title
+                    try:
+                        headers = {'X-Api-Key': SONARR_API_KEY}
+                        response = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers)
+                        series_title = response.json().get('title', f'Series {series_id}') if response.ok else f'Series {series_id}'
+                    except:
+                        series_title = f'Series {series_id}'
+                    series_rule = None
+                    for rule_name, rule in config['rules'].items():
+                        if series_id_str in rule.get('series', {}):
+                            series_rule = rule
+                            break
+                    
+                    if series_rule:
+                        rule_dry_run = series_rule.get('dry_run', False)
+                        is_dry_run = global_dry_run or rule_dry_run
+                    else:
+                        is_dry_run = global_dry_run
+                    
+                    episode_file_ids = [ep['episode_file_id'] for ep in expired_episodes if ep.get('episode_file_id')]
+                    
+                    if episode_file_ids:
+                        cleanup_logger.info(f"🗑️  {series_title}: {'DRY RUN - Would delete' if is_dry_run else 'Permanently deleting'} {len(episode_file_ids)} expired episodes")
+                        delete_episodes_in_sonarr_with_logging(episode_file_ids, is_dry_run, series_title)
+                        total_deleted += len(episode_file_ids)
+                        
+            except (ValueError, TypeError):
+                continue
+        
+        cleanup_logger.info(f"🗑️  Recycle bin cleanup: Processed {total_deleted} episodes")
+        return total_deleted
+        
+    except Exception as e:
+        cleanup_logger.error(f"Error in recycle bin cleanup: {str(e)}")
+        return 0
+    
 def save_config(config):
     """Save configuration to JSON file."""
     config_path = os.getenv('CONFIG_PATH', '/app/config/config.json')
@@ -531,45 +769,222 @@ def unmonitor_episodes(episode_ids):
         monitor_episodes(episode_ids, False)
 
 def fetch_next_episodes(series_id, season_number, episode_number, get_option):
-    """Fetch the next episodes starting from the given season and episode."""
+    """
+    SIMPLIFIED: Assumes linear watching only. 
+    Non-linear watchers should use dormant-only rules.
+    """
     next_episode_ids = []
 
     try:
         if get_option == "all":
-            # Fetch all episodes from current position forward
+            # Get all episodes from current position forward (linear progression)
             all_episodes = fetch_all_episodes(series_id)
-            for ep in all_episodes:
+            sorted_episodes = sorted(all_episodes, key=lambda ep: (ep['seasonNumber'], ep['episodeNumber']))
+            
+            # Find current position and get everything after
+            for ep in sorted_episodes:
                 if (ep['seasonNumber'] > season_number or 
                     (ep['seasonNumber'] == season_number and ep['episodeNumber'] > episode_number)):
                     next_episode_ids.append(ep['id'])
             return next_episode_ids
             
         elif get_option == 'season':
-            # Fetch remaining episodes in the current season
+            # SIMPLIFIED: Get remaining episodes in current season, then next season if needed
             current_season_episodes = get_episode_details(series_id, season_number)
-            next_episode_ids.extend([ep['id'] for ep in current_season_episodes if ep['episodeNumber'] > episode_number])
+            remaining_current = [ep['id'] for ep in current_season_episodes if ep['episodeNumber'] > episode_number]
+            next_episode_ids.extend(remaining_current)
+            
+            # If no episodes left in current season, get ALL of next season
+            if not remaining_current:
+                logger.info(f"Linear progression: Season {season_number} complete, moving to Season {season_number + 1}")
+                next_season_episodes = get_episode_details(series_id, season_number + 1)
+                next_episode_ids.extend([ep['id'] for ep in next_season_episodes])
+                
+                # If next season is empty, try one more
+                if not next_episode_ids:
+                    logger.info(f"Season {season_number + 1} empty, trying Season {season_number + 2}")
+                    next_next_season = get_episode_details(series_id, season_number + 2)
+                    next_episode_ids.extend([ep['id'] for ep in next_next_season])
+                    
+            logger.info(f"Linear season mode: Found {len(next_episode_ids)} episodes")
             return next_episode_ids
         else:
-            # Treat as number of episodes to get
+            # Get specific number of episodes in linear order
             num_episodes = int(get_option)
             
-            # Get remaining episodes in the current season
+            # Get remaining episodes in current season first
             current_season_episodes = get_episode_details(series_id, season_number)
-            next_episode_ids.extend([ep['id'] for ep in current_season_episodes if ep['episodeNumber'] > episode_number])
+            remaining_episodes = [ep['id'] for ep in current_season_episodes if ep['episodeNumber'] > episode_number]
+            next_episode_ids.extend(remaining_episodes)
 
-            # Fetch episodes from next seasons if needed
-            next_season_number = season_number + 1
+            # If we need more episodes, get from subsequent seasons in order
+            current_season_num = season_number + 1
             while len(next_episode_ids) < num_episodes:
-                next_season_episodes = get_episode_details(series_id, next_season_number)
+                next_season_episodes = get_episode_details(series_id, current_season_num)
                 if not next_season_episodes:
+                    logger.info(f"Linear progression: No more episodes available after season {current_season_num - 1}")
                     break
-                next_episode_ids.extend([ep['id'] for ep in next_season_episodes])
-                next_season_number += 1
+                    
+                remaining_needed = num_episodes - len(next_episode_ids)
+                next_episode_ids.extend([ep['id'] for ep in next_season_episodes[:remaining_needed]])
+                current_season_num += 1
+                
+                # Prevent infinite loops for malformed series
+                if current_season_num > season_number + 10:
+                    logger.warning(f"Linear progression: Stopping after checking 10 seasons ahead")
+                    break
 
+            logger.info(f"Linear episode mode: Found {len(next_episode_ids)} out of {num_episodes} requested")
             return next_episode_ids[:num_episodes]
             
     except ValueError:
         logger.error(f"Invalid get_option value: {get_option}")
+        return []
+    except Exception as e:
+        logger.error(f"Error in linear fetch_next_episodes: {str(e)}")
+        return []
+
+
+
+def run_dormant_cleanup():
+    """Process dormant cleanup with optional storage gate."""
+    try:
+        cleanup_logger.info("🔴 DORMANT CLEANUP: Checking abandoned series")
+        
+        config = load_config()
+        global_settings = load_global_settings()
+        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        
+        # Check storage gate
+        storage_min_gb = global_settings.get('global_storage_min_gb')
+        if storage_min_gb:
+            gate_open, _, gate_reason = check_global_storage_gate()
+            if not gate_open:
+                cleanup_logger.info(f"🔒 Storage gate CLOSED: {gate_reason}")
+                return 0
+            cleanup_logger.info(f"🔓 Storage gate OPEN: {gate_reason}")
+        else:
+            cleanup_logger.info("⏰ No storage gate - running scheduled dormant cleanup")
+        
+        # Get candidates
+        candidates = []
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        all_series = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers).json()
+        current_time = int(time.time())
+        
+        for rule_name, rule in config['rules'].items():
+            dormant_days = rule.get('dormant_days')
+            if not dormant_days:
+                continue
+            
+            rule_dry_run = rule.get('dry_run', False)
+            is_dry_run = global_dry_run or rule_dry_run
+            
+            for series_id_str in rule.get('series', {}):
+                try:
+                    series_id = int(series_id_str)
+                    series_info = next((s for s in all_series if s['id'] == series_id), None)
+                    if not series_info:
+                        continue
+                    
+                    activity_date = get_activity_date_with_hierarchy(series_id, series_info['title'])
+                    if not activity_date:
+                        continue
+                    
+                    days_since_activity = (current_time - activity_date) / (24 * 60 * 60)
+                    if days_since_activity > dormant_days:
+                        all_episodes = fetch_all_episodes(series_id)
+                        episode_file_ids = [ep['episodeFileId'] for ep in all_episodes if ep.get('hasFile') and 'episodeFileId' in ep]
+                        
+                        if episode_file_ids:
+                            candidates.append({
+                                'series_id': series_id,
+                                'title': series_info['title'],
+                                'days_since_activity': days_since_activity,
+                                'episode_file_ids': episode_file_ids,
+                                'is_dry_run': is_dry_run
+                            })
+                            
+                except (ValueError, TypeError):
+                    continue
+        
+        # Process candidates
+        processed_count = 0
+        candidates.sort(key=lambda x: x['days_since_activity'], reverse=True)
+        
+        for candidate in candidates:
+            # Check storage gate again if configured
+            if storage_min_gb and not candidate['is_dry_run']:
+                current_disk = get_sonarr_disk_space()
+                if current_disk and current_disk['free_space_gb'] >= storage_min_gb:
+                    cleanup_logger.info(f"🎯 Storage target reached")
+                    break
+            
+            cleanup_logger.info(f"🔴 {candidate['title']}: Dormant for {candidate['days_since_activity']:.1f} days")
+            delete_episodes_in_sonarr_with_logging(candidate['episode_file_ids'], candidate['is_dry_run'], candidate['title'])
+            processed_count += 1
+        
+        cleanup_logger.info(f"🔴 Dormant cleanup: Processed {processed_count} series")
+        return processed_count
+        
+    except Exception as e:
+        cleanup_logger.error(f"Error in dormant cleanup: {str(e)}")
+        return 0
+    
+def calculate_keep_block_episodes(all_episodes, keep_watched, last_watched_season, last_watched_episode):
+    """
+    SIMPLIFIED: Calculate keep block assuming linear watching pattern.
+    For non-linear watchers, use dormant-only rules.
+    """
+    try:
+        if keep_watched == "all":
+            return []
+            
+        elif keep_watched == "season":
+            # Keep only the current season being watched
+            season_episodes = [
+                ep for ep in all_episodes 
+                if ep['seasonNumber'] == last_watched_season and ep.get('hasFile')
+            ]
+            return [ep['id'] for ep in season_episodes]
+            
+        else:
+            try:
+                keep_count = int(keep_watched)
+                # Sort all episodes in linear order
+                sorted_episodes = sorted(all_episodes, key=lambda ep: (ep['seasonNumber'], ep['episodeNumber']))
+                
+                # Find the last watched episode position
+                last_watched_index = None
+                for i, ep in enumerate(sorted_episodes):
+                    if (ep['seasonNumber'] == last_watched_season and 
+                        ep['episodeNumber'] == last_watched_episode):
+                        last_watched_index = i
+                        break
+                
+                if last_watched_index is not None:
+                    # Linear keep block: keep_count episodes ending with the one just watched
+                    keep_start_index = max(0, last_watched_index - keep_count + 1)
+                    
+                    keep_block = []
+                    for i in range(keep_start_index, last_watched_index + 1):
+                        if i < len(sorted_episodes) and sorted_episodes[i].get('hasFile'):
+                            keep_block.append(sorted_episodes[i]['id'])
+                    
+                    logger.info(f"Linear keep block: {len(keep_block)} episodes from position {keep_start_index} to {last_watched_index}")
+                    return keep_block
+                else:
+                    logger.warning("Could not find last watched episode for linear keep block calculation")
+                    return []
+                    
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid keep_watched value: {keep_watched}")
+                return []
+        
+        return []
+        
+    except Exception as e:
+        logger.error(f"Error calculating linear keep block episodes: {str(e)}")
         return []
 
 def fetch_all_episodes(series_id):
@@ -1008,25 +1423,43 @@ def get_baseline_date(series_id, series_title=None):
 
 
 
-# =============================================================================
-# WEBHOOK PROCESSING - ACTIVITY TRACKING + NEXT CONTENT ONLY
-# =============================================================================
-
-
-
+def rule_to_legacy_params(rule):
+    """Convert rule to legacy parameters for existing functions."""
+    get_type = rule.get('get_type', 'episodes')
+    get_count = rule.get('get_count', 1)
+    keep_type = rule.get('keep_type', 'episodes') 
+    keep_count = rule.get('keep_count', 1)
+    
+    # Convert get params
+    if get_type == 'all':
+        get_option = 'all'
+    elif get_type == 'seasons':
+        get_option = 'season' if get_count == 1 else str(get_count)
+    else:
+        get_option = str(get_count) if get_count else '1'
+    
+    # Convert keep params
+    if keep_type == 'all':
+        keep_watched = 'all'
+    elif keep_type == 'seasons':
+        keep_watched = 'season' if keep_count == 1 else str(keep_count)
+    else:
+        keep_watched = str(keep_count) if keep_count else '1'
+    
+    return get_option, keep_watched
 
 def process_episodes_for_webhook(series_id, season_number, episode_number, rule):
-    """
-    WEBHOOK PROCESSING: Update activity + Get next episodes + Delete old episodes (RESTORED).
-    This restores the original two-layer behavior where webhooks handle immediate management.
-    """
+    """Enhanced webhook processing with new grace logic."""
     try:
         logger.info(f"Processing webhook for series {series_id}: S{season_number}E{episode_number}")
         
-        # 1. Update activity date in config (will call the new function when we create it)
+        # Convert rule to legacy params for existing functions
+        get_option, keep_watched = rule_to_legacy_params(rule)
+        
+        # Update activity date
         update_activity_date(series_id, season_number, episode_number)
         
-        # 2. Get current episode and unmonitor if needed
+        # Get and unmonitor current episode if needed
         all_episodes = fetch_all_episodes(series_id)
         current_episode = next(
             (ep for ep in all_episodes 
@@ -1038,42 +1471,34 @@ def process_episodes_for_webhook(series_id, season_number, episode_number, rule)
             logger.error(f"Could not find current episode S{season_number}E{episode_number}")
             return
             
-        current_episode_id = current_episode['id']
-        
-        # Unmonitor current episode if rule says so
         if not rule.get('monitor_watched', True):
-            unmonitor_episodes([current_episode_id])
-            logger.info(f"Unmonitored current episode S{season_number}E{episode_number}")
+            unmonitor_episodes([current_episode['id']])
         
-        # 3. Get next episodes based on get_option
-        next_episode_ids = fetch_next_episodes(series_id, season_number, episode_number, rule['get_option'])
-        
+        # Get next episodes (using fixed function)
+        next_episode_ids = fetch_next_episodes(series_id, season_number, episode_number, get_option)
         if next_episode_ids:
-            # Monitor next episodes
             monitor_or_search_episodes(next_episode_ids, rule.get('action_option', 'monitor'))
-            logger.info(f"Processed {len(next_episode_ids)} next episodes with action: {rule.get('action_option', 'monitor')}")
-        else:
-            logger.info("No next episodes to process")
+            logger.info(f"Processed {len(next_episode_ids)} next episodes")
         
-        # 4. IMMEDIATE DELETION - Delete episodes before keep block (RESTORED ORIGINAL LOGIC)
-        episodes_to_delete = find_episodes_to_delete_immediate(
-            all_episodes, rule['keep_watched'], season_number, episode_number
-        )
-        
+        # Set grace timer for keep block
+        if rule.get('grace_days'):
+            episodes_to_delete_ids = find_episodes_to_delete_immediate(all_episodes, keep_watched, season_number, episode_number)
+            if episodes_to_delete_ids:
+                # Convert episode file IDs back to episode objects
+                episodes_for_bin = []
+                for ep in all_episodes:
+                    if ep.get('episodeFileId') in episodes_to_delete_ids:
+                        episodes_for_bin.append(ep)
+                
+                add_episodes_to_recycle_bin(series_id, episodes_for_bin, rule['grace_days'])
+        # Immediate deletion
+        episodes_to_delete = find_episodes_to_delete_immediate(all_episodes, keep_watched, season_number, episode_number)
         if episodes_to_delete:
             delete_episodes_in_sonarr_with_logging(episodes_to_delete, False, "Series Name")
-            logger.info(f"Immediate deletion: removed {len(episodes_to_delete)} episode files")
-        else:
-            logger.info("Immediate deletion: no episodes to delete")
             
-        logger.info(f"Webhook processing complete for series {series_id}")
-        
     except Exception as e:
-        logger.error(f"Error in webhook processing for series {series_id}: {str(e)}", exc_info=True)
+        logger.error(f"Error in webhook processing: {str(e)}")
 
-# =============================================================================
-# SCHEDULER PROCESSING - ALL CLEANUP LOGIC
-# =============================================================================
 
 def check_time_based_cleanup(series_id, rule):
     """Check if time-based cleanup should be performed - OPTIMIZED VERSION."""
@@ -2230,35 +2655,30 @@ def run_global_storage_gate_cleanup():
     except Exception as e:
         cleanup_logger.error(f"Error in global storage gate cleanup: {str(e)}")
 
-# Update main function to use global gate
 def main():
-    """Main entry point with global storage gate."""
+    """Main entry point."""
     series_name, season_number, episode_number = get_server_activity()
     
     if series_name:
-        # WEBHOOK MODE - unchanged
+        # Webhook mode
         series_id = get_series_id(series_name)
         if series_id:
             config = load_config()
             rule = None
             for rule_name, rule_details in config['rules'].items():
-                series_dict = rule_details.get('series', {})
-                if str(series_id) in series_dict:
+                if str(series_id) in rule_details.get('series', {}):
                     rule = rule_details
                     break
             
             if rule:
-                logger.info(f"Applying webhook rule for series {series_id}")
                 process_episodes_for_webhook(series_id, season_number, episode_number, rule)
             else:
-                logger.info(f"No rule found for series ID {series_id}. Only updating activity.")
                 update_activity_date(series_id, season_number, episode_number)
-        else:
-            logger.error(f"Series ID not found for series: {series_name}")
     else:
-        # SCHEDULER MODE - global storage gate cleanup
-        logger.info("Running global storage gate cleanup")
-        run_global_storage_gate_cleanup()
+        # Scheduler mode
+        run_periodic_cleanup()  # Keep existing cleanup
+        run_recycle_bin_cleanup()    # Add grace cleanup
+        run_dormant_cleanup()   # Add dormant cleanup 
 
 if __name__ == "__main__":
     main()

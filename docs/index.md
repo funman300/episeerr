@@ -33,6 +33,7 @@ Welcome to the Episeerr documentation. Episeerr provides three independent autom
 
 ---
 
+
 ## Core Features
 
 ### 🎬 Episode Selection System
@@ -45,7 +46,7 @@ Welcome to the Episeerr documentation. Episeerr provides three independent autom
 
 ### 💾 Storage Management (NEW!)
 - [Global Storage Gate Guide](global_storage_gate_guide.md) - One threshold controls all cleanup
-- [Understanding Grace vs Dormant Timers](global_storage_gate_guide.md#the-chips-philosophy) - "Chips" philosophy explained
+- [Understanding Grace vs Dormant Timers](global_storage_gate_guide.md) - 
 
 ### 🔧 Integration
 - [Sonarr Integration](sonarr_integration.md) - Tags, profiles, and webhook setup
@@ -53,14 +54,6 @@ Welcome to the Episeerr documentation. Episeerr provides three independent autom
 
 ---
 
-## Advanced Topics
-
-- [API Reference](api-reference.md) - Endpoints and usage
-- [Custom Configurations](advanced-config.md) - Environment variables and tuning
-- [Migration from OCDarr](migration.md) - Switching from full OCDarr setup
-- [Multiple Rule Strategies](advanced-rules.md) - Complex automation setups
-
----
 
 ## Troubleshooting
 
@@ -71,6 +64,24 @@ Welcome to the Episeerr documentation. Episeerr provides three independent autom
 ---
 
 ## Understanding the System
+---
+
+## Visual System Flow
+
+The complete Episeerr workflow is shown below:
+
+![Episeerr System Flow](flow.svg)
+
+*Interactive diagram showing how episodes flow through the system*
+
+### Key Components:
+- **User Activity Path** (left): Watch episode → manage existing content
+- **Dormant Check Path** (right): Storage-gated cleanup for inactive series  
+- **Grace Period Logic**: Recycle bin system with individual episode timers
+- **Request System** (bottom): Manual episode selection workflow
+- **Dry Run Protection**: Prevents actual deletions during testing
+
+---
 
 ### How Features Work Together
 

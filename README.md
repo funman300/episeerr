@@ -1,66 +1,30 @@
 # Episeerr
 
-**Smart episode management system for Sonarr** - Three independent automation solutions with intelligent storage management.
+**Smart episode management for Sonarr** - Get episodes as you watch, clean up automatically when storage gets low.
 
-## What Episeerr Does
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/vansmak)
 
-Episeerr gives you precise control over your TV episodes with three separate systems that work together or independently, plus a global storage gate that keeps your library size under control.
+## What It Does
 
-### 🎯 **Three Solutions + Smart Storage**
+Episeerr automates your TV library with three simple features:
 
-| Solution | Purpose | When to Use |
-|----------|---------|-------------|
-| **🎬 Granular Episode Requests** | Select exactly which episodes you want | Want specific episodes, not full seasons |
-| **⚡ Viewing-Based Rules** | Auto-manage episodes when you watch | Want next episode ready, cleanup watched ones |
-| **⏰ Time-Based Cleanup** | Clean up based on age and activity | Want automatic library maintenance |
-| **💾 Global Storage Gate** | One threshold controls all cleanup | Want simple, safe storage management |
+🎯 **Episode Selection** - Choose exactly which episodes you want  
+⚡ **Smart Rules** - Next episode ready when you watch, old episodes cleaned up  
+💾 **Storage Gate** - Automatic cleanup when storage gets low
 
-**Use any combination** - or just one solution that fits your needs.
+## Quick Start
 
----
-
-## 💾 Global Storage Gate (NEW!)
-
-**One simple setting controls all cleanup across your entire library.**
-
-### How It Works
-1. **Set one global threshold** (e.g., "20GB free space")
-2. **Cleanup only runs when below threshold** (smart, not wasteful)
-3. **Stops when back above threshold** (surgical precision)
-4. **Only affects rules with grace/dormant settings** (safe by default)
-
-### The "Chips" Philosophy
-- 🟡 **Grace Period:** "Take my chips off the table" - Remove unwatched episodes while keeping your viewing context
-- 🔴 **Dormant Timer:** "Remove chips from the bank" - Show abandoned, aggressive cleanup to reclaim storage
-- 🛡️ **Protected Rules:** Rules without timers = never touched (your permanent collection)
-
----
-
-## 🚀 Quick Start
-
-### Docker Compose
+### Minimal Setup (Just Episode Selection)
 ```yaml
 version: '3.8'
 services:
   episeerr:
     image: vansmak/episeerr:latest
     environment:
-      # Required
+      # Only 3 required for basic episode selection
       - SONARR_URL=http://your-sonarr:8989
       - SONARR_API_KEY=your_sonarr_api_key
       - TMDB_API_KEY=your_tmdb_api_key
-      
-      # Optional - Viewing-based rules
-      - TAUTULLI_URL=http://your-tautulli:8181
-      - TAUTULLI_API_KEY=your_tautulli_key
-      # OR
-      - JELLYFIN_URL=http://your-jellyfin:8096
-      - JELLYFIN_API_KEY=your_jellyfin_key
-      
-      # Optional - Request integration
-      - JELLYSEERR_URL=http://your-jellyseerr:5055
-      - JELLYSEERR_API_KEY=your_jellyseerr_key
-      
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
@@ -69,102 +33,144 @@ services:
     restart: unless-stopped
 ```
 
-### Setup
-1. **Configure:** `http://your-server:5002` - Web interface for management
-2. **Set global storage gate** - One threshold for smart cleanup
-3. **Create rules** for automated episode management  
-4. **Assign series** to rules (unassigned series are ignored)
-5. **Optional:** Set up webhooks for viewing-based automation
+### Full Setup (All Features)
+```yaml
+version: '3.8'
+services:
+  episeerr:
+    image: vansmak/episeerr:latest
+    environment:
+      # Required for all features
+      - SONARR_URL=http://your-sonarr:8989
+      - SONARR_API_KEY=your_sonarr_api_key
+      - TMDB_API_KEY=your_tmdb_api_key
+      
+      # Add these ONLY if you want viewing automation
+      - TAUTULLI_URL=http://your-tautulli:8181
+      - TAUTULLI_API_KEY=your_tautulli_key
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    ports:
+      - "5002:5002"
+    restart: unless-stopped
+```
+
+### Basic Setup (Works Immediately)
+1. **Start container** and go to `http://your-server:5002`
+2. **That's it!** You can now use episode selection
+
+### Optional Additions (Add Only What You Want)
+- **Storage cleanup**: Set threshold in Scheduler page
+- **Smart rules**: Create rules for automatic management
+- **Viewing automation**: Add webhooks for next episode ready
 
 ---
 
-## 🎛️ Example Configurations
+## How It Works
 
-### Global Storage Gate Only
-Simple storage management without viewing automation.
+### Smart Rules (NEW!)
+Create rules with the new dropdown system:
+
+**Get Episodes:**
+- Type: Episodes/Seasons/All + Count
+- Example: "3 episodes" = next 3 episodes ready
+
+**Keep Episodes:**  
+- Type: Episodes/Seasons/All + Count
+- Example: "1 season" = keep current season after watching
+
+**Grace Period (NEW!):**
+- Protects your keep block for X days after watching
+- Example: 7 days = keep watched episodes for a week, then delete them
+
+**Dormant Timer (NEW!):**
+- Removes content from abandoned shows 
+- Example: 30 days = if no activity for a month, clean up the show
+
+### Example: Popular Show Rule
 ```
-Global Storage Gate: 30GB
-Rules with time-based cleanup:
-  - Grace: 14 days, Dormant: 90 days
-Webhooks: Not needed
+Get: 5 episodes (next 5 episodes ready)
+Keep: 2 episodes (last 2 watched episodes)
+Grace: 7 days (keep watched episodes for a week)
+Dormant: 60 days (cleanup if abandoned for 2 months)
 ```
 
-### Viewing Rules Only  
-Next episode always ready, no time-based cleanup.
-```
-Rule: Get 1, Search, Keep 1
-Grace: null, Dormant: null
-Webhooks: Tautulli or Jellyfin
-```
+**What happens:**
+1. Watch E10 → Get E11-E15, Keep E9-E10, Delete E1-E8
+2. After 7 days → Delete E9-E10 (grace expired), Library: E11-E15
+3. After 60 days no activity → Delete E11-E15 (series abandoned)
 
-### Episode Requests Only
-Perfect for trying new shows or specific episode management.
-```
-No rules needed - just use episode selection interface
-Webhooks: Sonarr, Jellyseerr/Overseerr
-```
-
-### Full Smart System
-Complete automation with intelligent storage management.
-```
-Global Storage Gate: 20GB
-Viewing Rules:
-  - Active Shows: Get 2, Search, Keep 2, Grace: 7 days
-  - Archive Shows: Get all, Monitor, Keep all, Grace: null
-  - Trial Shows: Get 1, Search, Keep 1, Dormant: 30 days
-Webhooks: All enabled
-```
+### Storage Gate
+- Set one global threshold: "Keep 20GB free"
+- Cleanup only runs when below threshold
+- Stops immediately when back above threshold
+- Only affects shows with grace/dormant timers
 
 ---
 
-## 🔧 Integration
+## Three Ways to Use Episeerr (Pick What You Need)
 
-### Sonarr Tags
-When making requests:
-- `episeerr_default`: Auto-assigns to default rule when added
-- `episeerr_select`: Triggers episode selection workflow
+### 🎯 **Just Episode Selection**
+Perfect for trying new shows or picking specific episodes.
+- **Setup**: Just the 3 required environment variables
+- **No rules needed, no webhooks required**
+- **Use**: Manual episode selection interface only
 
-### Webhooks *(Optional)*
-- **Tautulli:** `http://your-episeerr:5002/webhook` 
-- **Jellyfin:** `http://your-episeerr:5002/jellyfin-webhook` 
-- **Sonarr:** `http://your-episeerr:5002/sonarr-webhook`
-- **Jellyseerr/Overseerr:** `http://your-episeerr:5002/seerr-webhook`
+### ⚡ **Add Viewing Automation**
+Next episode ready as you watch (optional upgrade).
+- **Setup**: Add Tautulli/Jellyfin webhook + create rules  
+- **No storage management required**
+- **Use**: Episodes managed automatically as you watch
 
----
-
-## 🎯 Key Benefits
-
-- **🔧 Modular:** Use only the features you need
-- **🎯 Precise:** Episode-level control when you want it
-- **⚡ Responsive:** Next episode ready when you need it  
-- **🧹 Smart:** Global storage gate prevents waste
-- **💡 Intuitive:** "Chips" philosophy makes cleanup predictable
-- **🛡️ Safe:** Protected rules never touched by cleanup
-- **🏠 Respectful:** Only manages assigned series
+### 💾 **Add Storage Management**  
+Automatic cleanup when storage gets low (optional upgrade).
+- **Setup**: Set storage threshold + add grace/dormant timers to rules
+- **No viewing automation required**
+- **Use**: Hands-off storage management
 
 ---
 
-## 📚 Documentation
+## Key Benefits
 
-**[Complete Documentation →](./docs/)**
+✅ **Intuitive**: New dropdown system makes rules easy to understand  
+✅ **Smart**: Grace periods that actually make sense  
+✅ **Safe**: Storage gate prevents unnecessary cleanup  
+✅ **Flexible**: Use only the features you need  
+✅ **Storage-Aware**: Cleanup respects your storage limits
+
+---
+
+## What's New in v2.1
+
+🎯 **New Dropdown UI**: Replace confusing text fields with clear dropdowns  
+🧠 **Intuitive Grace Logic**: Grace periods now protect recent watches  
+🔧 **Fixed Season Bug**: Properly handles end-of-season transitions  
+💾 **Storage-Aware Dormant**: Dormant cleanup respects storage gates
+
+### Migration from v2.0
+- Existing rules automatically converted to new format
+- No manual changes needed
+- Old behavior preserved with new interface
+
+---
+
+## Documentation
+
+**[📚 Full Documentation](./docs/)** - Complete guides and setup
 
 **Quick Links:**
-- [Installation & Setup](./docs/installation.md)
-- [Global Storage Gate Guide](./docs/global_storage_gate_guide.md) 
-- [Rules System Guide](./docs/rules-guide.md) 
-- [Episode Selection](./docs/episode-selection.md)
-- [Webhook Setup](./docs/webhooks.md)
+- [Installation Guide](./docs/installation.md) - Docker setup and configuration
+- [Rules Guide](./docs/rules-guide.md) - Creating and managing rules
+- [Episode Selection](./docs/episode-selection.md) - Manual episode management
+- [Storage Gate](./docs/global_storage_gate_guide.md) - Automatic cleanup system
 
 ---
 
-## 🆕 What's New in v2.0
+## Support
 
-- **🌍 Global Storage Gate:** One threshold controls all cleanup
-- **🎯 Smart Priority:** Cleanup order based on dormant > grace, oldest first
-- **🛡️ Rule Protection:** Rules without timers are never touched
-- **🎮 Intuitive UI:** Visual storage status and gate indicators
-- **🧠 "Chips" Philosophy:** Clear mental model for cleanup behavior
+- **Issues**: [GitHub Issues](https://github.com/Vansmak/episeerr/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Vansmak/episeerr/discussions)
+- **Coffee**: [Buy Me A Coffee](https://buymeacoffee.com/vansmak) ☕
 
----
-
-*Episeerr: Three solutions for episode management with intelligent storage control - use what you need, when you need it.*
+*Simple, smart episode management that just works.*

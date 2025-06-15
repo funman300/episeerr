@@ -1,240 +1,172 @@
-# Global Storage Gate Guide
+# Global Storage Gate Guide (v2.1)
 
-The Global Storage Gate is Episeerr's intelligent storage management system that keeps your library size under control with one simple threshold.
+The Global Storage Gate is **completely optional** - it only runs cleanup when your storage actually needs it.
 
-## Core Concept
+## Do You Need Storage Gate?
 
-**One global setting controls all cleanup across your entire library.**
+### ❌ **Skip Storage Gate If:**
+- You have plenty of storage space
+- You prefer manual cleanup
+- You only want episode selection
+- You're just testing Episeerr
 
-Instead of managing storage per-rule or per-series, you set one threshold that controls when cleanup happens. This is both simpler and smarter than traditional approaches.
-
-## How It Works
-
-### The Simple Setup
-1. **Set global threshold:** "20GB free space"
-2. **Create rules with timers:** Grace and/or dormant settings
-3. **Assign series to rules:** Only assigned series participate
-4. **Automatic operation:** Cleanup only when needed
-
-### The Smart Behavior
-- **Gate CLOSED:** Free space ≥ threshold → No cleanup runs
-- **Gate OPEN:** Free space < threshold → Cleanup until back above threshold
-- **Surgical precision:** Stops immediately when threshold met
-- **Protected rules:** Rules without grace/dormant never touched
-
-## The "Chips" Philosophy
-
-Think of your episodes like poker chips in a casino:
-
-### 🟡 Grace Period: "Take My Chips Off The Table"
-- **You're still playing** the game (actively watching)
-- **Clear some space** by removing unwatched episodes
-- **Keep your place** in the show (maintain viewing context)
-- **Strategy:** "I'll finish this show, just need room to breathe"
-
-**Example:** Breaking Bad - 7 days grace
-- Watched through S03E10
-- Grace cleanup removes S01-S02 (unwatched buffer episodes)
-- Keeps S03E08-E12 (current viewing context)
-- You can continue from where you left off
-
-### 🔴 Dormant Timer: "Remove My Chips From The Bank"
-- **You've left the table** (abandoned the show)
-- **Aggressive cleanup** to reclaim maximum storage
-- **No viewing context** needed (show is abandoned)
-- **Strategy:** "I'm not coming back to this anytime soon"
-
-**Example:** Lost - 90 days dormant
-- Haven't watched in 3+ months
-- Dormant cleanup removes ALL episodes
-- Series stays in Sonarr but no files remain
-- Maximum storage reclaimed
-
-### 🛡️ Protected Rules: "House Money"
-- **Permanent collection** shows
-- **Rules with null grace/dormant** settings
-- **Never touched** by time-based cleanup
-- **Strategy:** "These are keepers, don't touch them"
-
-## Configuration
-
-### Global Settings
-Access via Episeerr web interface → Scheduler page:
-
-| Setting | Purpose | Example |
-|---------|---------|---------|
-| **Storage Threshold** | When cleanup triggers | `20` (GB) |
-| **Cleanup Interval** | How often to check | `6` (hours) |
-| **Global Dry Run** | Test mode for safety | `true`/`false` |
-
-### Rule Settings
-Each rule can have time-based cleanup:
-
-| Setting | Purpose | Value |
-|---------|---------|--------|
-| **Grace Days** | Days before grace cleanup | `7` or `null` |
-| **Dormant Days** | Days before dormant cleanup | `30` or `null` |
-
-**Key:** `null` = protected (never cleaned up)
-
-## Cleanup Priority
-
-When the storage gate opens, cleanup happens in this specific order:
-
-### 1. Dormant Shows (Highest Priority)
-- **Order:** Oldest dormant first
-- **Behavior:** Aggressive cleanup (all/most episodes)
-- **Goal:** Maximum storage reclamation
-
-### 2. Grace Shows (Medium Priority)  
-- **Order:** Oldest grace first
-- **Behavior:** Surgical cleanup (unwatched episodes)
-- **Goal:** Free space while preserving context
-
-### 3. Stop When Threshold Met
-- **Immediate halt** when free space ≥ threshold
-- **No unnecessary cleanup** beyond storage needs
-- **Preserves shows** that didn't need processing
-
-### Example Cleanup Sequence
-```
-Storage Gate Opens: 15GB free < 20GB threshold
-
-🔴 DORMANT (oldest first):
-  Lost (120 days) → Remove ALL episodes → +8GB
-  Dexter (95 days) → Remove ALL episodes → +6GB
-  Current: 29GB free → STOP (above 20GB threshold)
-
-✅ GRACE SHOWS PRESERVED:
-  Breaking Bad (15 days) → Not processed
-  The Office (10 days) → Not processed
-```
-
-## Storage Gate States
-
-### 🔒 Gate CLOSED
-- **Condition:** Free space ≥ threshold
-- **Behavior:** No cleanup runs
-- **Status:** "Storage gate CLOSED - no cleanup needed"
-- **Action:** Normal operation, no files deleted
-
-### 🔓 Gate OPEN
-- **Condition:** Free space < threshold  
-- **Behavior:** Cleanup until threshold met
-- **Status:** "Storage gate OPEN - cleanup will run"
-- **Action:** Process candidates in priority order
-
-## Rule Protection
-
-### Automatic Protection
-Rules are automatically protected from time-based cleanup when:
-- **Grace Days:** Set to `null` (empty)
-- **Dormant Days:** Set to `null` (empty)
-- **Both null:** Rule never participates in cleanup
-
-### Example Protected Rule
-```
-Rule: "Permanent Collection"
-Get: all
-Action: monitor  
-Keep: all
-Grace Days: null
-Dormant Days: null
-
-Result: Series in this rule are NEVER cleaned up
-```
-
-### Mixed Protection
-You can mix protected and cleanup rules:
-```
-🛡️ "Archive Shows" - Grace: null, Dormant: null (protected)
-🟡 "Current Shows" - Grace: 7 days, Dormant: null (grace only)
-🔴 "Trial Shows" - Grace: null, Dormant: 30 days (dormant only)
-🟡🔴 "Active Shows" - Grace: 14 days, Dormant: 90 days (both)
-```
-
-## Safety Features
-
-### Global Dry Run Mode
-- **Test cleanup logic** without deleting files
-- **See what would be cleaned** in logs
-- **Perfect for testing** new configurations
-- **Enable in main settings** for system-wide safety
-
-### Rule-Specific Dry Run
-- **Individual rule testing** alongside global dry run
-- **Granular control** for specific show types
-- **Overrides global setting** for that rule only
-
-### Storage Gate Validation
-- **Prevents unnecessary cleanup** when storage is adequate
-- **Only runs when truly needed** (below threshold)
-- **Stops immediately** when goal achieved
-- **Logs all decisions** for transparency
-
-## Best Practices
-
-### Setting Your Threshold
-- **Conservative approach:** Set threshold higher than you think you need
-- **Monitor usage:** Watch storage patterns for a few weeks
-- **Adjust gradually:** Lower threshold as you get comfortable
-- **Consider buffer:** Account for active downloads and temporary files
-
-### Rule Design
-- **Start simple:** Begin with one or two rules
-- **Test with dry run:** Always test before going live
-- **Use protection:** Set important shows to protected rules
-- **Monitor logs:** Watch cleanup behavior and adjust
-
-### Common Thresholds
-| Storage Size | Suggested Threshold | Use Case |
-|--------------|-------------------|----------|
-| **500GB** | 50GB (10%) | Small home server |
-| **2TB** | 100GB (5%) | Medium library |
-| **8TB** | 200GB (2.5%) | Large collection |
-| **16TB+** | 500GB (3%) | Massive library |
-
-## Troubleshooting
-
-### Storage Gate Not Working
-- **Check threshold setting:** Ensure it's configured in UI
-- **Verify current space:** Look at storage status display  
-- **Review rule assignments:** Only assigned series participate
-- **Check grace/dormant:** Rules need timers to participate
-
-### Cleanup Too Aggressive
-- **Increase threshold:** Give more storage buffer
-- **Extend timers:** Longer grace/dormant periods
-- **Use protection:** Move important shows to protected rules
-- **Enable dry run:** Test changes safely
-
-### Cleanup Not Happening
-- **Lower threshold:** Gate may never open with current setting
-- **Check rule timers:** Ensure rules have grace/dormant settings
-- **Verify assignments:** Series must be assigned to rules
-- **Review logs:** Look for cleanup decision messages
-
-### Wrong Shows Getting Cleaned
-- **Check priority order:** Dormant processes before grace
-- **Review assignment:** Ensure series are in correct rules
-- **Verify timers:** Grace/dormant settings affect behavior
-- **Use dry run:** Preview cleanup before enabling
-
-## Advanced Configuration
-
-### Multiple Storage Scenarios
-- **Critical shows:** Protected rules (null timers)
-- **Active viewing:** Short grace (3-7 days)
-- **Casual shows:** Medium grace (14-30 days)  
-- **Trial shows:** Short dormant (30-60 days)
-- **Archive shows:** Long dormant (365+ days) or protected
-
-### Dynamic Thresholds
-While Episeerr uses a fixed threshold, you can adjust based on:
-- **Seasonal viewing:** Lower threshold during heavy watching periods
-- **Storage upgrades:** Adjust threshold when adding drives
-- **Library growth:** Monitor and adjust as collection expands
+### ✅ **Use Storage Gate If:**
+- Storage space is limited
+- You want automatic cleanup when space gets low
+- You have shows you're okay with losing
+- You want hands-off storage management
 
 ---
 
-**Next:** [Rules System Guide](rules-guide.md) - Configure episode automation behavior
+## Core Concept (Optional Feature)
+
+**Set one threshold, cleanup only happens when needed.**
+
+Example: Set "20GB" and cleanup only runs when free space drops below 20GB. When space is above 20GB, no storage cleanup happens at all.
+
+## How It Works (When Enabled)
+
+### Simple Setup
+1. **Set trigger threshold**: "20GB free space" (in Scheduler page)
+2. **Create rules with dormant timers**: Only rules with dormant days participate
+3. **Assign series to rules**: Only assigned series can be cleaned up
+4. **Automatic operation**: Cleanup only when storage is actually low
+
+### Smart Behavior
+- **Gate CLOSED**: Free space ≥ threshold → No cleanup runs (storage is fine)
+- **Gate OPEN**: Free space < threshold → Cleanup until back above threshold
+- **Surgical precision**: Stops immediately when threshold is met
+- **Protected rules**: Rules without dormant timers are never touched
+
+---
+
+## Understanding Grace vs Dormant (v2.1 Changes)
+
+### 🔄 **Grace Period: Viewing Workflow** (NEW!)
+- **What it does**: Automatically manages your "recently watched" episodes
+- **When it runs**: Continuously, every time you watch something
+- **Purpose**: Keep viewing context, then clean up old watches
+- **NOT storage-driven**: Runs regardless of available space
+
+**Example**: 7-day grace period
+```
+Keep 1 episode
+Watch E10 → Keep E10 for 7 days → Auto-delete E10 after 7 days
+```
+
+### 🗂️ **Dormant Timer: Storage Cleanup** 
+- **What it does**: Removes content from shows you've abandoned
+- **When it runs**: Only when storage gate is open
+- **Purpose**: Reclaim space from shows you're not watching anymore
+- **IS storage-driven**: Only runs when space is actually needed
+
+**Example**: 60-day dormant timer
+```
+No activity for 60 days + Storage below threshold → Remove episodes
+```
+
+### 🏛️ **Protected Rules: Never Touched**
+- **What it does**: Preserves your permanent collection
+- **When it runs**: Never - completely immune to cleanup
+- **Purpose**: Archive important shows safely
+- **Setting**: Dormant timer set to `null` (empty)
+
+---
+
+## The "Automatic Librarian" System
+
+Think of Episeerr like having a smart librarian managing your TV collection:
+
+### 📚 **Grace Period: The "Recent Reads" Desk**
+Your librarian keeps recently watched episodes on your desk for easy access. After the grace period expires, they get filed away (deleted) to keep your active viewing area clean.
+
+- **Personal habit**: Happens based on your viewing
+- **Always active**: Works regardless of storage space
+- **Viewing-focused**: Maintains your current show context
+
+### 🗂️ **Dormant Cleanup: The "Spring Cleaning"**
+When storage gets tight, your librarian looks for shows you've completely abandoned and removes them to make space for new content.
+
+- **Storage-driven**: Only happens when space is actually needed
+- **Selective**: Targets oldest, most abandoned content first
+- **Stops when done**: No unnecessary removal once storage is adequate
+
+### 🏛️ **Protected Collection: The "Special Archives"**
+Some shows are marked as permanent collection - your librarian never touches these no matter how full storage gets.
+
+- **Permanent safety**: Never removed regardless of space or time
+- **Your choice**: You decide what goes in the protected collection
+- **Storage awareness**: These don't participate in space management
+
+---
+
+## Rule Assignment for Storage Gate
+
+### How to Assign Series (Covered in Rules Guide)
+See [Rules Guide](rules-guide.md) for detailed assignment instructions.
+
+### Quick Reference
+- **Manual assignment**: Episeerr interface → Series Management
+- **Automatic assignment**: Add `episeerr_default` tag in Sonarr
+- **Protected series**: Set Dormant to `null` (never cleaned up)
+
+---
+
+## Configuration (Scheduler Page)
+
+### Global Settings
+| Setting | Purpose | Example |
+|---------|---------|---------|
+| **Storage Threshold** | Cleanup trigger point | `20` GB |
+| **Cleanup Interval** | How often to check storage | `6` hours |
+| **Global Dry Run** | Test mode for safety | `true`/`false` |
+
+### Which Rules Participate
+- **Rules with Dormant timers**: Participate in storage cleanup
+- **Rules with Dormant = null**: Protected (never cleaned up)
+- **Grace timers**: Don't affect storage gate (viewing-only)
+
+---
+
+## Best Practices (Storage Focus)
+
+### Setting Your Threshold
+- **Conservative start**: Set higher than you think (e.g., 15% of total storage)
+- **Monitor patterns**: Watch for a few weeks to understand usage
+- **Adjust gradually**: Lower threshold as you get comfortable
+
+### Protecting Important Shows
+- **Set Dormant to null**: Never participate in storage cleanup
+- **Use separate rules**: Create "Archive" rules with no dormant timer
+- **Test with dry run**: Always verify behavior before going live
+
+### Common Configurations
+
+| Storage Size | Suggested Threshold | Philosophy |
+|--------------|-------------------|------------|
+| **1TB** | 100GB (10%) | Conservative, rarely triggers |
+| **4TB** | 200GB (5%) | Balanced approach |
+| **8TB** | 300GB (3.5%) | Aggressive space management |
+
+---
+
+## Storage Gate Troubleshooting
+
+### Gate Never Opens
+- **Check threshold**: May be set too low for your usage patterns
+- **Monitor space**: Verify you actually reach the threshold
+- **Review downloads**: Factor in active downloads and temporary files
+
+### Gate Always Open  
+- **Increase threshold**: Give yourself more storage buffer
+- **Check participating rules**: Ensure rules have dormant timers set
+- **Review assignments**: Unassigned series can't be cleaned up
+
+### Wrong Shows Getting Cleaned
+- **Check dormant timers**: Only rules with dormant days participate
+- **Review rule assignments**: Ensure series are in correct rules  
+- **Use dry run**: Test changes before enabling live cleanup
+
+---
+
+**Next:** [Rules System Guide](rules-guide.md) - Configure viewing and storage management

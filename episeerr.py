@@ -459,6 +459,80 @@ def index():
                          all_series=all_series,
                          current_rule=request.args.get('rule', list(config['rules'].keys())[0] if config['rules'] else 'full_seasons'))
 
+# =============================================================================
+# ADD THESE NEW HELPER FUNCTIONS (completely new)
+# =============================================================================
+
+def convert_to_legacy_format(type_val, count_val):
+    """Convert new dropdown format to legacy string format for backward compatibility."""
+    if type_val == 'all':
+        return 'all'
+    elif type_val == 'seasons':
+        return 'season' if count_val == 1 else str(count_val)
+    else:  # episodes
+        return str(count_val) if count_val else '1'
+
+def convert_legacy_to_new_format(rule):
+    """Convert legacy rule format to new dropdown format for display."""
+    rule_copy = rule.copy()
+    
+    # Only convert if new format doesn't exist
+    if 'get_type' not in rule_copy:
+        get_option = rule.get('get_option', '1')
+        keep_watched = rule.get('keep_watched', '1')
+        
+        # Convert get_option
+        rule_copy['get_type'], rule_copy['get_count'] = parse_legacy_value(get_option)
+        
+        # Convert keep_watched
+        rule_copy['keep_type'], rule_copy['keep_count'] = parse_legacy_value(keep_watched)
+    
+    return rule_copy
+
+def parse_legacy_value(value):
+    """Parse legacy string value to new format."""
+    if value == 'all':
+        return 'all', None
+    elif value == 'season':
+        return 'seasons', 1
+    else:
+        try:
+            count = int(value)
+            return 'episodes', count
+        except (ValueError, TypeError):
+            return 'episodes', 1
+
+def migrate_rules_to_new_format():
+    """Migrate existing rules from legacy format to new format."""
+    try:
+        config = load_config()
+        migrated_count = 0
+        
+        for rule_name, rule in config['rules'].items():
+            # Skip if already migrated
+            if 'get_type' in rule:
+                continue
+                
+            # Convert legacy fields to new format
+            get_option = rule.get('get_option', '1')
+            keep_watched = rule.get('keep_watched', '1')
+            
+            rule['get_type'], rule['get_count'] = parse_legacy_value(get_option)
+            rule['keep_type'], rule['keep_count'] = parse_legacy_value(keep_watched)
+            
+            migrated_count += 1
+            app.logger.info(f"Migrated rule '{rule_name}' to new dropdown format")
+        
+        if migrated_count > 0:
+            save_config(config)
+            app.logger.info(f"Migration completed: {migrated_count} rules migrated to new format")
+            
+    except Exception as e:
+        app.logger.error(f"Error during rule migration: {str(e)}")
+
+# CLEAN IMPLEMENTATION - No more conversion functions
+# Just implement the new dropdown logic directly
+
 @app.route('/create-rule', methods=['GET', 'POST'])
 def create_rule():
     if request.method == 'POST':
@@ -468,19 +542,37 @@ def create_rule():
             return redirect(url_for('index', message="Rule name is required"))
         if rule_name in config['rules']:
             return redirect(url_for('index', message=f"Rule '{rule_name}' already exists"))
+        
+        # Parse dropdown values
+        get_type = request.form.get('get_type', 'episodes')
+        get_count = request.form.get('get_count', '').strip()
+        keep_type = request.form.get('keep_type', 'episodes')
+        keep_count = request.form.get('keep_count', '').strip()
+        
+        # Convert to integer or None for 'all' type
+        get_count = None if get_type == 'all' else int(get_count) if get_count else 1
+        keep_count = None if keep_type == 'all' else int(keep_count) if keep_count else 1
+        
+        # Parse time fields
         grace_days = request.form.get('grace_days', '').strip()
         dormant_days = request.form.get('dormant_days', '').strip()
         grace_days = None if not grace_days else int(grace_days)
         dormant_days = None if not dormant_days else int(dormant_days)
+        
+        # Save rule in new format only
         config['rules'][rule_name] = {
-            'get_option': request.form.get('get_option', ''),
+            'get_type': get_type,
+            'get_count': get_count,
+            'keep_type': keep_type,
+            'keep_count': keep_count,
             'action_option': request.form.get('action_option', 'monitor'),
-            'keep_watched': request.form.get('keep_watched', ''),
-            'monitor_watched': 'monitor_watched' in request.form, 
+            'monitor_watched': 'monitor_watched' in request.form,
             'grace_days': grace_days,
             'dormant_days': dormant_days,
-            'series': {}
+            'series': {},
+            'dry_run': False
         }
+        
         save_config(config)
         return redirect(url_for('index', message=f"Rule '{rule_name}' created successfully"))
     return render_template('create_rule.html')
@@ -490,24 +582,92 @@ def edit_rule(rule_name):
     config = load_config()
     if rule_name not in config['rules']:
         return redirect(url_for('index', message=f"Rule '{rule_name}' not found"))
+    
     if request.method == 'POST':
+        # Parse dropdown values
+        get_type = request.form.get('get_type', 'episodes')
+        get_count = request.form.get('get_count', '').strip()
+        keep_type = request.form.get('keep_type', 'episodes')
+        keep_count = request.form.get('keep_count', '').strip()
+        
+        # Convert to integer or None for 'all' type
+        get_count = None if get_type == 'all' else int(get_count) if get_count else 1
+        keep_count = None if keep_type == 'all' else int(keep_count) if keep_count else 1
+        
+        # Parse time fields
         grace_days = request.form.get('grace_days', '').strip()
         dormant_days = request.form.get('dormant_days', '').strip()
         grace_days = None if not grace_days else int(grace_days)
         dormant_days = None if not dormant_days else int(dormant_days)
+        
+        # Update rule in new format only
         config['rules'][rule_name].update({
-            'get_option': request.form.get('get_option', ''),
+            'get_type': get_type,
+            'get_count': get_count,
+            'keep_type': keep_type,
+            'keep_count': keep_count,
             'action_option': request.form.get('action_option', 'monitor'),
-            'keep_watched': request.form.get('keep_watched', ''),
-            'monitor_watched': 'monitor_watched' in request.form, 
+            'monitor_watched': 'monitor_watched' in request.form,
             'grace_days': grace_days,
             'dormant_days': dormant_days
         })
+        
         save_config(config)
         return redirect(url_for('index', message=f"Rule '{rule_name}' updated successfully"))
+    
     rule = config['rules'][rule_name]
     return render_template('edit_rule.html', rule_name=rule_name, rule=rule)
+def migrate_old_rules():
+    """One-time migration from old format to new format."""
+    try:
+        config = load_config()
+        migrated = 0
+        
+        for rule_name, rule in config['rules'].items():
+            if 'get_type' in rule:
+                continue  # Already migrated
+                
+            # Migrate get_option
+            get_option = rule.get('get_option', '1')
+            if get_option == 'all':
+                rule['get_type'] = 'all'
+                rule['get_count'] = None
+            elif get_option == 'season':
+                rule['get_type'] = 'seasons'
+                rule['get_count'] = 1
+            else:
+                rule['get_type'] = 'episodes'
+                rule['get_count'] = int(get_option) if get_option.isdigit() else 1
+            
+            # Migrate keep_watched
+            keep_watched = rule.get('keep_watched', '1')
+            if keep_watched == 'all':
+                rule['keep_type'] = 'all'
+                rule['keep_count'] = None
+            elif keep_watched == 'season':
+                rule['keep_type'] = 'seasons'
+                rule['keep_count'] = 1
+            else:
+                rule['keep_type'] = 'episodes'
+                rule['keep_count'] = int(keep_watched) if keep_watched.isdigit() else 1
+            
+            # Remove old fields
+            rule.pop('get_option', None)
+            rule.pop('keep_watched', None)
+            migrated += 1
+        
+        if migrated > 0:
+            save_config(config)
+            app.logger.info(f"Migrated {migrated} rules to new format")
+            
+    except Exception as e:
+        app.logger.error(f"Migration error: {str(e)}")
 
+# Simple startup initialization
+def initialize_new_format():
+    """Initialize new format features."""
+    migrate_legacy_rules_once()
+    app.logger.info("✓ New dropdown format initialization completed")
 @app.route('/delete-rule/<rule_name>', methods=['POST'])
 def delete_rule(rule_name):
     config = load_config()
@@ -2142,6 +2302,7 @@ cleanup_scheduler.start_scheduler()
 
 if __name__ == '__main__':
     cleanup_config_rules()
+    migrate_old_rules()  # Add this line
     initialize_episeerr()
-    app.logger.info("🚀 Episeerr webhook listener starting - webhook handles activity tracking and requests")
+    app.logger.info("🚀 Enhanced Episeerr starting")
     app.run(host='0.0.0.0', port=5002, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
