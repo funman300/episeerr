@@ -85,7 +85,7 @@ Create rules with two independent grace timers:
 
 **Grace Watched (Rotating Collection):**  
 - Your kept episodes expire after X days of inactivity
-- Example: 14 days = favorites rotate out after 2 weeks
+- Example: 14 days = watched rotate out after 2 weeks
 
 **Grace Unwatched (Watch Deadlines):**
 - New episodes get X days from download to be watched
@@ -100,13 +100,13 @@ Create rules with two independent grace timers:
 ```
 Get: 5 episodes (next 5 episodes ready)
 Keep: 2 episodes (last 2 watched episodes)
-Grace: 7 days (keep last 2 watched episodes, delete others after a week)
+Grace: 7 days (keep last 2 watched episodes, delete after a week)
 Dormant: 60 days (cleanup if abandoned for 2 months)
 ```
 
 **What happens:**
-1. Watch E10 → Get E11-E15, Keep E9-E10, Delete E1-E8
-2. After 7 days → Delete E7-E8 (grace expired), Library: E9-E15
+1. Watch E10 → Get E11-E15, Keep E9-E10
+2. After 7 days → Delete E9-10 (grace expired)
 3. After 60 days no activity → Delete show (series abandoned)
 
 ### Storage Gate
