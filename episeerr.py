@@ -1,4 +1,4 @@
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -302,55 +302,6 @@ def setup_cleanup_logging():
 
 cleanup_logger = setup_cleanup_logging()
 
-# Config Migration
-def migrate_config_complete(config_path):
-    try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-        if config.get('field_migration_complete') and config.get('series_migration_complete'):
-            print("✅ Config already fully migrated")
-            return config
-        backup_path = config_path + f'.backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
-        shutil.copy2(config_path, backup_path)
-        print(f"📁 Created backup: {backup_path}")
-        field_migrations = 0
-        series_migrations = 0
-        for rule_name, rule in config.get('rules', {}).items():
-            print(f"\n🔄 Migrating rule: {rule_name}")
-            if 'keep_watched_days' in rule:
-                rule['grace_days'] = rule.pop('keep_watched_days')
-                field_migrations += 1
-                print(f"  ✓ Migrated keep_watched_days → grace_days")
-            if 'keep_unwatched_days' in rule:
-                rule['dormant_days'] = rule.pop('keep_unwatched_days')
-                field_migrations += 1
-                print(f"  ✓ Migrated keep_unwatched_days → dormant_days")
-            if 'grace_days' not in rule:
-                rule['grace_days'] = None
-            if 'dormant_days' not in rule:
-                rule['dormant_days'] = None
-            if 'series' in rule and isinstance(rule['series'], list):
-                old_series = rule['series']
-                new_series = {str(series_id): {'activity_date': None} for series_id in old_series}
-                rule['series'] = new_series
-                series_migrations += 1
-                print(f"  ✓ Migrated {len(old_series)} series from array to dict format")
-            if 'dry_run' not in rule:
-                rule['dry_run'] = False
-                print(f"  ✓ Added dry_run field (default: False)")
-        config['field_migration_complete'] = True
-        config['series_migration_complete'] = True
-        with open(config_path, 'w') as f:
-            json.dump(config, f, indent=4)
-        print(f"\n✅ Migration complete!")
-        print(f"   - Field migrations: {field_migrations}")
-        print(f"   - Series structure migrations: {series_migrations}")
-        print(f"   - Backup saved to: {backup_path}")
-        return config
-    except Exception as e:
-        print(f"❌ Migration failed: {str(e)}")
-        raise
-
 def load_config_with_migration(config_path):
     if not os.path.exists(config_path):
         default_config = {
@@ -360,7 +311,8 @@ def load_config_with_migration(config_path):
                     "action_option": "search",
                     "keep_watched": "1",
                     "monitor_watched": False,
-                    "grace_days": None,
+                    "grace_watched": None,      # FIXED: Removed grace_buffer
+                    "grace_unwatched": None,
                     "dormant_days": None,
                     "series": {},
                     "dry_run": False
@@ -368,13 +320,110 @@ def load_config_with_migration(config_path):
             },
             "default_rule": "default",
             "field_migration_complete": True,
-            "series_migration_complete": True
+            "series_migration_complete": True,
+            "multi_grace_migration_complete": True,
+            "grace_simplified_migration_complete": True  # ADDED: Mark as complete
         }
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         with open(config_path, 'w') as f:
             json.dump(default_config, f, indent=4)
         return default_config
     return migrate_config_complete(config_path)
+
+
+def migrate_config_complete(config_path):
+    """UPDATED: Existing migration + grace buffer removal."""
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        
+        if (config.get('field_migration_complete') and 
+            config.get('series_migration_complete') and 
+            config.get('multi_grace_migration_complete') and
+            config.get('grace_simplified_migration_complete')):
+            print("✅ Config already fully migrated")
+            return config
+        
+        backup_path = config_path + f'.backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+        shutil.copy2(config_path, backup_path)
+        print(f"📁 Created backup: {backup_path}")
+        
+        field_migrations = 0
+        series_migrations = 0
+        grace_migrations = 0
+        buffer_removals = 0
+        
+        for rule_name, rule in config.get('rules', {}).items():
+            print(f"\n🔄 Migrating rule: {rule_name}")
+            
+            # Existing legacy field migrations
+            if 'keep_watched_days' in rule:
+                rule['grace_days'] = rule.pop('keep_watched_days')
+                field_migrations += 1
+                print(f"  ✓ Migrated keep_watched_days → grace_days")
+            if 'keep_unwatched_days' in rule:
+                rule['dormant_days'] = rule.pop('keep_unwatched_days')
+                field_migrations += 1
+                print(f"  ✓ Migrated keep_unwatched_days → dormant_days")
+            
+            # SIMPLIFIED: Direct migration grace_days → grace_watched
+            if 'grace_days' in rule and not any(['grace_buffer' in rule, 'grace_watched' in rule, 'grace_unwatched' in rule]):
+                old_grace = rule.pop('grace_days')
+                rule['grace_watched'] = old_grace if old_grace else None
+                if old_grace:
+                    grace_migrations += 1
+                    print(f"  ✓ Migrated grace_days ({old_grace}) → grace_watched")
+            
+            # Remove any existing grace_buffer (simplified system)
+            if 'grace_buffer' in rule:
+                grace_buffer = rule.pop('grace_buffer')
+                if grace_buffer:
+                    # Add buffer to grace_watched
+                    current_grace_watched = rule.get('grace_watched', 0) or 0
+                    rule['grace_watched'] = current_grace_watched + grace_buffer
+                    print(f"  ✓ Removed grace_buffer ({grace_buffer}), added to grace_watched → {rule['grace_watched']}")
+                else:
+                    print(f"  ✓ Removed empty grace_buffer")
+                buffer_removals += 1
+            
+            # Ensure all remaining grace fields exist (no grace_buffer)
+            for field in ['grace_watched', 'grace_unwatched', 'dormant_days']:
+                if field not in rule:
+                    rule[field] = None
+            
+            # Existing series structure migration
+            if 'series' in rule and isinstance(rule['series'], list):
+                old_series = rule['series']
+                new_series = {str(series_id): {'activity_date': None} for series_id in old_series}
+                rule['series'] = new_series
+                series_migrations += 1
+                print(f"  ✓ Migrated {len(old_series)} series from array to dict format")
+            
+            if 'dry_run' not in rule:
+                rule['dry_run'] = False
+                print(f"  ✓ Added dry_run field (default: False)")
+        
+        # Mark all migrations complete
+        config['field_migration_complete'] = True
+        config['series_migration_complete'] = True
+        config['multi_grace_migration_complete'] = True
+        config['grace_simplified_migration_complete'] = True
+        
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=4)
+        
+        print(f"\n✅ Migration complete!")
+        print(f"   - Field migrations: {field_migrations}")
+        print(f"   - Series structure migrations: {series_migrations}")
+        print(f"   - Grace migrations: {grace_migrations}")
+        print(f"   - Grace buffer removals: {buffer_removals}")
+        print(f"   - Backup saved to: {backup_path}")
+        
+        return config
+        
+    except Exception as e:
+        print(f"❌ Migration failed: {str(e)}")
+        raise
 
 def load_config():
     try:
@@ -553,13 +602,18 @@ def create_rule():
         get_count = None if get_type == 'all' else int(get_count) if get_count else 1
         keep_count = None if keep_type == 'all' else int(keep_count) if keep_count else 1
         
-        # Parse time fields
-        grace_days = request.form.get('grace_days', '').strip()
+        # Parse multi-grace fields
+        grace_buffer = request.form.get('grace_buffer', '').strip()
+        grace_watched = request.form.get('grace_watched', '').strip()
+        grace_unwatched = request.form.get('grace_unwatched', '').strip()
         dormant_days = request.form.get('dormant_days', '').strip()
-        grace_days = None if not grace_days else int(grace_days)
+        
+        grace_buffer = None if not grace_buffer else int(grace_buffer)
+        grace_watched = None if not grace_watched else int(grace_watched)
+        grace_unwatched = None if not grace_unwatched else int(grace_unwatched)
         dormant_days = None if not dormant_days else int(dormant_days)
         
-        # Save rule in new format only
+        # Save rule in new format
         config['rules'][rule_name] = {
             'get_type': get_type,
             'get_count': get_count,
@@ -567,7 +621,9 @@ def create_rule():
             'keep_count': keep_count,
             'action_option': request.form.get('action_option', 'monitor'),
             'monitor_watched': 'monitor_watched' in request.form,
-            'grace_days': grace_days,
+            'grace_buffer': grace_buffer,
+            'grace_watched': grace_watched,
+            'grace_unwatched': grace_unwatched,
             'dormant_days': dormant_days,
             'series': {},
             'dry_run': False
@@ -594,13 +650,18 @@ def edit_rule(rule_name):
         get_count = None if get_type == 'all' else int(get_count) if get_count else 1
         keep_count = None if keep_type == 'all' else int(keep_count) if keep_count else 1
         
-        # Parse time fields
-        grace_days = request.form.get('grace_days', '').strip()
+        # Parse multi-grace fields
+        grace_buffer = request.form.get('grace_buffer', '').strip()
+        grace_watched = request.form.get('grace_watched', '').strip()
+        grace_unwatched = request.form.get('grace_unwatched', '').strip()
         dormant_days = request.form.get('dormant_days', '').strip()
-        grace_days = None if not grace_days else int(grace_days)
+        
+        grace_buffer = None if not grace_buffer else int(grace_buffer)
+        grace_watched = None if not grace_watched else int(grace_watched)
+        grace_unwatched = None if not grace_unwatched else int(grace_unwatched)
         dormant_days = None if not dormant_days else int(dormant_days)
         
-        # Update rule in new format only
+        # Update rule in new format
         config['rules'][rule_name].update({
             'get_type': get_type,
             'get_count': get_count,
@@ -608,7 +669,9 @@ def edit_rule(rule_name):
             'keep_count': keep_count,
             'action_option': request.form.get('action_option', 'monitor'),
             'monitor_watched': 'monitor_watched' in request.form,
-            'grace_days': grace_days,
+            'grace_buffer': grace_buffer,
+            'grace_watched': grace_watched,
+            'grace_unwatched': grace_unwatched,
             'dormant_days': dormant_days
         })
         
@@ -617,6 +680,7 @@ def edit_rule(rule_name):
     
     rule = config['rules'][rule_name]
     return render_template('edit_rule.html', rule_name=rule_name, rule=rule)
+
 def migrate_old_rules():
     """One-time migration from old format to new format."""
     try:
@@ -1959,11 +2023,6 @@ def process_sonarr_webhook():
                     app.logger.error(f"Failed to get episodes for series: {episodes_response.text}")
             except Exception as e:
                 app.logger.error(f"Error executing default rule for {series_title}: {str(e)}", exc_info=True)
-            
-            return jsonify({
-                "status": "success",
-                "message": "Series processed with default rule"
-            }), 200
         
         elif has_episeerr_select:
             app.logger.info(f"Processing {series_title} with episeerr_select tag - creating selection request")

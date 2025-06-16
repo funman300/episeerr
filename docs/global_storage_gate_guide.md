@@ -1,4 +1,4 @@
-# Global Storage Gate Guide (v2.1)
+# Global Storage Gate Guide (v2.2)
 
 The Global Storage Gate is **completely optional** - it only runs cleanup when your storage actually needs it.
 
@@ -40,36 +40,35 @@ Example: Set "20GB" and cleanup only runs when free space drops below 20GB. When
 
 ---
 
-## Understanding Grace vs Dormant (v2.1 Changes)
+## Understanding the Three Grace Types + Dormant (v2.2)
 
-### 🔄 **Grace Period: Viewing Workflow** (NEW!)
-- **What it does**: Automatically manages your "recently watched" episodes
-- **When it runs**: Continuously, every time you watch something
-- **Purpose**: Keep viewing context, then clean up old watches
-- **NOT storage-driven**: Runs regardless of available space
+### 🔄 **Grace Watched: Rotating Collection**
+- **What it does**: Your kept episodes expire after x days
+- **When it runs**: Based on fixed timer
+- **Purpose**: Rotate out old favorites to make room for new ones  
+- **Timing**: X days from date added after last watch activity on the series
+- **Storage impact**: Medium - manages your active collection size
 
-**Example**: 7-day grace period
-```
-Keep 1 episode
-Watch E10 → Keep E10 for 7 days → Auto-delete E10 after 7 days
-```
+### ⏰ **Grace Unwatched: Watch Deadlines**
+- **What it does**: New episodes get deadline to be watched
+- **When it runs**: Based on individual episode download dates
+- **Purpose**: Pressure to watch new content or lose it
+- **Timing**: X days from when episode was downloaded
+- **Storage impact**: High - prevents backlog accumulation
 
-### 🗂️ **Dormant Timer: Storage Cleanup** 
-- **What it does**: Removes content from shows you've abandoned
+### 🗂️ **Dormant Timer: Abandoned Series Cleanup**
+- **What it does**: Nuclear cleanup for completely abandoned shows
 - **When it runs**: Only when storage gate is open
-- **Purpose**: Reclaim space from shows you're not watching anymore
-- **IS storage-driven**: Only runs when space is actually needed
-
-**Example**: 60-day dormant timer
-```
-No activity for 60 days + Storage below threshold → Remove episodes
-```
+- **Purpose**: Reclaim space from shows you've stopped watching
+- **Timing**: X days from any series activity + storage below threshold
+- **Storage impact**: Maximum - removes entire abandoned series
 
 ### 🏛️ **Protected Rules: Never Touched**
 - **What it does**: Preserves your permanent collection
 - **When it runs**: Never - completely immune to cleanup
 - **Purpose**: Archive important shows safely
 - **Setting**: Dormant timer set to `null` (empty)
+- **Storage impact**: None - these shows are permanent
 
 ---
 
@@ -77,12 +76,27 @@ No activity for 60 days + Storage below threshold → Remove episodes
 
 Think of Episeerr like having a smart librarian managing your TV collection:
 
-### 📚 **Grace Period: The "Recent Reads" Desk**
-Your librarian keeps recently watched episodes on your desk for easy access. After the grace period expires, they get filed away (deleted) to keep your active viewing area clean.
 
-- **Personal habit**: Happens based on your viewing
-- **Always active**: Works regardless of storage space
-- **Viewing-focused**: Maintains your current show context
+### 🔄 **Grace Watched: The "Recent Reads" Rotation**
+Your librarian keeps your last watched on the shelf for easy access. After watched grace, they rotate these out to make room for new ones.
+
+```
+Keep: 3
+Grace:3 type  watched
+```
+### after watching e6 the keep block is now e4,5,6 but wont delete them until after the grace 3 days
+
+### ⏰ **Grace Unwatched: The "New Arrivals" Pressure**
+New episodes go on a "new arrivals" shelf with a deadline. If you don't watch them by the deadline, they get removed.
+
+```
+Get: 3
+
+Grace:3 type  unwatched
+```
+### after watching e6 will get ep7,8,9 but remove them after the grace 3 days
+
+## use none or any combo
 
 ### 🗂️ **Dormant Cleanup: The "Spring Cleaning"**
 When storage gets tight, your librarian looks for shows you've completely abandoned and removes them to make space for new content.
@@ -97,6 +111,9 @@ Some shows are marked as permanent collection - your librarian never touches the
 - **Permanent safety**: Never removed regardless of space or time
 - **Your choice**: You decide what goes in the protected collection
 - **Storage awareness**: These don't participate in space management
+
+---
+
 
 ---
 
@@ -121,7 +138,7 @@ See [Rules Guide](rules-guide.md) for detailed assignment instructions.
 | **Cleanup Interval** | How often to check storage | `6` hours |
 | **Global Dry Run** | Test mode for safety | `true`/`false` |
 
-### Which Rules Participate
+### Which Rules Participate in Storage Gate
 - **Rules with Dormant timers**: Participate in storage cleanup
 - **Rules with Dormant = null**: Protected (never cleaned up)
 - **Grace timers**: Don't affect storage gate (viewing-only)
@@ -140,13 +157,18 @@ See [Rules Guide](rules-guide.md) for detailed assignment instructions.
 - **Use separate rules**: Create "Archive" rules with no dormant timer
 - **Test with dry run**: Always verify behavior before going live
 
+### Balancing Grace Types
+- **Watched for collection**: 2-8 weeks depending on viewing habits
+- **Unwatched for pressure**: 1-3 weeks depending on download speed
+- **Dormant for abandonment**: 1-6 months depending on storage constraints
+
 ### Common Configurations
 
-| Storage Size | Suggested Threshold | Philosophy |
-|--------------|-------------------|------------|
-| **1TB** | 100GB (10%) | Conservative, rarely triggers |
-| **4TB** | 200GB (5%) | Balanced approach |
-| **8TB** | 300GB (3.5%) | Aggressive space management |
+| Storage Size | Suggested Threshold | Buffer | Watched | Unwatched | Dormant |
+|--------------|-------------------|--------|---------|-----------|---------|
+| **1TB** | 100GB (10%) | 7d | 60d | null | 180d |
+| **4TB** | 200GB (5%) | 5d | 30d | 21d | 90d |
+| **8TB** | 300GB (3.5%) | 3d | 14d | 10d | 60d |
 
 ---
 
@@ -166,6 +188,12 @@ See [Rules Guide](rules-guide.md) for detailed assignment instructions.
 - **Check dormant timers**: Only rules with dormant days participate
 - **Review rule assignments**: Ensure series are in correct rules  
 - **Use dry run**: Test changes before enabling live cleanup
+
+### Grace Periods Not Working
+- **Check rule configuration**: Verify grace fields are set correctly
+- **Review timing**: Grace periods work on different schedules
+- **Monitor logs**: Check for processing errors in cleanup logs
+- **Verify assignments**: Series must be assigned to rules with grace settings
 
 ---
 

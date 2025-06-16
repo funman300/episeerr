@@ -768,16 +768,16 @@ def unmonitor_episodes(episode_ids):
     if episode_ids:
         monitor_episodes(episode_ids, False)
 
-def fetch_next_episodes(series_id, season_number, episode_number, get_option):
+def fetch_next_episodes_dropdown(series_id, season_number, episode_number, get_type, get_count):
     """
-    SIMPLIFIED: Assumes linear watching only. 
-    Non-linear watchers should use dormant-only rules.
+    Fetch next episodes using dropdown system (get_type + get_count).
+    Assumes linear watching only.
     """
     next_episode_ids = []
 
     try:
-        if get_option == "all":
-            # Get all episodes from current position forward (linear progression)
+        if get_type == "all":
+            # Get all episodes from current position forward
             all_episodes = fetch_all_episodes(series_id)
             sorted_episodes = sorted(all_episodes, key=lambda ep: (ep['seasonNumber'], ep['episodeNumber']))
             
@@ -788,62 +788,60 @@ def fetch_next_episodes(series_id, season_number, episode_number, get_option):
                     next_episode_ids.append(ep['id'])
             return next_episode_ids
             
-        elif get_option == 'season':
-            # SIMPLIFIED: Get remaining episodes in current season, then next season if needed
+        elif get_type == 'seasons':
+            # Get X full seasons starting from remaining current season
             current_season_episodes = get_episode_details(series_id, season_number)
             remaining_current = [ep['id'] for ep in current_season_episodes if ep['episodeNumber'] > episode_number]
             next_episode_ids.extend(remaining_current)
             
-            # If no episodes left in current season, get ALL of next season
+            # Get additional full seasons if needed
+            seasons_to_get = get_count if get_count else 1
             if not remaining_current:
-                logger.info(f"Linear progression: Season {season_number} complete, moving to Season {season_number + 1}")
-                next_season_episodes = get_episode_details(series_id, season_number + 1)
-                next_episode_ids.extend([ep['id'] for ep in next_season_episodes])
-                
-                # If next season is empty, try one more
-                if not next_episode_ids:
-                    logger.info(f"Season {season_number + 1} empty, trying Season {season_number + 2}")
-                    next_next_season = get_episode_details(series_id, season_number + 2)
-                    next_episode_ids.extend([ep['id'] for ep in next_next_season])
+                # Current season finished, get next X seasons
+                for season_offset in range(1, seasons_to_get + 1):
+                    season_episodes = get_episode_details(series_id, season_number + season_offset)
+                    next_episode_ids.extend([ep['id'] for ep in season_episodes])
+            elif seasons_to_get > 1:
+                # Get additional seasons beyond current
+                for season_offset in range(1, seasons_to_get):
+                    season_episodes = get_episode_details(series_id, season_number + season_offset)
+                    next_episode_ids.extend([ep['id'] for ep in season_episodes])
                     
-            logger.info(f"Linear season mode: Found {len(next_episode_ids)} episodes")
+            logger.info(f"Dropdown seasons mode: Found {len(next_episode_ids)} episodes across {seasons_to_get} seasons")
             return next_episode_ids
-        else:
+            
+        else:  # episodes
             # Get specific number of episodes in linear order
-            num_episodes = int(get_option)
+            num_episodes = get_count if get_count else 1
             
             # Get remaining episodes in current season first
             current_season_episodes = get_episode_details(series_id, season_number)
             remaining_episodes = [ep['id'] for ep in current_season_episodes if ep['episodeNumber'] > episode_number]
             next_episode_ids.extend(remaining_episodes)
 
-            # If we need more episodes, get from subsequent seasons in order
+            # If we need more episodes, get from subsequent seasons
             current_season_num = season_number + 1
             while len(next_episode_ids) < num_episodes:
                 next_season_episodes = get_episode_details(series_id, current_season_num)
                 if not next_season_episodes:
-                    logger.info(f"Linear progression: No more episodes available after season {current_season_num - 1}")
+                    logger.info(f"No more episodes available after season {current_season_num - 1}")
                     break
                     
                 remaining_needed = num_episodes - len(next_episode_ids)
                 next_episode_ids.extend([ep['id'] for ep in next_season_episodes[:remaining_needed]])
                 current_season_num += 1
                 
-                # Prevent infinite loops for malformed series
+                # Prevent infinite loops
                 if current_season_num > season_number + 10:
-                    logger.warning(f"Linear progression: Stopping after checking 10 seasons ahead")
+                    logger.warning(f"Stopping after checking 10 seasons ahead")
                     break
 
-            logger.info(f"Linear episode mode: Found {len(next_episode_ids)} out of {num_episodes} requested")
+            logger.info(f"Dropdown episodes mode: Found {len(next_episode_ids)} out of {num_episodes} requested")
             return next_episode_ids[:num_episodes]
             
-    except ValueError:
-        logger.error(f"Invalid get_option value: {get_option}")
-        return []
     except Exception as e:
-        logger.error(f"Error in linear fetch_next_episodes: {str(e)}")
+        logger.error(f"Error in dropdown fetch_next_episodes: {str(e)}")
         return []
-
 
 
 def run_dormant_cleanup():
@@ -1449,12 +1447,25 @@ def rule_to_legacy_params(rule):
     return get_option, keep_watched
 
 def process_episodes_for_webhook(series_id, season_number, episode_number, rule):
-    """Enhanced webhook processing with new grace logic."""
+    """
+    Enhanced webhook processing with SIMPLIFIED 2-grace system.
+    REMOVED: grace_buffer (redundant)
+    KEPT: grace_watched (keep block expiry) + grace_unwatched (watch deadlines)
+    """
     try:
         logger.info(f"Processing webhook for series {series_id}: S{season_number}E{episode_number}")
         
-        # Convert rule to legacy params for existing functions
-        get_option, keep_watched = rule_to_legacy_params(rule)
+        # Parse rule using dropdown format
+        if 'get_type' in rule and 'get_count' in rule:
+            get_type = rule.get('get_type', 'episodes')
+            get_count = rule.get('get_count', 1)
+            keep_type = rule.get('keep_type', 'episodes') 
+            keep_count = rule.get('keep_count', 1)
+        else:
+            # Fall back to legacy conversion for old rules
+            get_option, keep_watched = rule_to_legacy_params(rule)
+            get_type, get_count = parse_legacy_value(get_option)
+            keep_type, keep_count = parse_legacy_value(keep_watched)
         
         # Update activity date
         update_activity_date(series_id, season_number, episode_number)
@@ -1474,39 +1485,196 @@ def process_episodes_for_webhook(series_id, season_number, episode_number, rule)
         if not rule.get('monitor_watched', True):
             unmonitor_episodes([current_episode['id']])
         
-        # Get next episodes (using fixed function)
-        next_episode_ids = fetch_next_episodes(series_id, season_number, episode_number, get_option)
+        # Get next episodes using dropdown system
+        next_episode_ids = fetch_next_episodes_dropdown(
+            series_id, season_number, episode_number, get_type, get_count
+        )
+        
         if next_episode_ids:
             monitor_or_search_episodes(next_episode_ids, rule.get('action_option', 'monitor'))
             logger.info(f"Processed {len(next_episode_ids)} next episodes")
         
-        # Set grace timer for keep block
-        if rule.get('grace_days'):
-            episodes_to_delete_ids = find_episodes_to_delete_immediate(all_episodes, keep_watched, season_number, episode_number)
-            if episodes_to_delete_ids:
-                # Convert episode file IDs back to episode objects
-                episodes_for_bin = []
-                for ep in all_episodes:
-                    if ep.get('episodeFileId') in episodes_to_delete_ids:
-                        episodes_for_bin.append(ep)
-                
-                add_episodes_to_recycle_bin(series_id, episodes_for_bin, rule['grace_days'])
-        # Immediate deletion
-        episodes_to_delete = find_episodes_to_delete_immediate(all_episodes, keep_watched, season_number, episode_number)
-        if episodes_to_delete:
-            delete_episodes_in_sonarr_with_logging(episodes_to_delete, False, "Series Name")
+        # Calculate current keep block
+        current_keep_block = calculate_current_keep_block(
+            all_episodes, keep_type, keep_count, season_number, episode_number
+        )
+        
+        # Calculate episodes leaving keep block (for immediate deletion)
+        episodes_leaving_keep_block = find_episodes_leaving_keep_block(
+            all_episodes, keep_type, keep_count, season_number, episode_number
+        )
+        
+        # SIMPLIFIED GRACE PROCESSING (REMOVED grace_buffer)
+        
+        # 1. GRACE WATCHED: Add current keep block to recycle bin with grace_watched expiry
+        if rule.get('grace_watched') and current_keep_block:
+            add_episodes_to_recycle_bin_unified(
+                series_id, 
+                current_keep_block, 
+                rule['grace_watched'],
+                grace_type='watched'
+            )
+            logger.info(f"Keep block episodes expire in {rule['grace_watched']} days")
+        
+        # 2. GRACE UNWATCHED: Track newly prepared episodes
+        if rule.get('grace_unwatched') and next_episode_ids:
+            track_grace_unwatched_episodes(series_id, next_episode_ids, rule['grace_unwatched'])
+            logger.info(f"Tracking {len(next_episode_ids)} new episodes for unwatched grace")
+        
+        # 3. IMMEDIATE DELETION: Episodes leaving keep block (no buffer)
+        if episodes_leaving_keep_block:
+            episode_file_ids = [ep['episodeFileId'] for ep in episodes_leaving_keep_block if 'episodeFileId' in ep]
+            if episode_file_ids:
+                # No grace_buffer - immediate deletion
+                delete_episodes_in_sonarr_with_logging(
+                    episode_file_ids, 
+                    rule.get('dry_run', False), 
+                    f"Series {series_id}"
+                )
+                logger.info(f"Immediately deleted {len(episode_file_ids)} episodes leaving keep block")
             
     except Exception as e:
         logger.error(f"Error in webhook processing: {str(e)}")
 
 
-def check_time_based_cleanup(series_id, rule):
-    """Check if time-based cleanup should be performed - OPTIMIZED VERSION."""
+# =============================================================================
+# NEW: Unified Recycle Bin Function
+# =============================================================================
+
+def add_episodes_to_recycle_bin_unified(series_id, episodes, grace_days, grace_type='watched'):
+    """
+    Unified function to add episodes to recycle bin for any grace type.
+    
+    :param series_id: Sonarr series ID
+    :param episodes: List of episode objects
+    :param grace_days: Days until expiry
+    :param grace_type: 'watched' or 'unwatched' (for logging/tracking)
+    """
+    if not episodes or grace_days <= 0:
+        return
+        
     try:
-        grace_days = rule.get('grace_days')
+        activity_data = load_activity_tracking()
+        series_id_str = str(series_id)
+        current_time = int(time.time())
+        expires_at = current_time + (grace_days * 24 * 60 * 60)
+        
+        if series_id_str not in activity_data:
+            activity_data[series_id_str] = {}
+        
+        if 'recycle_bin' not in activity_data[series_id_str]:
+            activity_data[series_id_str]['recycle_bin'] = {}
+        
+        recycle_bin = activity_data[series_id_str]['recycle_bin']
+        
+        # Add episodes to unified recycle bin
+        new_episodes = 0
+        for episode in episodes:
+            ep_id = str(episode['id'])
+            
+            # SIMPLIFIED: Always update expiry (latest grace period wins)
+            recycle_bin[ep_id] = {
+                'episode_file_id': episode.get('episodeFileId'),
+                'season_number': episode['seasonNumber'],
+                'episode_number': episode['episodeNumber'],
+                'added_at': current_time,
+                'expires_at': expires_at,
+                'grace_days': grace_days,
+                'grace_type': grace_type  # Track which type of grace
+            }
+            new_episodes += 1
+        
+        if new_episodes > 0:
+            save_activity_tracking(activity_data)
+            logger.info(f"Added {new_episodes} episodes to recycle bin ({grace_type} grace: {grace_days} days)")
+        
+    except Exception as e:
+        logger.error(f"Error adding episodes to unified recycle bin: {str(e)}")
+
+# =============================================================================
+# UPDATED: Simplified Cleanup Functions
+# =============================================================================
+
+def run_unified_grace_cleanup():
+    """
+    SIMPLIFIED: Single cleanup function for all grace types using recycle bin.
+    REMOVED: Separate grace_watched and grace_buffer cleanup functions.
+    """
+    try:
+        cleanup_logger.info("🗑️  UNIFIED GRACE CLEANUP: Processing expired episodes")
+        
+        config = load_config()
+        activity_data = load_activity_tracking()
+        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        total_deleted = 0
+        
+        # Get all series from Sonarr for title lookup
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
+        all_series = response.json() if response.ok else []
+        
+        # Process each series that has a recycle bin
+        for series_id_str, series_data in activity_data.items():
+            recycle_bin = series_data.get('recycle_bin', {})
+            if not recycle_bin:
+                continue
+            
+            try:
+                series_id = int(series_id_str)
+                expired_episodes = check_recycle_bin_expiry(series_id)
+                
+                if expired_episodes:
+                    # Get series title and rule
+                    series_info = next((s for s in all_series if s['id'] == series_id), None)
+                    series_title = series_info['title'] if series_info else f'Series {series_id}'
+                    
+                    series_rule = None
+                    for rule_name, rule in config['rules'].items():
+                        if series_id_str in rule.get('series', {}):
+                            series_rule = rule
+                            break
+                    
+                    # Determine dry run status
+                    if series_rule:
+                        rule_dry_run = series_rule.get('dry_run', False)
+                        is_dry_run = global_dry_run or rule_dry_run
+                    else:
+                        is_dry_run = global_dry_run
+                    
+                    # Group by grace type for better logging
+                    watched_episodes = [ep for ep in expired_episodes if ep.get('grace_type') == 'watched']
+                    other_episodes = [ep for ep in expired_episodes if ep.get('grace_type') != 'watched']
+                    
+                    episode_file_ids = [ep['episode_file_id'] for ep in expired_episodes if ep.get('episode_file_id')]
+                    
+                    if episode_file_ids:
+                        if watched_episodes:
+                            cleanup_logger.info(f"🟡 {series_title}: {len(watched_episodes)} keep block episodes expired")
+                        if other_episodes:
+                            cleanup_logger.info(f"⏰ {series_title}: {len(other_episodes)} other grace episodes expired")
+                            
+                        delete_episodes_in_sonarr_with_logging(episode_file_ids, is_dry_run, series_title)
+                        total_deleted += len(episode_file_ids)
+                        
+            except (ValueError, TypeError):
+                continue
+        
+        cleanup_logger.info(f"🗑️  Unified grace cleanup: Processed {total_deleted} episodes")
+        return total_deleted
+        
+    except Exception as e:
+        cleanup_logger.error(f"Error in unified grace cleanup: {str(e)}")
+        return 0
+
+def check_time_based_cleanup(series_id, rule):
+    """Check if time-based cleanup should be performed - MULTI-GRACE VERSION."""
+    try:
+        grace_buffer = rule.get('grace_buffer')
+        grace_watched = rule.get('grace_watched')
+        grace_unwatched = rule.get('grace_unwatched')
         dormant_days = rule.get('dormant_days')
         
-        if not grace_days and not dormant_days:
+        if not any([grace_buffer, grace_watched, grace_unwatched, dormant_days]):
             return False, "No time-based cleanup configured"
         
         # Get series title for external API lookups (only once)
@@ -1519,7 +1687,7 @@ def check_time_based_cleanup(series_id, rule):
         except Exception as e:
             logger.warning(f"Failed to get series title: {str(e)}")
         
-        # Get activity date using hierarchy (this calls the fixed function above)
+        # Get activity date using hierarchy
         activity_date = get_activity_date_with_hierarchy(series_id, series_title)
         
         if activity_date is None:
@@ -1535,9 +1703,17 @@ def check_time_based_cleanup(series_id, rule):
         if dormant_days and days_since_activity > dormant_days:
             return True, f"Dormant cleanup: {days_since_activity:.1f} days > {dormant_days} days"
         
-        # Check grace period cleanup  
-        if grace_days and days_since_activity > grace_days:
-            return True, f"Grace cleanup: {days_since_activity:.1f} days > {grace_days} days"
+        # Check any grace period cleanup
+        grace_reasons = []
+        if grace_buffer:
+            grace_reasons.append(f"buffer({grace_buffer}d)")
+        if grace_watched and days_since_activity > grace_watched:
+            grace_reasons.append(f"watched({grace_watched}d)")
+        if grace_unwatched:
+            grace_reasons.append(f"unwatched({grace_unwatched}d)")
+        
+        if grace_reasons:
+            return True, f"Multi-grace cleanup: {', '.join(grace_reasons)}"
         
         return False, f"Time thresholds not met ({days_since_activity:.1f} days since activity)"
         
@@ -1769,6 +1945,329 @@ def is_dry_run_enabled(rule_name=None):
     # For now, return False
     return False
 
+def find_episodes_leaving_keep_block(all_episodes, keep_type, keep_count, last_watched_season, last_watched_episode):
+    """
+    Find episodes that are leaving the keep block using dropdown system.
+    These episodes should go to grace buffer if configured.
+    """
+    episodes_leaving = []
+    
+    try:
+        if keep_type == "all":
+            # Keep everything, nothing leaves
+            return []
+            
+        elif keep_type == "seasons":
+            # Keep X seasons, episodes from older seasons leave
+            seasons_to_keep = keep_count if keep_count else 1
+            cutoff_season = last_watched_season - seasons_to_keep + 1
+            
+            episodes_leaving = [
+                ep for ep in all_episodes 
+                if ep['seasonNumber'] < cutoff_season and ep.get('hasFile')
+            ]
+            
+        else:  # episodes
+            # Keep X episodes, older episodes leave the keep block
+            episodes_to_keep = keep_count if keep_count else 1
+            
+            # Sort episodes by season/episode number
+            sorted_episodes = sorted(all_episodes, key=lambda ep: (ep['seasonNumber'], ep['episodeNumber']))
+            
+            # Find the last watched episode index
+            last_watched_index = None
+            for i, ep in enumerate(sorted_episodes):
+                if (ep['seasonNumber'] == last_watched_season and 
+                    ep['episodeNumber'] == last_watched_episode):
+                    last_watched_index = i
+                    break
+            
+            if last_watched_index is not None:
+                # Keep block: episodes_to_keep episodes ending with the one just watched
+                keep_start_index = max(0, last_watched_index - episodes_to_keep + 1)
+                
+                # Episodes before the keep block are leaving
+                episodes_with_files = [ep for ep in sorted_episodes if ep.get('hasFile')]
+                
+                for ep in episodes_with_files:
+                    ep_index = next((i for i, se in enumerate(sorted_episodes) if se['id'] == ep['id']), None)
+                    if ep_index is not None and ep_index < keep_start_index:
+                        episodes_leaving.append(ep)
+                
+                logger.info(f"Keep block: episodes {keep_start_index} to {last_watched_index}, {len(episodes_leaving)} episodes leaving")
+        
+        return episodes_leaving
+        
+    except Exception as e:
+        logger.error(f"Error finding episodes leaving keep block: {str(e)}")
+        return []
+
+
+def calculate_current_keep_block(all_episodes, keep_type, keep_count, last_watched_season, last_watched_episode):
+    """
+    Calculate current keep block using dropdown system.
+    These episodes get the grace_watched timer.
+    """
+    try:
+        if keep_type == "all":
+            # Keep everything
+            return [ep for ep in all_episodes if ep.get('hasFile')]
+            
+        elif keep_type == "seasons":
+            # Keep X seasons
+            seasons_to_keep = keep_count if keep_count else 1
+            cutoff_season = last_watched_season - seasons_to_keep + 1
+            
+            keep_block = [
+                ep for ep in all_episodes 
+                if ep['seasonNumber'] >= cutoff_season and ep.get('hasFile')
+            ]
+            return keep_block
+            
+        else:  # episodes
+            # Keep X episodes ending with the one just watched
+            episodes_to_keep = keep_count if keep_count else 1
+            
+            # Sort episodes by season/episode number
+            sorted_episodes = sorted(all_episodes, key=lambda ep: (ep['seasonNumber'], ep['episodeNumber']))
+            
+            # Find the last watched episode index
+            last_watched_index = None
+            for i, ep in enumerate(sorted_episodes):
+                if (ep['seasonNumber'] == last_watched_season and 
+                    ep['episodeNumber'] == last_watched_episode):
+                    last_watched_index = i
+                    break
+            
+            if last_watched_index is not None:
+                # Keep block: episodes_to_keep episodes ending with the one just watched
+                keep_start_index = max(0, last_watched_index - episodes_to_keep + 1)
+                
+                keep_block = []
+                for i in range(keep_start_index, last_watched_index + 1):
+                    if i < len(sorted_episodes) and sorted_episodes[i].get('hasFile'):
+                        keep_block.append(sorted_episodes[i])
+                
+                return keep_block
+            else:
+                logger.warning("Could not find last watched episode for keep block calculation")
+                return []
+        
+        return []
+        
+    except Exception as e:
+        logger.error(f"Error calculating current keep block: {str(e)}")
+        return []
+
+
+def set_grace_watched_timer(series_id, keep_block_episodes, grace_watched_days):
+    """
+    Set grace_watched timer for current keep block episodes.
+    Timer resets each time series has activity.
+    """
+    try:
+        activity_data = load_activity_tracking()
+        series_id_str = str(series_id)
+        current_time = int(time.time())
+        expires_at = current_time + (grace_watched_days * 24 * 60 * 60)
+        
+        if series_id_str not in activity_data:
+            activity_data[series_id_str] = {}
+        
+        # Reset the watched grace timer (activity resets it)
+        activity_data[series_id_str]['grace_watched_timer'] = {
+            'expires_at': expires_at,
+            'grace_days': grace_watched_days,
+            'last_reset': current_time,
+            'keep_block_episodes': [
+                {
+                    'episode_id': ep['id'],
+                    'episode_file_id': ep.get('episodeFileId'),
+                    'season_number': ep['seasonNumber'],
+                    'episode_number': ep['episodeNumber']
+                }
+                for ep in keep_block_episodes
+            ]
+        }
+        
+        save_activity_tracking(activity_data)
+        logger.info(f"Reset grace_watched timer for {len(keep_block_episodes)} episodes in keep block")
+        
+    except Exception as e:
+        logger.error(f"Error setting grace_watched timer: {str(e)}")
+
+
+def track_grace_unwatched_episodes(series_id, episode_ids, grace_unwatched_days):
+    """
+    Track newly "got" episodes with individual grace_unwatched timers.
+    Each episode gets its own timer from its Sonarr download date.
+    """
+    try:
+        activity_data = load_activity_tracking()
+        series_id_str = str(series_id)
+        
+        if series_id_str not in activity_data:
+            activity_data[series_id_str] = {}
+        
+        if 'grace_unwatched_episodes' not in activity_data[series_id_str]:
+            activity_data[series_id_str]['grace_unwatched_episodes'] = {}
+        
+        # Get episode details and their download dates from Sonarr
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        all_episodes = fetch_all_episodes(series_id)
+        tracked_count = 0
+        
+        for episode_id in episode_ids:
+            episode = next((ep for ep in all_episodes if ep['id'] == episode_id), None)
+            if not episode or not episode.get('hasFile'):
+                continue
+                
+            # Get episode file info to check download date
+            try:
+                episode_file_id = episode.get('episodeFileId')
+                if episode_file_id:
+                    file_response = requests.get(f"{SONARR_URL}/api/v3/episodefile/{episode_file_id}", headers=headers)
+                    if file_response.ok:
+                        file_data = file_response.json()
+                        date_added = file_data.get('dateAdded')
+                        
+                        if date_added:
+                            download_timestamp = parse_date_fixed(date_added, f"S{episode['seasonNumber']}E{episode['episodeNumber']}")
+                            if download_timestamp:
+                                expires_at = download_timestamp + (grace_unwatched_days * 24 * 60 * 60)
+                                
+                                ep_id = str(episode_id)
+                                activity_data[series_id_str]['grace_unwatched_episodes'][ep_id] = {
+                                    'episode_file_id': episode_file_id,
+                                    'season_number': episode['seasonNumber'],
+                                    'episode_number': episode['episodeNumber'],
+                                    'download_date': download_timestamp,
+                                    'expires_at': expires_at,
+                                    'grace_days': grace_unwatched_days,
+                                    'got_by_rule': True  # Mark as prepared by rule
+                                }
+                                tracked_count += 1
+                                logger.debug(f"Tracking S{episode['seasonNumber']}E{episode['episodeNumber']} - expires in {grace_unwatched_days} days from download")
+            except Exception as e:
+                logger.warning(f"Could not get download date for episode {episode_id}: {str(e)}")
+                continue
+        
+        if tracked_count > 0:
+            save_activity_tracking(activity_data)
+            logger.info(f"Now tracking {tracked_count} episodes for grace_unwatched cleanup")
+        
+    except Exception as e:
+        logger.error(f"Error tracking grace_unwatched episodes: {str(e)}")
+
+
+def check_grace_unwatched_expiry(series_id):
+    """
+    Check for grace_unwatched episodes that have expired.
+    Only removes episodes that were "got" by rules and not watched within grace period.
+    """
+    try:
+        activity_data = load_activity_tracking()
+        series_id_str = str(series_id)
+        current_time = int(time.time())
+        
+        if series_id_str not in activity_data:
+            return []
+        
+        unwatched_episodes = activity_data[series_id_str].get('grace_unwatched_episodes', {})
+        expired_episodes = []
+        episodes_to_remove = []
+        
+        for ep_id, episode_data in unwatched_episodes.items():
+            if current_time >= episode_data['expires_at']:
+                expired_episodes.append(episode_data)
+                episodes_to_remove.append(ep_id)
+                logger.info(f"Grace unwatched expired: S{episode_data['season_number']}E{episode_data['episode_number']} - {(current_time - episode_data['download_date']) / (24*60*60):.1f} days since download")
+        
+        # Remove expired episodes from tracking
+        if episodes_to_remove:
+            for ep_id in episodes_to_remove:
+                del unwatched_episodes[ep_id]
+            save_activity_tracking(activity_data)
+        
+        return expired_episodes
+        
+    except Exception as e:
+        logger.error(f"Error checking grace_unwatched expiry: {str(e)}")
+        return []
+
+
+def check_grace_watched_expiry(series_id):
+    """
+    Check if grace_watched timer has expired for keep block.
+    This is a series-wide timer that resets on any activity.
+    """
+    try:
+        activity_data = load_activity_tracking()
+        series_id_str = str(series_id)
+        current_time = int(time.time())
+        
+        if series_id_str not in activity_data:
+            return []
+        
+        watched_timer = activity_data[series_id_str].get('grace_watched_timer')
+        if not watched_timer:
+            return []
+        
+        if current_time >= watched_timer['expires_at']:
+            # Timer expired - return keep block episodes for deletion
+            expired_episodes = watched_timer.get('keep_block_episodes', [])
+            
+            # Clear the timer
+            del activity_data[series_id_str]['grace_watched_timer']
+            save_activity_tracking(activity_data)
+            
+            logger.info(f"Grace watched expired: {len(expired_episodes)} keep block episodes after {(current_time - watched_timer['last_reset']) / (24*60*60):.1f} days of inactivity")
+            return expired_episodes
+        
+        return []
+        
+    except Exception as e:
+        logger.error(f"Error checking grace_watched expiry: {str(e)}")
+        return []
+
+
+def process_multi_grace_cleanup_fixed(series_id, rule, all_episodes):
+    """
+    FIXED: Process all configured grace periods with proper targeting.
+    """
+    try:
+        episodes_to_delete = []
+        
+        # 1. Grace buffer (recycle bin expiry) - Episodes that left keep block
+        if rule.get('grace_buffer'):
+            expired_buffer = check_recycle_bin_expiry(series_id)
+            if expired_buffer:
+                buffer_file_ids = [ep['episode_file_id'] for ep in expired_buffer if ep.get('episode_file_id')]
+                episodes_to_delete.extend(buffer_file_ids)
+                logger.info(f"Grace buffer: {len(buffer_file_ids)} episodes expired from recycle bin")
+        
+        # 2. Grace watched (keep block expires after series inactivity)
+        if rule.get('grace_watched'):
+            expired_watched = check_grace_watched_expiry(series_id)
+            if expired_watched:
+                watched_file_ids = [ep['episode_file_id'] for ep in expired_watched if ep.get('episode_file_id')]
+                episodes_to_delete.extend(watched_file_ids)
+                logger.info(f"Grace watched: {len(watched_file_ids)} keep block episodes expired after inactivity")
+        
+        # 3. Grace unwatched (individual episode timers from download date)
+        if rule.get('grace_unwatched'):
+            expired_unwatched = check_grace_unwatched_expiry(series_id)
+            if expired_unwatched:
+                unwatched_file_ids = [ep['episode_file_id'] for ep in expired_unwatched if ep.get('episode_file_id')]
+                episodes_to_delete.extend(unwatched_file_ids)
+                logger.info(f"Grace unwatched: {len(unwatched_file_ids)} episodes exceeded watch deadline")
+        
+        return list(set(episodes_to_delete))  # Remove duplicates
+        
+    except Exception as e:
+        logger.error(f"Error in multi-grace cleanup: {str(e)}")
+        return []
+
 def perform_time_based_cleanup_with_logging(series_id, series_title, rule, cleanup_reason):
     """Perform cleanup with detailed logging of what gets deleted."""
     try:
@@ -1788,18 +2287,24 @@ def perform_time_based_cleanup_with_logging(series_id, series_title, rule, clean
         last_watched_season = series_activity.get('last_season', 1)
         last_watched_episode = series_activity.get('last_episode', 1)
         
-        # Determine cleanup type and get episodes to delete
-        if "Nuclear cleanup" in cleanup_reason:
-            episodes_to_delete = find_episodes_to_delete_nuclear(all_episodes, keep_watched)
-            cleanup_type = "☢️  NUCLEAR"
-            print(f"{cleanup_type}: Complete removal based on inactivity")
+        # Check for multi-grace cleanup first
+        episodes_to_delete = process_multi_grace_cleanup(series_id, rule, all_episodes)
+
+        if episodes_to_delete:
+            cleanup_type = "⏰ MULTI-GRACE"
+            print(f"{cleanup_type}: Processing grace periods")
         else:
-            episodes_to_delete = find_episodes_to_delete_surgical(
-                all_episodes, keep_watched, last_watched_season, last_watched_episode
-            )
-            cleanup_type = "🔪 SURGICAL"
-            print(f"{cleanup_type}: Selective cleanup, last watched S{last_watched_season}E{last_watched_episode}")
-        
+            # Fall back to existing logic for dormant/nuclear cleanup
+            if "Nuclear cleanup" in cleanup_reason or "Dormant" in cleanup_reason:
+                episodes_to_delete = find_episodes_to_delete_nuclear(all_episodes, keep_watched)
+                cleanup_type = "☢️  NUCLEAR"
+                print(f"{cleanup_type}: Complete removal based on inactivity")
+            else:
+                episodes_to_delete = find_episodes_to_delete_surgical(
+                    all_episodes, keep_watched, last_watched_season, last_watched_episode
+                )
+                cleanup_type = "🔪 SURGICAL"
+                print(f"{cleanup_type}: Selective cleanup, last watched S{last_watched_season}E{last_watched_episode}")
         if episodes_to_delete:
             print(f"📊 Episodes to delete: {len(episodes_to_delete)}")
             
@@ -2655,8 +3160,142 @@ def run_global_storage_gate_cleanup():
     except Exception as e:
         cleanup_logger.error(f"Error in global storage gate cleanup: {str(e)}")
 
+def run_grace_watched_cleanup():
+    """
+    Scheduler function: Check all series for expired grace_watched timers.
+    This runs periodically to clean up keep blocks that have been inactive too long.
+    """
+    try:
+        cleanup_logger.info("🟡 GRACE WATCHED CLEANUP: Checking inactive keep blocks")
+        
+        config = load_config()
+        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        
+        # Get all series from Sonarr
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
+        
+        if not response.ok:
+            cleanup_logger.error("Failed to fetch series from Sonarr for grace_watched cleanup")
+            return 0
+        
+        all_series = response.json()
+        processed_count = 0
+        
+        # Check each rule for grace_watched settings
+        for rule_name, rule in config['rules'].items():
+            if not rule.get('grace_watched'):
+                continue
+                
+            cleanup_logger.info(f"📋 Rule '{rule_name}': Checking grace_watched ({rule['grace_watched']} days)")
+            rule_dry_run = rule.get('dry_run', False)
+            is_dry_run = global_dry_run or rule_dry_run
+            
+            # Check each series in this rule
+            series_dict = rule.get('series', {})
+            for series_id_str in series_dict.keys():
+                try:
+                    series_id = int(series_id_str)
+                    series_info = next((s for s in all_series if s['id'] == series_id), None)
+                    
+                    if not series_info:
+                        continue
+                    
+                    series_title = series_info['title']
+                    
+                    # Check if grace_watched timer has expired
+                    expired_episodes = check_grace_watched_expiry(series_id)
+                    
+                    if expired_episodes:
+                        episode_file_ids = [ep['episode_file_id'] for ep in expired_episodes if ep.get('episode_file_id')]
+                        
+                        if episode_file_ids:
+                            cleanup_logger.info(f"🟡 {series_title}: Grace watched expired - keep block inactive too long")
+                            delete_episodes_in_sonarr_with_logging(episode_file_ids, is_dry_run, series_title)
+                            processed_count += 1
+                            
+                except (ValueError, TypeError):
+                    continue
+        
+        cleanup_logger.info(f"🟡 Grace watched cleanup: Processed {processed_count} series")
+        return processed_count
+        
+    except Exception as e:
+        cleanup_logger.error(f"Error in grace_watched cleanup: {str(e)}")
+        return 0
+
+
+def run_grace_unwatched_cleanup():
+    """
+    Scheduler function: Check all series for expired grace_unwatched episodes.
+    This runs periodically to clean up episodes that were downloaded but not watched within deadline.
+    """
+    try:
+        cleanup_logger.info("⏰ GRACE UNWATCHED CLEANUP: Checking unwatched episode deadlines")
+        
+        config = load_config()
+        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        
+        # Get all series from Sonarr
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
+        
+        if not response.ok:
+            cleanup_logger.error("Failed to fetch series from Sonarr for grace_unwatched cleanup")
+            return 0
+        
+        all_series = response.json()
+        processed_count = 0
+        
+        # Check each rule for grace_unwatched settings
+        for rule_name, rule in config['rules'].items():
+            if not rule.get('grace_unwatched'):
+                continue
+                
+            cleanup_logger.info(f"📋 Rule '{rule_name}': Checking grace_unwatched ({rule['grace_unwatched']} days)")
+            rule_dry_run = rule.get('dry_run', False)
+            is_dry_run = global_dry_run or rule_dry_run
+            
+            # Check each series in this rule
+            series_dict = rule.get('series', {})
+            for series_id_str in series_dict.keys():
+                try:
+                    series_id = int(series_id_str)
+                    series_info = next((s for s in all_series if s['id'] == series_id), None)
+                    
+                    if not series_info:
+                        continue
+                    
+                    series_title = series_info['title']
+                    
+                    # Check for expired unwatched episodes
+                    expired_episodes = check_grace_unwatched_expiry(series_id)
+                    
+                    if expired_episodes:
+                        episode_file_ids = [ep['episode_file_id'] for ep in expired_episodes if ep.get('episode_file_id')]
+                        
+                        if episode_file_ids:
+                            cleanup_logger.info(f"⏰ {series_title}: {len(episode_file_ids)} episodes exceeded watch deadline")
+                            delete_episodes_in_sonarr_with_logging(episode_file_ids, is_dry_run, series_title)
+                            processed_count += 1
+                            
+                except (ValueError, TypeError):
+                    continue
+        
+        cleanup_logger.info(f"⏰ Grace unwatched cleanup: Processed {processed_count} series")
+        return processed_count
+        
+    except Exception as e:
+        cleanup_logger.error(f"Error in grace_unwatched cleanup: {str(e)}")
+        return 0
+
+
+# =============================================================================
+# UPDATED: Main Scheduler Function
+# =============================================================================
+
 def main():
-    """Main entry point."""
+    """Main entry point - SIMPLIFIED with unified grace cleanup."""
     series_name, season_number, episode_number = get_server_activity()
     
     if series_name:
@@ -2675,10 +3314,17 @@ def main():
             else:
                 update_activity_date(series_id, season_number, episode_number)
     else:
-        # Scheduler mode
-        run_periodic_cleanup()  # Keep existing cleanup
-        run_recycle_bin_cleanup()    # Add grace cleanup
-        run_dormant_cleanup()   # Add dormant cleanup 
+        # Scheduler mode - SIMPLIFIED cleanup cycle
+        cleanup_logger.info("🚀 STARTING SIMPLIFIED GRACE CLEANUP CYCLE")
+        
+        unified_count = run_unified_grace_cleanup()        # All grace types in one function
+        unwatched_count = run_grace_unwatched_cleanup()    # Still separate (different data structure)
+        dormant_count = run_dormant_cleanup()              # Separate (different purpose)
+        
+        total_processed = unified_count + unwatched_count + dormant_count
+        cleanup_logger.info(f"✅ SIMPLIFIED CLEANUP CYCLE COMPLETED: {total_processed} total operations")
+        cleanup_logger.info(f"   🗑️ Unified: {unified_count}, ⏰ Unwatched: {unwatched_count}, 🔴 Dormant: {dormant_count}")
+
 
 if __name__ == "__main__":
     main()

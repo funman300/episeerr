@@ -94,20 +94,36 @@
                         <div class="col-md-6">
                             <div class="card bg-dark border-secondary">
                                 <div class="card-header bg-secondary">
-                                    <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Time-Based Cleanup</h6>
+                                    <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Grace Periods (Optional)</h6>
                                 </div>
                                 <div class="card-body">
+                                    
+
                                     <div class="mb-3">
-                                        <label for="grace_days" class="form-label">
-                                            Grace Period (days)
+                                        <label for="grace_watched" class="form-label">
+                                            Watched Grace (days)
                                             <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                               title="After grace expires, episodes outside the keep get deleted."></i>
+                                            title="Expire favorites: Your kept episodes themselves get deleted after X days of inactivity."></i>
                                         </label>
-                                        <input type="number" class="form-control" id="grace_days" 
-                                               name="grace_days" min="1" 
-                                               placeholder="Leave empty to keep watched episodes forever">
+                                        <input type="number" class="form-control" id="grace_watched" 
+                                            name="grace_watched" min="1" 
+                                            placeholder="Leave empty to keep favorites forever">
                                         <div class="form-text text-muted">
-                                            <small>NEW: Keep watched episodes brfore 'keep block' for X days after watching</small>
+                                            <small>Kept episodes expire after inactivity</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="grace_unwatched" class="form-label">
+                                            Unwatched Grace (days)
+                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                            title="Watch deadline: New episodes get X days to be watched before deletion."></i>
+                                        </label>
+                                        <input type="number" class="form-control" id="grace_unwatched" 
+                                            name="grace_unwatched" min="1" 
+                                            placeholder="Leave empty for no watch deadlines">
+                                        <div class="form-text text-muted">
+                                            <small>New episodes have watch deadlines</small>
                                         </div>
                                     </div>
 
@@ -115,36 +131,23 @@
                                         <label for="dormant_days" class="form-label">
                                             Dormant Timer (days)
                                             <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                               title="Remove content if series is completely inactive for X days. With storage gate: removes oldest first until space target met. Without storage gate: removes everything."></i>
+                                            title="Nuclear option: Remove ALL content if series is completely inactive for X days."></i>
                                         </label>
                                         <input type="number" class="form-control" id="dormant_days" 
-                                               name="dormant_days" min="1" 
-                                               placeholder="Leave empty to never remove dormant series">
+                                            name="dormant_days" min="1" 
+                                            placeholder="Leave empty to never remove dormant series">
                                         <div class="form-text text-muted">
-                                            <small>NEW: Storage-aware cleanup for abandoned series</small>
+                                            <small>Complete cleanup for abandoned series</small>
                                         </div>
                                     </div>
 
-                                    <div class="alert alert-warning alert-sm">
+                                    <div class="alert alert-info alert-sm">
                                         <small>
-                                            <p><strong>🔄 NEW GRACE/DORMANT LOGIC:</strong></p>
-                                            
-                                            <strong>Grace Period (Smart Retention):</strong><br>
-                                            • Protects your "keep block" for X days after watching<br>
-                                            • When grace expires → keep block gets deleted<br>
-                                            • Leaves you with fresh unwatched content<br><br>
-                                            
-                                            <strong>Dormant Timer (Abandoned Series):</strong><br>
-                                            • If NO activity for X days → series considered abandoned<br>
-                                            • <u>With storage gate:</u> Delete oldest content first until space target met<br>
-                                            • <u>Without storage gate:</u> Delete everything (nuclear cleanup)<br><br>
-                                            
-                                            <strong>Example: Get 5, Keep 1, Grace 7 days, Dormant 60 days</strong><br>
-                                            1. Watch E5 → Keep E5, Get E6-E10, Delete older<br>
-                                            2. After 7 days → Delete E5 (grace expired), Library: E6-E10<br>
-                                            3. After 60 days no activity → Dormant cleanup triggers<br><br>
-                                            
-                                            <span class="text-warning">⚠️ Test with dry run first!</span>
+                                            <strong>🎯 Mix and Match Grace Periods:</strong><br>
+                                            • <strong>Watched:</strong> Expire your watched<br>
+                                            • <strong>Unwatched:</strong> Pressure to watch new content<br>
+                                            • <strong>Dormant:</strong> Nuclear cleanup for abandoned shows<br><br>
+                                            <span class="text-warning">⚠️ Use any combination that fits your viewing style</span>
                                         </small>
                                     </div>
                                 </div>

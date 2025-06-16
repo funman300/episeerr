@@ -91,40 +91,41 @@
                         </div>
 
                         <div class="col-md-6">
-                            <div class="card bg-dark border-secondary">
+                             <div class="card bg-dark border-secondary">
                                 <div class="card-header bg-secondary">
-                                    <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Time-Based Cleanup</h6>
+                                    <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Grace Periods (Optional)</h6>
                                 </div>
                                 <div class="card-body">
+                                    
+
                                     <div class="mb-3">
-                                        <label for="grace_days" class="form-label">
-                                            Grace Period (days)
-                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                               title="After grace expires, episodes get deleted leaving only the keep content."></i>
-                                        </label>
-                                        <input type="number" class="form-control" id="grace_days" 
-                                               name="grace_days" min="1" 
-                                               value="{% if rule.grace_days %}{{ rule.grace_days }}{% endif %}"
-                                               placeholder="Leave empty to keep watched episodes forever">
-                                        <div class="form-text text-muted">
-                                            <small>NEW: Keep watched episodes before 'keep block' for X days after watching</small>
-                                        </div>
+                                        <label for="grace_watched">Watched Grace (days)</label>
+                                        <input type="number" class="form-control" id="grace_watched" 
+                                            name="grace_watched" min="1" 
+                                            value="{% if rule.grace_watched %}{{ rule.grace_watched }}{% endif %}"
+                                            placeholder="Expire kept episodes after inactivity">
+                                        <small class="form-text">Kept episodes expire after inactivity</small>
                                     </div>
 
                                     <div class="mb-3">
-                                        <label for="dormant_days" class="form-label">
-                                            Dormant Timer (days)
-                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                               title="Remove content if series is completely inactive for X days. With storage gate: removes oldest first until space target met. Without storage gate: removes everything."></i>
-                                        </label>
-                                        <input type="number" class="form-control" id="dormant_days" 
-                                               name="dormant_days" min="1" 
-                                               value="{% if rule.dormant_days %}{{ rule.dormant_days }}{% endif %}"
-                                               placeholder="Leave empty to never remove dormant series">
-                                        <div class="form-text text-muted">
-                                            <small>NEW: Storage-aware cleanup for abandoned series</small>
-                                        </div>
+                                        <label for="grace_unwatched">Unwatched Grace (days)</label>
+                                        <input type="number" class="form-control" id="grace_unwatched" 
+                                            name="grace_unwatched" min="1" 
+                                            value="{% if rule.grace_unwatched %}{{ rule.grace_unwatched }}{% endif %}"
+                                            placeholder="Watch deadline for new episodes">
+                                        <small class="form-text">New episodes have watch deadlines</small>
                                     </div>
+
+                                    <div class="mb-3">
+                                        <label for="dormant_days">Dormant Timer (days)</label>
+                                        <input type="number" class="form-control" id="dormant_days" 
+                                            name="dormant_days" min="1" 
+                                            value="{% if rule.dormant_days %}{{ rule.dormant_days }}{% endif %}"
+                                            placeholder="Nuclear cleanup for abandoned series">
+                                        <small class="form-text">Complete cleanup for abandoned series</small>
+                                    </div>
+                                </div>
+                            </div>
 
                                     <div class="alert alert-info alert-sm">
                                         <small>

@@ -6,7 +6,6 @@
             "action_option": "search",
             "keep_watched": "1",
             "monitor_watched": false,
-            "grace_days": null,
             "dormant_days": null,
             "series": {
                 "90": {
@@ -88,7 +87,7 @@
                     "activity_date": null
                 },
                 "440": {
-                    "activity_date": null
+                    "activity_date": 1750046703
                 },
                 "71": {
                     "activity_date": null
@@ -188,46 +187,60 @@
                 },
                 "471": {
                     "activity_date": null
+                },
+                "477": {
+                    "activity_date": null
                 }
             },
             "dry_run": false,
             "get_type": "episodes",
             "get_count": 1,
             "keep_type": "episodes",
-            "keep_count": 1
+            "keep_count": 1,
+            "grace_watched": null,
+            "grace_unwatched": null
         },
         "season": {
             "get_option": "season",
             "action_option": "monitor",
             "keep_watched": "season",
             "monitor_watched": false,
-            "grace_days": 7,
             "dormant_days": null,
             "series": {},
-            "dry_run": false
+            "dry_run": false,
+            "grace_watched": 7,
+            "grace_unwatched": null
         },
         "nukeafter90days": {
             "get_option": "1",
             "action_option": "monitor",
             "keep_watched": "all",
             "monitor_watched": false,
-            "grace_days": null,
             "dormant_days": 90,
             "series": {},
-            "dry_run": false
+            "dry_run": false,
+            "grace_watched": null,
+            "grace_unwatched": null
         },
         "get3keep1": {
             "get_option": "3",
             "action_option": "monitor",
             "keep_watched": "1",
             "monitor_watched": false,
-            "grace_days": null,
-            "dormant_days": null,
+            "dormant_days": 30,
             "series": {},
-            "dry_run": false
+            "dry_run": false,
+            "grace_watched": 8,
+            "grace_unwatched": 7,
+            "get_type": "episodes",
+            "get_count": 1,
+            "keep_type": "episodes",
+            "keep_count": 1
         }
     },
     "field_migration_complete": true,
     "field_migration_complete_saved": true,
-    "series_migration_complete": true
+    "series_migration_complete": true,
+    "multi_grace_migration_complete": true,
+    "grace_simplified_migration_complete": true
 }

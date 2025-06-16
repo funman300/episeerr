@@ -80,9 +80,17 @@ Create rules with the new dropdown system:
 - Type: Episodes/Seasons/All + Count
 - Example: "1 season" = keep current season after watching
 
-**Grace Period (NEW!):**
-- Protects your keep block for X days after watching
-- Example: 7 days = keep watched episodes for a week, then delete them
+### Grace Periods (NEW!)
+Create rules with two independent grace timers:
+
+**Grace Watched (Rotating Collection):**  
+- Your kept episodes expire after X days of inactivity
+- Example: 14 days = favorites rotate out after 2 weeks
+
+**Grace Unwatched (Watch Deadlines):**
+- New episodes get X days from download to be watched
+- Example: 10 days = pressure to watch new content
+
 
 **Dormant Timer (NEW!):**
 - Removes content from abandoned shows 
@@ -92,14 +100,14 @@ Create rules with the new dropdown system:
 ```
 Get: 5 episodes (next 5 episodes ready)
 Keep: 2 episodes (last 2 watched episodes)
-Grace: 7 days (keep watched episodes for a week)
+Grace: 7 days (keep last 2 watched episodes, delete others after a week)
 Dormant: 60 days (cleanup if abandoned for 2 months)
 ```
 
 **What happens:**
 1. Watch E10 → Get E11-E15, Keep E9-E10, Delete E1-E8
-2. After 7 days → Delete E9-E10 (grace expired), Library: E11-E15
-3. After 60 days no activity → Delete E11-E15 (series abandoned)
+2. After 7 days → Delete E7-E8 (grace expired), Library: E9-E15
+3. After 60 days no activity → Delete show (series abandoned)
 
 ### Storage Gate
 - Set one global threshold: "Keep 20GB free"
@@ -112,8 +120,9 @@ Dormant: 60 days (cleanup if abandoned for 2 months)
 ## Three Ways to Use Episeerr (Pick What You Need)
 
 ### 🎯 **Just Episode Selection**
-Perfect for trying new shows or picking specific episodes.
+Good for picking specific episodes. Even across seasons
 - **Setup**: Just the 3 required environment variables
+- **create sonarr and optional seer webhooks**
 - **No rules needed, no webhooks required**
 - **Use**: Manual episode selection interface only
 
@@ -121,7 +130,7 @@ Perfect for trying new shows or picking specific episodes.
 Next episode ready as you watch (optional upgrade).
 - **Setup**: Add Tautulli/Jellyfin webhook + create rules  
 - **No storage management required**
-- **Use**: Episodes managed automatically as you watch
+- **Use**: Episodes managed automatically as you watch, get this many, keep this many
 
 ### 💾 **Add Storage Management**  
 Automatic cleanup when storage gets low (optional upgrade).
@@ -141,9 +150,10 @@ Automatic cleanup when storage gets low (optional upgrade).
 
 ---
 
-## What's New in v2.1
+## What's New in v2.2
 
 🎯 **New Dropdown UI**: Replace confusing text fields with clear dropdowns  
+   ** pick type, episodes or seasons and then the # of
 🧠 **Intuitive Grace Logic**: Grace periods now protect recent watches  
 🔧 **Fixed Season Bug**: Properly handles end-of-season transitions  
 💾 **Storage-Aware Dormant**: Dormant cleanup respects storage gates

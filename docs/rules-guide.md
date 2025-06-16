@@ -1,7 +1,6 @@
-# Rules Guide (v2.1)
+# Rules Guide (v2.2)
 
 Rules tell Episeerr how to manage episodes automatically. **Rules are completely optional** - you can use just episode selection without any rules.
-
 
 # ⚠️ **Important: Rules Assume Linear Viewing**
 
@@ -18,7 +17,6 @@ Rules tell Episeerr how to manage episodes automatically. **Rules are completely
 - Non-sequential viewing patterns
 
 **For non-linear viewing:** Use episode selection instead of rules, or create dormant-only rules (no grace/keep settings).
-
 
 ---
 
@@ -40,15 +38,66 @@ Rules tell Episeerr how to manage episodes automatically. **Rules are completely
 - **All**: Keep everything forever
 - **Skip this**: No automatic retention management
 
-### Grace Period (Viewing-based cleanup) - Optional
-**Days to protect watched content:**
-- **7 days**: Will still keep your "keep block" but will wait 7 days before deleting the previous ones 
-- **null/empty**: Keep watched content forever (no grace cleanup)
+### Grace Periods (Multi-Timer System) - Optional
 
-### Dormant Timer (Storage-based cleanup) - Optional
-**Days before abandoned series cleanup:**
-- **30 days**: Clean up shows with no activity for a month when storage is low
-- **null/empty**: Never clean up abandoned shows (protected from storage cleanup)
+**All grace periods are independent - use any combination that fits your viewing style:**
+
+#### Grace Buffer (Safety Net)
+**Days to protect episodes leaving keep block:**
+- **7 days**: Episodes get recycled before permanent deletion
+- **null/empty**: Immediate deletion when leaving keep block
+- **Use for**: Preventing accidental loss, "oops I wanted to rewatch that"
+
+#### Grace Watched (Rotating Favorites)  
+**Days before kept episodes expire from inactivity:**
+- **30 days**: Your watched expire after a month of no series activity
+- **null/empty**: Keep forever (never expire)
+- **Use for**: Rotating collection, making room for new content
+
+#### Grace Unwatched (Watch Deadlines)
+**Days from download before unwatched episodes expire:**
+- **14 days**: New episodes have 2 weeks to be watched or deleted
+- **null/empty**: No pressure to watch new content
+- **Use for**: Staying current, preventing backlog buildup
+## The "Automatic Librarian" System
+
+Think of Episeerr like having a smart librarian managing your TV collection:
+
+### 📚 **Grace Buffer: The "Return Cart"**
+Your librarian puts episodes you previously finished watching in a return cart before removing them. This gives you a few days to watch them again if you change your mind.
+```
+Keep: 3
+Grace:3 type  buffer
+```
+### after watching e6 the keep block is now e4,5,6 but wont delete the previous episodes e 1,2,3 until after the grace buffer 3 days
+
+### 🔄 **Grace Watched: The "Recent Reads" Rotation**
+Your librarian keeps your last watched on the shelf for easy access. After watched grace, they rotate these out to make room for new ones.
+
+```
+Keep: 3
+Grace:3 type  watched
+```
+### after watching e6 the keep block is now e4,5,6 but wont delete them until after the grace 3 days
+
+### ⏰ **Grace Unwatched: The "New Arrivals" Pressure**
+New episodes go on a "new arrivals" shelf with a deadline. If you don't watch them by the deadline, they get removed.
+
+```
+Get: 3
+
+Grace:3 type  unwatched
+```
+### after watching e6 will get ep7,8,9 but remove them after the grace 3 days
+
+## use none or any combo
+
+
+### Dormant Timer (Abandoned Series Cleanup) - Optional
+**Days before complete series cleanup:**
+- **90 days**: If no activity for 3 months, clean up when storage is low
+- **null/empty**: Never clean up abandoned series (protected)
+- **Use for**: Reclaiming space from shows you've stopped watching
 
 ---
 
@@ -57,96 +106,32 @@ Rules tell Episeerr how to manage episodes automatically. **Rules are completely
 ### Minimal Automation (Just Next Episode)
 ```
 Get: 1 episode, Action: Search
-Keep: null, Grace: null, Dormant: null
+Keep: null, Grace: all null, Dormant: null
 ```
 **Result**: Next episode ready, everything else manual
 
 ### Viewing Only (No Storage Management)
 ```
 Get: 3 episodes, Keep: 1 episode
-Grace: null, Dormant: null
+Grace: all null, Dormant: null
 ```
 **Result**: Episode management when you watch, no automatic cleanup
 
 ### Storage Only (No Viewing Automation)
 ```
 Get: null, Keep: null
-Grace: null, Dormant: 60 days
+Grace: all null, Dormant: 60 days
 ```
 **Result**: Only storage cleanup, no viewing automation
 
-### Complete Automation
-```
-Get: 3 episodes, Keep: 2 episodes
-Grace: 7 days, Dormant: 60 days
-```
-**Result**: Full automation with viewing and storage management
 
----
+### Key Insights
+- **Multiple timers run independently** - each serves a different purpose
+- **Buffer protects against mistakes** - short-term safety net
+- **Watched manages your collection** - medium-term rotation
+- **Unwatched creates pressure** - forces you to stay current  
+- **Dormant handles abandonment** - long-term space reclamation
 
-## Rule Examples
-
-### Next Episode Ready (No Cleanup)
-```
-Get: 1 episode
-Keep: 1 episode  
-Grace: null (keep forever)
-Dormant: null (never cleanup)
-```
-**Perfect for**: Shows you're actively watching without storage pressure
-
-### Binge Ready (Light Cleanup)
-```
-Get: 5 episodes
-Keep: 2 episodes
-Grace: 7 days  
-Dormant: 60 days
-```
-**Perfect for**: Popular shows you binge watch
-
-### Season Collector (Archive Mode)
-```
-Get: 1 season
-Keep: all seasons
-Grace: null (keep forever)
-Dormant: null (never cleanup)
-```
-**Perfect for**: Shows you want to keep permanently
-
-### Storage Saver (Aggressive Cleanup)
-```
-Get: 1 episode
-Keep: 1 episode
-Grace: 1 day
-Dormant: 7 days
-```
-**Perfect for**: Limited storage, trying new shows
-
----
-
-## How the NEW Grace Logic Works
-
-### OLD (Confusing) Way:
-- Grace = Delete unwatched content after X days
-- Hard to understand and predict
-
-### NEW (Intuitive) Way:  
-- Grace = Keep watched content for X days after watching
-- Clear, predictable behavior
-
-### Example: Grace Period in Action
-**Rule**: Get 3, Keep 1, Grace 7 days
-
-```
-Day 1 - Watch E5:
-✅ Keep E5 (protected for 7 days)
-✅ Get E6, E7, E8 (next episodes)  
-✅ Delete E1-E4 (old episodes)
-
-Day 8 - Grace expires:
-✅ Delete E5 (grace period over)
-✅ Library now has: E6, E7, E8 (fresh unwatched)
-```
 
 ---
 
@@ -165,6 +150,17 @@ Day 8 - Grace expires:
 ### Example: Currently on S2E8 (Season 2 has 10 episodes)
 **Get 1 season**: Episodes S2E9, S2E10 + all of S3  
 **Keep 1 season**: Keep all of S2
+
+---
+
+## Migration from Single Grace
+
+If upgrading from v2.1 single grace system:
+- **Old grace_days** becomes **grace_buffer** automatically
+- **Add grace_watched/grace_unwatched** as desired
+- **No behavior change** unless you add new grace types
+
+This gives you the same safety as before, plus new options for more control.
 
 ---
 
