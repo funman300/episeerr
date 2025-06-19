@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  ocdarr-lite:
+  episeerr:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: episeerr
+    
     env_file:
       - .env
     volumes:
