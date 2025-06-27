@@ -1984,7 +1984,7 @@ def find_episodes_leaving_keep_block(all_episodes, keep_type, keep_count, last_w
             
             if last_watched_index is not None:
                 # Keep block: episodes_to_keep episodes ending with the one just watched
-                keep_start_index = max(0, last_watched_index - episodes_to_keep + 1)
+                keep_start_index = max(0, last_watched_index - keep_count + 1)
                 
                 # Episodes before the keep block are leaving
                 episodes_with_files = [ep for ep in sorted_episodes if ep.get('hasFile')]
@@ -2041,7 +2041,7 @@ def calculate_current_keep_block(all_episodes, keep_type, keep_count, last_watch
             
             if last_watched_index is not None:
                 # Keep block: episodes_to_keep episodes ending with the one just watched
-                keep_start_index = max(0, last_watched_index - episodes_to_keep + 1)
+                keep_start_index = max(0, last_watched_index - keep_count + 1)
                 
                 keep_block = []
                 for i in range(keep_start_index, last_watched_index + 1):

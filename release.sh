@@ -1,5 +1,5 @@
 #!/bin/bash
-# Combined build and release script for Episeerr with Beta Support
+# Combined build and release script for Episeerr with Beta Support and Buildx Cleanup
 # Get version from command line
 VERSION=${1}
 
@@ -13,10 +13,11 @@ if [ -z "$VERSION" ]; then
     echo "  ./release.sh 1.0.0-rc.1     (release candidate)"
     echo ""
     echo "This will:"
-    echo "  1. Create git commit and tag"
-    echo "  2. Push to GitHub"
-    echo "  3. Build multi-arch Docker image"
-    echo "  4. Push to Docker Hub"
+    echo "  1. Handle any merge conflicts automatically"
+    echo "  2. Create git commit and tag"
+    echo "  3. Push to GitHub"
+    echo "  4. Build multi-arch Docker image with cleanup"
+    echo "  5. Push to Docker Hub"
     echo "  Note: Beta/RC versions won't be tagged as 'latest'"
     exit 1
 fi
@@ -35,15 +36,60 @@ else
 fi
 echo "=================================================="
 
-# Step 1: Git operations
+# Step 1: Git operations with conflict handling
 echo ""
-echo "📝 Step 1: Git operations"
-echo "------------------------"
+echo "📝 Step 1: Git operations with conflict resolution"
+echo "-------------------------------------------------"
 
 # Check if we're in a git repository
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
     echo "❌ Error: Not in a git repository"
     exit 1
+fi
+
+# Handle potential conflicts by fetching and merging first
+echo "🔄 Fetching latest changes from GitHub..."
+git fetch origin
+
+# Get current branch
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$BRANCH" != "main" ]; then
+    echo "⚠️  Warning: You're on branch '$BRANCH'"
+    echo "   Consider switching to 'main' branch for releases"
+fi
+echo "Current branch: $BRANCH"
+
+# Try to merge any remote changes
+echo "🔀 Checking for remote changes..."
+if ! git merge origin/$BRANCH --no-edit; then
+    echo "⚠️  Merge conflicts detected!"
+    echo "📝 Auto-resolving common conflicts..."
+    
+    # Auto-resolve README conflicts by preferring local version
+    if git status --porcelain | grep -q "README.md"; then
+        echo "   - README.md conflict: using local version"
+        git checkout --ours README.md
+        git add README.md
+    fi
+    
+    # Auto-resolve VERSION conflicts by using the new version
+    if git status --porcelain | grep -q "VERSION"; then
+        echo "   - VERSION conflict: using new version ($VERSION)"
+        echo "$VERSION" > VERSION
+        git add VERSION
+    fi
+    
+    # Check if all conflicts are resolved
+    if git status --porcelain | grep -q "^UU\|^AA\|^DD"; then
+        echo "❌ Some conflicts still need manual resolution:"
+        git status --porcelain | grep "^UU\|^AA\|^DD"
+        echo "Please resolve manually and run the script again."
+        exit 1
+    fi
+    
+    # Complete the merge
+    git commit --no-edit -m "Auto-resolved merge conflicts for release $VERSION"
+    echo "✅ Conflicts resolved automatically"
 fi
 
 # Write version to VERSION file
@@ -59,14 +105,6 @@ if [ -f "episeerr.py" ]; then
         sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" episeerr.py
     fi
 fi
-
-# Get current branch, should be 'main' for Episeerr
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-if [ "$BRANCH" != "main" ]; then
-    echo "⚠️  Warning: You're on branch '$BRANCH'"
-    echo "   Consider switching to 'main' branch for releases"
-fi
-echo "Current branch: $BRANCH"
 
 # Add files
 echo "Adding files to git..."
@@ -116,14 +154,7 @@ if [ "$IS_PRERELEASE" = true ]; then
 - Flexible rule system for different show management strategies
 - Integration with Jellyseerr/Overseerr request workflows
 
-⚠️  Pre-release - recommended for testing environments only
-
-Testing Focus:
-- Episode selection workflow validation
-- Webhook processing accuracy (Tautulli/Jellyfin)
-- Rule automation with timer-based cleanup
-- Multi-season selection interface
-- Tag-based request processing"
+⚠️  Pre-release - recommended for testing environments only"
 else
     echo "Creating stable release tag v$VERSION..."
     git tag -a "v$VERSION" -m "Episeerr v$VERSION
@@ -139,56 +170,101 @@ Features:
 - Multi-architecture Docker support"
 fi
 
-# Push commits and tags with force
-echo "⚠️  Warning: Force pushing to GitHub. This will overwrite remote changes!"
-echo "Pushing to GitHub with --force..."
-if ! git push origin $BRANCH --force; then
-    echo "❌ Error: Failed to force push commits to $BRANCH. Check your network or permissions."
+# Push commits and tags (no more force!)
+echo "📤 Pushing to GitHub..."
+if ! git push origin $BRANCH; then
+    echo "❌ Error: Failed to push commits to $BRANCH. Check your network or permissions."
     exit 1
 fi
-if ! git push origin "v$VERSION" --force; then
-    echo "❌ Error: Failed to force push tag v$VERSION. Check your network or permissions."
+if ! git push origin "v$VERSION"; then
+    echo "❌ Error: Failed to push tag v$VERSION. Check your network or permissions."
     exit 1
 fi
 
 echo "✅ Git operations completed"
 
-# Step 2: Docker build and push
+# Step 2: Docker build and push with cleanup
 echo ""
-echo "🐳 Step 2: Docker build and push"
-echo "--------------------------------"
+echo "🐳 Step 2: Docker build and push with automatic cleanup"
+echo "------------------------------------------------------"
 
-# Set up buildx
-echo "Setting up Docker Buildx..."
-docker buildx create --name episeerr-builder --use || true
+# Create temporary builder with unique name
+BUILDER_NAME="episeerr-builder-$$"
+echo "🔧 Creating temporary buildx builder: $BUILDER_NAME"
+
+# Cleanup function
+cleanup_buildx() {
+    echo ""
+    echo "🧹 Cleaning up buildx environment..."
+    echo "Removing temporary builder: $BUILDER_NAME"
+    docker buildx rm $BUILDER_NAME 2>/dev/null || true
+    
+    # Clean up any orphaned buildx containers (your annoying ones!)
+    echo "Cleaning up orphaned buildx containers..."
+    docker container prune -f --filter "label=com.docker.compose.project=buildx" 2>/dev/null || true
+    
+    # Remove any containers with builder/buildkit in the name
+    echo "Removing any remaining builder containers..."
+    docker ps -aq --filter "name=builder" | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -aq --filter "name=buildkit" | xargs -r docker rm -f 2>/dev/null || true
+    
+    # Clean up buildx cache
+    echo "Pruning buildx cache..."
+    docker buildx prune -f 2>/dev/null || true
+    
+    echo "✅ Buildx cleanup completed - no more annoying containers!"
+}
+
+# Set trap for cleanup
+trap cleanup_buildx EXIT INT TERM
+
+# Create temporary builder
+if ! docker buildx create --name $BUILDER_NAME --use; then
+    echo "❌ Failed to create buildx builder"
+    exit 1
+fi
 
 # Ensure the builder is running
-docker buildx inspect episeerr-builder --bootstrap
+echo "Bootstrapping builder..."
+if ! docker buildx inspect $BUILDER_NAME --bootstrap; then
+    echo "❌ Failed to bootstrap builder"
+    exit 1
+fi
 
 # Build with different tagging strategy based on release type
 if [ "$IS_PRERELEASE" = true ]; then
     echo "Building Episeerr pre-release multi-arch image (no 'latest' tag)..."
-    docker buildx build \
+    if docker buildx build \
+      --builder $BUILDER_NAME \
       --platform linux/amd64,linux/arm64,linux/arm/v7 \
       -t vansmak/episeerr:$VERSION \
       --push \
-      .
-    
-    echo "🧪 Pre-release image built and pushed:"
-    echo "  - vansmak/episeerr:$VERSION"
-    echo "  - NOT tagged as 'latest' (pre-release)"
+      .; then
+        
+        echo "🧪 Pre-release image built and pushed:"
+        echo "  - vansmak/episeerr:$VERSION"
+        echo "  - NOT tagged as 'latest' (pre-release)"
+    else
+        echo "❌ Docker build failed!"
+        exit 1
+    fi
 else
     echo "Building Episeerr stable multi-arch image..."
-    docker buildx build \
+    if docker buildx build \
+      --builder $BUILDER_NAME \
       --platform linux/amd64,linux/arm64,linux/arm/v7 \
       -t vansmak/episeerr:$VERSION \
       -t vansmak/episeerr:latest \
       --push \
-      .
-    
-    echo "✅ Stable release images built and pushed:"
-    echo "  - vansmak/episeerr:$VERSION"
-    echo "  - vansmak/episeerr:latest"
+      .; then
+        
+        echo "✅ Stable release images built and pushed:"
+        echo "  - vansmak/episeerr:$VERSION"
+        echo "  - vansmak/episeerr:latest"
+    else
+        echo "❌ Docker build failed!"
+        exit 1
+    fi
 fi
 
 echo "✅ Docker operations completed"
@@ -238,9 +314,5 @@ else
 fi
 
 echo ""
-echo "🎯 Episeerr Features Released:"
-echo "  - Episode selection system (granular control)"
-echo "  - Viewing-based automation (webhook-driven)"
-echo "  - Time-based cleanup (grace + dormant timers)"
-echo "  - Rule-based management (flexible automation)"
-echo "  - Multi-platform support (amd64, arm64, arm/v7)"
+echo "🧹 Buildx cleanup will complete automatically..."
+# Cleanup happens via trap
