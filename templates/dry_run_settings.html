@@ -57,11 +57,14 @@
                                     </div>
                                 </div>
                                 <div class="col-md-4">
-                                    {% if rule_details.grace_days or rule_details.dormant_days %}
+                                    {% if rule_details.grace_watched or rule_details.grace_unwatched or rule_details.dormant_days %}
                                         <small class="text-info">
                                             <i class="fas fa-clock me-1"></i>Time-based cleanup enabled
-                                            {% if rule_details.grace_days %}
-                                                <br>Grace Period: {{ rule_details.grace_days }} days
+                                            {% if rule_details.grace_watched %}
+                                                <br>Grace Watched: {{ rule_details.grace_watched }} days
+                                            {% endif %}
+                                            {% if rule_details.grace_unwatched %}
+                                                <br>Grace Unwatched: {{ rule_details.grace_unwatched }} days
                                             {% endif %}
                                             {% if rule_details.dormant_days %}
                                                 <br>Dormant Timer: {{ rule_details.dormant_days }} days

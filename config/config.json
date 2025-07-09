@@ -8,9 +8,9 @@
             "keep_count": 1,
             "action_option": "search",
             "monitor_watched": false,
-            "grace_watched": null,
-            "grace_unwatched": null,
-            "dormant_days": null,
+            "grace_watched": 1,
+            "grace_unwatched": 1,
+            "dormant_days": 7,
             "dry_run": false,
             "series": {
                 "90": {
@@ -94,6 +94,9 @@
                 "243": {
                     "activity_date": null
                 },
+                "480": {
+                    "activity_date": null
+                },
                 "29": {
                     "activity_date": null
                 },
@@ -134,7 +137,7 @@
                     "activity_date": null
                 },
                 "477": {
-                    "activity_date": 1751043408
+                    "activity_date": null
                 },
                 "7": {
                     "activity_date": null
@@ -170,7 +173,7 @@
                     "activity_date": null
                 },
                 "101": {
-                    "activity_date": 1751043541
+                    "activity_date": null
                 },
                 "11": {
                     "activity_date": null
@@ -199,6 +202,9 @@
                 "60": {
                     "activity_date": null
                 },
+                "481": {
+                    "activity_date": null
+                },
                 "385": {
                     "activity_date": null
                 }
@@ -216,6 +222,19 @@
             "dormant_days": null,
             "dry_run": false,
             "series": {}
+        },
+        "test0keep": {
+            "get_type": "episodes",
+            "get_count": 1,
+            "keep_type": "episodes",
+            "keep_count": 1,
+            "action_option": "monitor",
+            "monitor_watched": false,
+            "grace_watched": 2,
+            "grace_unwatched": 1,
+            "dormant_days": null,
+            "series": {},
+            "dry_run": true
         }
     },
     "field_migration_complete": true,

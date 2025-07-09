@@ -1,4 +1,4 @@
-__version__ = "2.3.1"
+__version__ = "2.3.2"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -22,8 +22,6 @@ from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID
 
 app = Flask(__name__)
 
-
-
 # Load environment variables
 load_dotenv()
 BASE_DIR = os.getcwd()
@@ -41,15 +39,11 @@ SEERR_ENABLED = bool((JELLYSEERR_URL and JELLYSEERR_API_KEY) or (OVERSEERR_URL a
 
 # TMDB API Key
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
-app.config['TMDB_API_KEY'] = TMDB_API_KEY  # Store in app.config
-# Log TMDB API key status at startup
+app.config['TMDB_API_KEY'] = TMDB_API_KEY
 if app.config['TMDB_API_KEY']:
     app.logger.info("TMDB_API_KEY is set - request system will function normally")
 else:
     app.logger.warning("TMDB_API_KEY is missing - you may encounter issues fetching series details and seasons")
-
-# Global variable to track pending requests from Jellyseerr/Overseerr
-jellyseerr_pending_requests = {}
 
 # Request storage
 REQUESTS_DIR = os.path.join(os.getcwd(), 'data', 'requests')
@@ -87,7 +81,6 @@ app.logger.addHandler(stream_handler)
 
 # Configuration management
 config_path = os.path.join(app.root_path, 'config', 'config.json')
-
 
 def get_tmdb_endpoint(endpoint, params=None):
     """Make a request to any TMDB endpoint with the given parameters."""
@@ -179,16 +172,23 @@ class OCDarrScheduler:
     def _run_cleanup(self):
         try:
             import servertosonarr
-            # Use the new global storage gate cleanup
-            servertosonarr.run_global_storage_gate_cleanup()
-            print("✓ Scheduled global storage gate cleanup completed")
+            # Use subprocess to run the unified cleanup
+            result = subprocess.run(["python3", os.path.join(os.getcwd(), "servertosonarr.py")], capture_output=True, text=True)
+            
+            if result.stderr:
+                print(f"Cleanup errors: {result.stderr}")
+            
+            print("✓ Scheduled cleanup completed (unified 3-function cleanup)")
+            return result
+            
         except Exception as e:
             print(f"Cleanup failed: {str(e)}")
-    
+            return None
+
     def force_cleanup(self):
         cleanup_thread = threading.Thread(target=self._run_cleanup, daemon=True)
         cleanup_thread.start()
-        return "Global storage gate cleanup started"
+        return "Unified cleanup started"
     
     def get_status(self):
         if not self.running:
@@ -207,62 +207,7 @@ class OCDarrScheduler:
             "last_cleanup": datetime.fromtimestamp(self.last_cleanup).strftime("%Y-%m-%d %H:%M:%S") if self.last_cleanup else "Never",
             "next_cleanup": next_cleanup
         }
-# Add this route to your episeerr.py
 
-@app.route('/api/series-with-titles')
-def get_series_with_titles():
-    """Get series list with titles and rule assignments for dropdowns."""
-    try:
-        config = load_config()
-        all_series = get_sonarr_series()
-        
-        # Build assignment mapping
-        assignments = {}
-        for rule_name, details in config['rules'].items():
-            series_dict = details.get('series', {})
-            for series_id in series_dict.keys():
-                assignments[str(series_id)] = rule_name
-        
-        # Format for dropdown
-        series_list = []
-        for series in all_series:
-            series_id = str(series['id'])
-            rule_name = assignments.get(series_id, 'Unassigned')
-            
-            # Add time-based cleanup info if assigned to a rule
-            cleanup_info = ""
-            if rule_name != 'Unassigned' and rule_name in config['rules']:
-                rule = config['rules'][rule_name]
-                grace_days = rule.get('grace_days')
-                dormant_days = rule.get('dormant_days')
-                
-                if grace_days or dormant_days:
-                    cleanup_parts = []
-                    if grace_days:
-                        cleanup_parts.append(f"Grace: {grace_days}d")
-                    if dormant_days:
-                        cleanup_parts.append(f"Dormant: {dormant_days}d")
-                    cleanup_info = f" ({', '.join(cleanup_parts)})"
-            
-            series_list.append({
-                'id': series_id,
-                'title': series['title'],
-                'rule': rule_name,
-                'display_text': f"{series['title']} - Rule: {rule_name}{cleanup_info}"
-            })
-        
-        # Sort by title
-        series_list.sort(key=lambda x: x['title'].lower())
-        
-        return jsonify({
-            'status': 'success',
-            'series': series_list,
-            'count': len(series_list)
-        })
-        
-    except Exception as e:
-        app.logger.error(f"Error getting series with titles: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
 # Cleanup Logging
 def setup_cleanup_logging():
     LOG_PATH = os.getenv('LOG_PATH', '/app/logs/app.log')
@@ -302,177 +247,54 @@ def setup_cleanup_logging():
 
 cleanup_logger = setup_cleanup_logging()
 
-def load_config_with_migration(config_path):
-    if not os.path.exists(config_path):
-        default_config = {
-            "rules": {
-                "default": {
-                    "get_option": "1",
-                    "action_option": "search",
-                    "keep_watched": "1",
-                    "monitor_watched": False,
-                    "grace_watched": None,      # FIXED: Removed grace_buffer
-                    "grace_unwatched": None,
-                    "dormant_days": None,
-                    "series": {},
-                    "dry_run": False
-                }
-            },
-            "default_rule": "default",
-            "field_migration_complete": True,
-            "series_migration_complete": True,
-            "multi_grace_migration_complete": True,
-            "grace_simplified_migration_complete": True  # ADDED: Mark as complete
-        }
-        os.makedirs(os.path.dirname(config_path), exist_ok=True)
-        with open(config_path, 'w') as f:
-            json.dump(default_config, f, indent=4)
-        return default_config
-    return migrate_config_complete(config_path)
-
-
-def migrate_config_complete(config_path):
-    """UPDATED: Existing migration + grace buffer removal."""
-    try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-        
-        if (config.get('field_migration_complete') and 
-            config.get('series_migration_complete') and 
-            config.get('multi_grace_migration_complete') and
-            config.get('grace_simplified_migration_complete')):
-            print("✅ Config already fully migrated")
-            return config
-        
-        backup_path = config_path + f'.backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
-        shutil.copy2(config_path, backup_path)
-        print(f"📁 Created backup: {backup_path}")
-        
-        field_migrations = 0
-        series_migrations = 0
-        grace_migrations = 0
-        buffer_removals = 0
-        
-        for rule_name, rule in config.get('rules', {}).items():
-            print(f"\n🔄 Migrating rule: {rule_name}")
-            
-            # Existing legacy field migrations
-            if 'keep_watched_days' in rule:
-                rule['grace_days'] = rule.pop('keep_watched_days')
-                field_migrations += 1
-                print(f"  ✓ Migrated keep_watched_days → grace_days")
-            if 'keep_unwatched_days' in rule:
-                rule['dormant_days'] = rule.pop('keep_unwatched_days')
-                field_migrations += 1
-                print(f"  ✓ Migrated keep_unwatched_days → dormant_days")
-            
-            # SIMPLIFIED: Direct migration grace_days → grace_watched
-            if 'grace_days' in rule and not any(['grace_buffer' in rule, 'grace_watched' in rule, 'grace_unwatched' in rule]):
-                old_grace = rule.pop('grace_days')
-                rule['grace_watched'] = old_grace if old_grace else None
-                if old_grace:
-                    grace_migrations += 1
-                    print(f"  ✓ Migrated grace_days ({old_grace}) → grace_watched")
-            
-            # Remove any existing grace_buffer (simplified system)
-            if 'grace_buffer' in rule:
-                grace_buffer = rule.pop('grace_buffer')
-                if grace_buffer:
-                    # Add buffer to grace_watched
-                    current_grace_watched = rule.get('grace_watched', 0) or 0
-                    rule['grace_watched'] = current_grace_watched + grace_buffer
-                    print(f"  ✓ Removed grace_buffer ({grace_buffer}), added to grace_watched → {rule['grace_watched']}")
-                else:
-                    print(f"  ✓ Removed empty grace_buffer")
-                buffer_removals += 1
-            
-            # Ensure all remaining grace fields exist (no grace_buffer)
-            for field in ['grace_watched', 'grace_unwatched', 'dormant_days']:
-                if field not in rule:
-                    rule[field] = None
-            
-            # Existing series structure migration
-            if 'series' in rule and isinstance(rule['series'], list):
-                old_series = rule['series']
-                new_series = {str(series_id): {'activity_date': None} for series_id in old_series}
-                rule['series'] = new_series
-                series_migrations += 1
-                print(f"  ✓ Migrated {len(old_series)} series from array to dict format")
-            
-            if 'dry_run' not in rule:
-                rule['dry_run'] = False
-                print(f"  ✓ Added dry_run field (default: False)")
-        
-        # Mark all migrations complete
-        config['field_migration_complete'] = True
-        config['series_migration_complete'] = True
-        config['multi_grace_migration_complete'] = True
-        config['grace_simplified_migration_complete'] = True
-        
-        with open(config_path, 'w') as f:
-            json.dump(config, f, indent=4)
-        
-        print(f"\n✅ Migration complete!")
-        print(f"   - Field migrations: {field_migrations}")
-        print(f"   - Series structure migrations: {series_migrations}")
-        print(f"   - Grace migrations: {grace_migrations}")
-        print(f"   - Grace buffer removals: {buffer_removals}")
-        print(f"   - Backup saved to: {backup_path}")
-        
-        return config
-        
-    except Exception as e:
-        print(f"❌ Migration failed: {str(e)}")
-        raise
+# ============================================================================
+# SIMPLIFIED CONFIG MANAGEMENT
+# ============================================================================
 
 def load_config():
+    """Load configuration with simplified migration."""
     try:
         with open(config_path, 'r') as file:
             config = json.load(file)
         if 'rules' not in config:
             config['rules'] = {}
-        config = migrate_config_complete(config_path)
         return config
     except FileNotFoundError:
         default_config = {
             'rules': {
-                'full_seasons': {
-                    'get_option': 'season',
-                    'action_option': 'monitor',
-                    'keep_watched': 'season',
+                'default': {
+                    'get_type': 'episodes',
+                    'get_count': 1,
+                    'keep_type': 'episodes', 
+                    'keep_count': 1,
+                    'action_option': 'search',
                     'monitor_watched': False,
-                    'grace_days': None,
+                    'grace_watched': None,
+                    'grace_unwatched': None,
                     'dormant_days': None,
                     'series': {},
                     'dry_run': False
                 }
             },
-            'default_rule': 'full_seasons',
-            'field_migration_complete': True,
-            'series_migration_complete': True
+            'default_rule': 'default'
         }
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         save_config(default_config)
         return default_config
 
 def save_config(config):
-    config_path = os.path.join(os.getcwd(), 'config', 'config.json')
-    print(f"DEBUG: save_config called")
-    print(f"DEBUG: config_path = {config_path}")
-    print(f"DEBUG: Config to save: {json.dumps(config, indent=2)}")
+    """Save configuration to JSON file."""
     try:
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         with open(config_path, 'w') as file:
             json.dump(config, file, indent=4)
-        print(f"DEBUG: Config saved successfully to {config_path}")
-        with open(config_path, 'r') as file:
-            saved_config = json.load(file)
-        print(f"DEBUG: Verified save - dry_run status: {saved_config.get('rules', {}).get('nukeafter90days', {}).get('dry_run', 'NOT_FOUND')}")
+        app.logger.debug("Config saved successfully")
     except Exception as e:
-        print(f"DEBUG: Save failed: {str(e)}")
+        app.logger.error(f"Save failed: {str(e)}")
         raise
 
 def get_sonarr_series():
+    """Get series list from Sonarr."""
     try:
         sonarr_preferences = sonarr_utils.load_preferences()
         headers = {
@@ -490,9 +312,13 @@ def get_sonarr_series():
         app.logger.error(f"Error fetching Sonarr series: {str(e)}")
         return []
 
-# Web UI Routes
+# ============================================================================
+# WEB UI ROUTES
+# ============================================================================
+
 @app.route('/')
 def index():
+    """Main rules management page."""
     config = load_config()
     all_series = get_sonarr_series()
     rules_mapping = {}
@@ -506,84 +332,11 @@ def index():
     return render_template('rules_index.html', 
                          config=config,
                          all_series=all_series,
-                         current_rule=request.args.get('rule', list(config['rules'].keys())[0] if config['rules'] else 'full_seasons'))
-
-# =============================================================================
-# ADD THESE NEW HELPER FUNCTIONS (completely new)
-# =============================================================================
-
-def convert_to_legacy_format(type_val, count_val):
-    """Convert new dropdown format to legacy string format for backward compatibility."""
-    if type_val == 'all':
-        return 'all'
-    elif type_val == 'seasons':
-        return 'season' if count_val == 1 else str(count_val)
-    else:  # episodes
-        return str(count_val) if count_val else '1'
-
-def convert_legacy_to_new_format(rule):
-    """Convert legacy rule format to new dropdown format for display."""
-    rule_copy = rule.copy()
-    
-    # Only convert if new format doesn't exist
-    if 'get_type' not in rule_copy:
-        get_option = rule.get('get_option', '1')
-        keep_watched = rule.get('keep_watched', '1')
-        
-        # Convert get_option
-        rule_copy['get_type'], rule_copy['get_count'] = parse_legacy_value(get_option)
-        
-        # Convert keep_watched
-        rule_copy['keep_type'], rule_copy['keep_count'] = parse_legacy_value(keep_watched)
-    
-    return rule_copy
-
-def parse_legacy_value(value):
-    """Parse legacy string value to new format."""
-    if value == 'all':
-        return 'all', None
-    elif value == 'season':
-        return 'seasons', 1
-    else:
-        try:
-            count = int(value)
-            return 'episodes', count
-        except (ValueError, TypeError):
-            return 'episodes', 1
-
-def migrate_rules_to_new_format():
-    """Migrate existing rules from legacy format to new format."""
-    try:
-        config = load_config()
-        migrated_count = 0
-        
-        for rule_name, rule in config['rules'].items():
-            # Skip if already migrated
-            if 'get_type' in rule:
-                continue
-                
-            # Convert legacy fields to new format
-            get_option = rule.get('get_option', '1')
-            keep_watched = rule.get('keep_watched', '1')
-            
-            rule['get_type'], rule['get_count'] = parse_legacy_value(get_option)
-            rule['keep_type'], rule['keep_count'] = parse_legacy_value(keep_watched)
-            
-            migrated_count += 1
-            app.logger.info(f"Migrated rule '{rule_name}' to new dropdown format")
-        
-        if migrated_count > 0:
-            save_config(config)
-            app.logger.info(f"Migration completed: {migrated_count} rules migrated to new format")
-            
-    except Exception as e:
-        app.logger.error(f"Error during rule migration: {str(e)}")
-
-# CLEAN IMPLEMENTATION - No more conversion functions
-# Just implement the new dropdown logic directly
+                         current_rule=request.args.get('rule', list(config['rules'].keys())[0] if config['rules'] else 'default'))
 
 @app.route('/create-rule', methods=['GET', 'POST'])
 def create_rule():
+    """Create a new rule."""
     if request.method == 'POST':
         config = load_config()
         rule_name = request.form.get('rule_name', '').strip()
@@ -602,18 +355,16 @@ def create_rule():
         get_count = None if get_type == 'all' else int(get_count) if get_count else 1
         keep_count = None if keep_type == 'all' else int(keep_count) if keep_count else 1
         
-        # Parse multi-grace fields
-        grace_buffer = request.form.get('grace_buffer', '').strip()
+        # Parse grace fields
         grace_watched = request.form.get('grace_watched', '').strip()
         grace_unwatched = request.form.get('grace_unwatched', '').strip()
         dormant_days = request.form.get('dormant_days', '').strip()
         
-        grace_buffer = None if not grace_buffer else int(grace_buffer)
         grace_watched = None if not grace_watched else int(grace_watched)
         grace_unwatched = None if not grace_unwatched else int(grace_unwatched)
         dormant_days = None if not dormant_days else int(dormant_days)
         
-        # Save rule in new format
+        # Save rule
         config['rules'][rule_name] = {
             'get_type': get_type,
             'get_count': get_count,
@@ -621,7 +372,6 @@ def create_rule():
             'keep_count': keep_count,
             'action_option': request.form.get('action_option', 'monitor'),
             'monitor_watched': 'monitor_watched' in request.form,
-            'grace_buffer': grace_buffer,
             'grace_watched': grace_watched,
             'grace_unwatched': grace_unwatched,
             'dormant_days': dormant_days,
@@ -635,6 +385,7 @@ def create_rule():
 
 @app.route('/edit-rule/<rule_name>', methods=['GET', 'POST'])
 def edit_rule(rule_name):
+    """Edit an existing rule."""
     config = load_config()
     if rule_name not in config['rules']:
         return redirect(url_for('index', message=f"Rule '{rule_name}' not found"))
@@ -650,18 +401,16 @@ def edit_rule(rule_name):
         get_count = None if get_type == 'all' else int(get_count) if get_count else 1
         keep_count = None if keep_type == 'all' else int(keep_count) if keep_count else 1
         
-        # Parse multi-grace fields
-        grace_buffer = request.form.get('grace_buffer', '').strip()
+        # Parse grace fields
         grace_watched = request.form.get('grace_watched', '').strip()
         grace_unwatched = request.form.get('grace_unwatched', '').strip()
         dormant_days = request.form.get('dormant_days', '').strip()
         
-        grace_buffer = None if not grace_buffer else int(grace_buffer)
         grace_watched = None if not grace_watched else int(grace_watched)
         grace_unwatched = None if not grace_unwatched else int(grace_unwatched)
         dormant_days = None if not dormant_days else int(dormant_days)
         
-        # Update rule in new format
+        # Update rule
         config['rules'][rule_name].update({
             'get_type': get_type,
             'get_count': get_count,
@@ -669,7 +418,6 @@ def edit_rule(rule_name):
             'keep_count': keep_count,
             'action_option': request.form.get('action_option', 'monitor'),
             'monitor_watched': 'monitor_watched' in request.form,
-            'grace_buffer': grace_buffer,
             'grace_watched': grace_watched,
             'grace_unwatched': grace_unwatched,
             'dormant_days': dormant_days
@@ -681,59 +429,9 @@ def edit_rule(rule_name):
     rule = config['rules'][rule_name]
     return render_template('edit_rule.html', rule_name=rule_name, rule=rule)
 
-def migrate_old_rules():
-    """One-time migration from old format to new format."""
-    try:
-        config = load_config()
-        migrated = 0
-        
-        for rule_name, rule in config['rules'].items():
-            if 'get_type' in rule:
-                continue  # Already migrated
-                
-            # Migrate get_option
-            get_option = rule.get('get_option', '1')
-            if get_option == 'all':
-                rule['get_type'] = 'all'
-                rule['get_count'] = None
-            elif get_option == 'season':
-                rule['get_type'] = 'seasons'
-                rule['get_count'] = 1
-            else:
-                rule['get_type'] = 'episodes'
-                rule['get_count'] = int(get_option) if get_option.isdigit() else 1
-            
-            # Migrate keep_watched
-            keep_watched = rule.get('keep_watched', '1')
-            if keep_watched == 'all':
-                rule['keep_type'] = 'all'
-                rule['keep_count'] = None
-            elif keep_watched == 'season':
-                rule['keep_type'] = 'seasons'
-                rule['keep_count'] = 1
-            else:
-                rule['keep_type'] = 'episodes'
-                rule['keep_count'] = int(keep_watched) if keep_watched.isdigit() else 1
-            
-            # Remove old fields
-            rule.pop('get_option', None)
-            rule.pop('keep_watched', None)
-            migrated += 1
-        
-        if migrated > 0:
-            save_config(config)
-            app.logger.info(f"Migrated {migrated} rules to new format")
-            
-    except Exception as e:
-        app.logger.error(f"Migration error: {str(e)}")
-
-# Simple startup initialization
-def initialize_new_format():
-    """Initialize new format features."""
-    migrate_legacy_rules_once()
-    app.logger.info("✓ New dropdown format initialization completed")
 @app.route('/delete-rule/<rule_name>', methods=['POST'])
 def delete_rule(rule_name):
+    """Delete a rule."""
     config = load_config()
     if rule_name not in config['rules']:
         return redirect(url_for('index', message=f"Rule '{rule_name}' not found"))
@@ -745,37 +443,62 @@ def delete_rule(rule_name):
 
 @app.route('/assign-rules', methods=['POST'])
 def assign_rules():
+    """Assign series to rules while preserving activity data."""
     config = load_config()
     rule_name = request.form.get('rule_name')
     series_ids = request.form.getlist('series_ids')
     if not rule_name or rule_name not in config['rules']:
         return redirect(url_for('index', message="Invalid rule selected"))
+    
+    # STEP 1: Collect existing activity data BEFORE removing
+    existing_activity = {}
+    for series_id in series_ids:
+        for rule, details in config['rules'].items():
+            series_dict = details.get('series', {})
+            if series_id in series_dict and isinstance(series_dict[series_id], dict):
+                # Preserve the complete activity data
+                existing_activity[series_id] = series_dict[series_id].copy()
+                break
+    
+    # STEP 2: Remove from old rules
     for rule, details in config['rules'].items():
         series_dict = details.get('series', {})
         for series_id in series_ids:
             if series_id in series_dict:
                 del series_dict[series_id]
+    
+    # STEP 3: Add to new rule WITH preserved activity data
     target_series_dict = config['rules'][rule_name].get('series', {})
+    preserved_count = 0
     for series_id in series_ids:
-        target_series_dict[series_id] = {'activity_date': None}
+        if series_id in existing_activity:
+            target_series_dict[series_id] = existing_activity[series_id]  # Preserve complete data!
+            preserved_count += 1
+        else:
+            target_series_dict[series_id] = {'activity_date': None}  # New series
+    
     save_config(config)
-    return redirect(url_for('index', message=f"Assigned {len(series_ids)} series to rule '{rule_name}'"))
+    
+    message = f"Assigned {len(series_ids)} series to rule '{rule_name}'"
+    if preserved_count > 0:
+        message += f" (preserved activity data for {preserved_count} series)"
+    
+    return redirect(url_for('index', message=message))
 
 @app.route('/set-default-rule', methods=['POST'])
 def set_default_rule():
+    """Set the default rule."""
     config = load_config()
     rule_name = request.form.get('rule_name')
     if rule_name not in config['rules']:
         return redirect(url_for('index', message="Invalid rule selected"))
     config['default_rule'] = rule_name
     save_config(config)
-    assigned_series = config['rules'][rule_name].get('series', {})
-    for series_id in assigned_series:
-        track_rule_assignment(series_id, rule_name)
-    return redirect(url_for('index', message=f"Set '{rule_name}' as default rule and tracked assignment dates"))
+    return redirect(url_for('index', message=f"Set '{rule_name}' as default rule"))
 
 @app.route('/unassign-series', methods=['POST'])
 def unassign_series():
+    """Unassign series from all rules."""
     config = load_config()
     series_ids = request.form.getlist('series_ids')
     total_removed = 0
@@ -789,8 +512,71 @@ def unassign_series():
     save_config(config)
     return redirect(url_for('index', message=f"Unassigned {len(series_ids)} series from all rules"))
 
+# ============================================================================
+# API ROUTES
+# ============================================================================
+
+@app.route('/api/series-with-titles')
+def get_series_with_titles():
+    """Get series list with titles and rule assignments for dropdowns."""
+    try:
+        config = load_config()
+        all_series = get_sonarr_series()
+        
+        # Build assignment mapping
+        assignments = {}
+        for rule_name, details in config['rules'].items():
+            series_dict = details.get('series', {})
+            for series_id in series_dict.keys():
+                assignments[str(series_id)] = rule_name
+        
+        # Format for dropdown
+        series_list = []
+        for series in all_series:
+            series_id = str(series['id'])
+            rule_name = assignments.get(series_id, 'Unassigned')
+            
+            # Add time-based cleanup info if assigned to a rule
+            cleanup_info = ""
+            if rule_name != 'Unassigned' and rule_name in config['rules']:
+                rule = config['rules'][rule_name]
+                grace_watched = rule.get('grace_watched')
+                grace_unwatched = rule.get('grace_unwatched')
+                dormant_days = rule.get('dormant_days')
+                
+                if grace_watched or grace_unwatched or dormant_days:
+                    cleanup_parts = []
+                    if grace_watched:
+                        cleanup_parts.append(f"GW: {grace_watched}d")
+                    if grace_unwatched:
+                        cleanup_parts.append(f"GU: {grace_unwatched}d")
+                    if dormant_days:
+                        cleanup_parts.append(f"Dormant: {dormant_days}d")
+                    cleanup_info = f" ({', '.join(cleanup_parts)})"
+            
+            series_list.append({
+                'id': series_id,
+                'title': series['title'],
+                'rule': rule_name,
+                'display_text': f"{series['title']} - Rule: {rule_name}{cleanup_info}"
+            })
+        
+        # Sort by title
+        series_list.sort(key=lambda x: x['title'].lower())
+        
+        return jsonify({
+            'status': 'success',
+            'series': series_list,
+            'count': len(series_list)
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error getting series with titles: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/recent-activity')
 def get_recent_activity():
+    """Get recent activity (simplified version)."""
     try:
         return jsonify({
             "recentDownloads": [],
@@ -805,6 +591,7 @@ def get_recent_activity():
 
 @app.route('/api/series-stats')
 def series_stats():
+    """Get series statistics."""
     try:
         config = load_config()
         all_series = get_sonarr_series()
@@ -827,6 +614,7 @@ def series_stats():
         return jsonify({'error': str(e)}), 500
 
 def cleanup_config_rules():
+    """Clean up config by removing non-existent series."""
     try:
         config = load_config()
         existing_series = get_sonarr_series()
@@ -844,7 +632,7 @@ def cleanup_config_rules():
                 changes_made = True
         config['rules'] = {
             rule: details for rule, details in config['rules'].items()
-            if details.get('series') or rule == config.get('default_rule', 'full_seasons')
+            if details.get('series') or rule == config.get('default_rule', 'default')
         }
         if changes_made:
             save_config(config)
@@ -854,21 +642,29 @@ def cleanup_config_rules():
 
 @app.route('/cleanup')
 def cleanup():
+    """Clean up configuration."""
     cleanup_config_rules()
     return redirect(url_for('index', message="Configuration cleaned up successfully"))
 
+# ============================================================================
+# SCHEDULER & SETTINGS ROUTES
+# ============================================================================
+
 @app.route('/scheduler')
 def scheduler_admin():
+    """Scheduler administration page."""
     return render_template('scheduler_admin.html')
 
 @app.route('/api/scheduler-status')
 def scheduler_status():
+    """Get scheduler status."""
     try:
         if 'cleanup_scheduler' not in globals():
             return jsonify({"status": "error", "message": "Scheduler not initialized"}), 500
         return jsonify(cleanup_scheduler.get_status())
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/global-settings')
 def get_global_settings():
     """Get global settings including storage gate."""
@@ -970,7 +766,7 @@ def scheduler_status_global():
         }
         
         for rule_name, rule in config['rules'].items():
-            has_cleanup = rule.get('grace_days') or rule.get('dormant_days')
+            has_cleanup = rule.get('grace_watched') or rule.get('grace_unwatched') or rule.get('dormant_days')
             if has_cleanup:
                 rule_summary["cleanup_rules"] += 1
             else:
@@ -984,6 +780,7 @@ def scheduler_status_global():
 
 @app.route('/api/force-cleanup', methods=['POST'])
 def force_cleanup():
+    """Force cleanup manually."""
     try:
         print("Manual cleanup requested via API")
         result = cleanup_scheduler.force_cleanup()
@@ -993,181 +790,133 @@ def force_cleanup():
         print(f"Failed to start manual cleanup: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.errorhandler(404)
-def not_found(error):
-    return render_template('error.html', message="Page not found"), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return render_template('error.html', message="Internal server error"), 500
-
-@app.route('/api/recent-cleanup-activity')
-def recent_cleanup_activity():
-    return jsonify({
-        "recentCleanups": [],
-        "totalOperations": 0,
-        "status": "success"
-    })
-
-@app.route('/debug-series/<int:series_id>')
-def debug_series(series_id):
-    try:
-        from servertosonarr import load_activity_tracking, check_time_based_cleanup, load_config
-        config = load_config()
-        rule = None
-        rule_name = None
-        for r_name, r_details in config['rules'].items():
-            if str(series_id) in r_details.get('series', {}):
-                rule = r_details
-                rule_name = r_name
-                break
-        if not rule:
-            return jsonify({"error": f"Series {series_id} not found in any rule"})
-        activity_data = load_activity_tracking()
-        series_activity = activity_data.get(str(series_id), {})
-        should_cleanup, reason = check_time_based_cleanup(series_id, rule)
-        return jsonify({
-            "series_id": series_id,
-            "rule_name": rule_name,
-            "rule_config": rule,
-            "activity_data": series_activity,
-            "should_cleanup": should_cleanup,
-            "cleanup_reason": reason,
-            "current_time": int(time.time()),
-            "days_since_last_watch": (int(time.time()) - series_activity.get('last_watched', 0)) / (24*60*60) if series_activity.get('last_watched') else "Never watched"
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/test-cleanup/<int:series_id>')
-def test_cleanup(series_id):
+@app.route('/api/safety-status')
+def safety_status():
+    """Get dry run safety status."""
     try:
         config = load_config()
-        rule = None
-        rule_name = None
-        for r_name, r_details in config['rules'].items():
-            if str(series_id) in r_details.get('series', {}):
-                rule = r_details
-                rule_name = r_name
-                break
-        
-        if not rule:
-            return jsonify({"status": "error", "message": "Series not assigned to any rule"}), 404
-        
-        test_rule = rule.copy()
-        test_rule['dry_run'] = True
-        
-        # Use the correct function names
-        from servertosonarr import check_time_based_cleanup
-        
-        should_cleanup, reason = check_time_based_cleanup(series_id, test_rule)
-        
-        if should_cleanup:
-            # For testing, we don't actually run cleanup, just show what would happen
-            return jsonify({
-                "status": "success",
-                "message": f"Test completed: {reason}",
-                "would_cleanup": True,
-                "rule": rule_name,
-                "reason": reason
-            })
-        else:
-            return jsonify({
-                "status": "success", 
-                "message": f"No cleanup needed: {reason}",
-                "would_cleanup": False,
-                "rule": rule_name,
-                "reason": reason
-            })
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route('/add-test-activity/<int:series_id>', methods=['POST'])
-def add_test_activity(series_id):
-    try:
-        from servertosonarr import load_activity_tracking, save_activity_tracking
-        days_ago = int(request.form.get('days_ago', 16))
-        season = int(request.form.get('season', 1))
-        episode = int(request.form.get('episode', 1))
-        current_time = int(time.time())
-        watch_time = current_time - (days_ago * 24 * 60 * 60)
-        activity_data = load_activity_tracking()
-        activity_data[str(series_id)] = {
-            "last_watched": watch_time,
-            "last_updated": current_time,
-            "last_season": season,
-            "last_episode": episode
-        }
-        save_activity_tracking(activity_data)
+        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        rules_with_dry_run = []
+        for rule_name, rule_details in config.get('rules', {}).items():
+            if rule_details.get('dry_run', False):
+                rules_with_dry_run.append(rule_name.replace('_', ' ').title())
         return jsonify({
-            "status": "success",
-            "message": f"Added activity for series {series_id}: watched S{season}E{episode} {days_ago} days ago",
-            "watch_timestamp": watch_time,
-            "days_ago": days_ago
+            "global_dry_run": global_dry_run,
+            "rules_with_dry_run": rules_with_dry_run,
+            "total_rules": len(config.get('rules', {})),
+            "status": "success"
         })
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        current_app.logger.error(f"Error getting safety status: {str(e)}")
+        return jsonify({
+            "global_dry_run": False,
+            "rules_with_dry_run": [],
+            "total_rules": 0,
+            "status": "error",
+            "message": str(e)
+        }), 500
 
-def get_cleanup_summary():
+@app.route('/api/current-assignments')
+def get_current_assignments():
+    """Get current rule assignments for all series."""
     try:
-        CLEANUP_LOG_PATH = os.getenv('CLEANUP_LOG_PATH', '/app/logs/cleanup.log')
-        if not os.path.exists(CLEANUP_LOG_PATH):
-            return {"recent_cleanups": [], "total_operations": 0}
-        recent_cleanups = []
-        with open(CLEANUP_LOG_PATH, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-        for line in reversed(lines[-100:]):
-            if "CLEANUP COMPLETED" in line:
-                try:
-                    timestamp = line.split(' - ')[0]
-                    recent_cleanups.append({
-                        "timestamp": timestamp,
-                        "type": "Scheduled" if "Scheduled" in line else "Manual",
-                        "status": "completed"
-                    })
-                    if len(recent_cleanups) >= 5:
-                        break
-                except:
-                    continue
-        return {
-            "recent_cleanups": recent_cleanups,
-            "total_operations": len(recent_cleanups)
-        }
+        config = load_config()
+        all_series = get_sonarr_series()
+        
+        assignments = {}
+        
+        # Build assignment mapping
+        for rule_name, details in config['rules'].items():
+            series_dict = details.get('series', {})
+            for series_id in series_dict.keys():
+                assignments[str(series_id)] = rule_name
+        
+        # Add series without assignments
+        for series in all_series:
+            series_id = str(series['id'])
+            if series_id not in assignments:
+                assignments[series_id] = 'None'
+        
+        return jsonify(assignments)
+        
     except Exception as e:
-        cleanup_logger.error(f"Error getting cleanup summary: {str(e)}")
-        return {"recent_cleanups": [], "total_operations": 0, "error": str(e)}
+        app.logger.error(f"Error getting current assignments: {str(e)}")
+        return jsonify({}), 500
 
-def get_cleanup_summary_fallback():
+@app.route('/api/quick-stats')
+def get_quick_stats():
+    """Get quick stats for change detection."""
     try:
-        CLEANUP_LOG_PATH = os.getenv('CLEANUP_LOG_PATH', '/app/logs/cleanup.log')
-        if not os.path.exists(CLEANUP_LOG_PATH):
-            return {"recent_cleanups": [], "total_operations": 0}
-        recent_cleanups = []
-        with open(CLEANUP_LOG_PATH, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-        for line in reversed(lines[-50:]):
-            if "CLEANUP COMPLETED" in line:
-                try:
-                    timestamp = line.split(' - ')[0]
-                    recent_cleanups.append({
-                        "timestamp": timestamp,
-                        "type": "Scheduled" if "Scheduled" in line else "Manual",
-                        "status": "completed"
-                    })
-                    if len(recent_cleanups) >= 3:
-                        break
-                except:
-                    continue
-        return {
-            "recent_cleanups": recent_cleanups,
-            "total_operations": len(recent_cleanups)
+        config = load_config()
+        all_series = get_sonarr_series()
+        
+        # Count assigned series
+        assigned_count = 0
+        for rule_name, details in config['rules'].items():
+            assigned_count += len(details.get('series', {}))
+        
+        stats = {
+            'total_series': len(all_series),
+            'assigned_series': assigned_count,
+            'unassigned_series': len(all_series) - assigned_count,
+            'total_rules': len(config['rules']),
+            'timestamp': int(time.time())
         }
+        
+        return jsonify(stats)
+        
     except Exception as e:
-        current_app.logger.error(f"Error in cleanup summary fallback: {str(e)}")
-        return {"recent_cleanups": [], "total_operations": 0, "error": str(e)}
+        app.logger.error(f"Error getting quick stats: {str(e)}")
+        return jsonify({
+            'total_series': 0,
+            'assigned_series': 0,
+            'unassigned_series': 0,
+            'total_rules': 0,
+            'timestamp': int(time.time())
+        }), 500
+
+# ============================================================================
+# DRY RUN SETTINGS
+# ============================================================================
+
+@app.route('/dry-run-settings', methods=['GET', 'POST'])
+def dry_run_settings():
+    """Manage dry run settings."""
+    if request.method == 'POST':
+        try:
+            app.logger.info(f"Form data received: {dict(request.form)}")
+            config = load_config()
+            
+            for rule_name in config.get('rules', {}).keys():
+                rule_dry_run_key = f'rule_dry_run_{rule_name}'
+                rule_dry_run = rule_dry_run_key in request.form
+                app.logger.info(f"Setting {rule_name} dry_run to: {rule_dry_run}")
+                config['rules'][rule_name]['dry_run'] = rule_dry_run
+            
+            save_config(config)
+            app.logger.info("save_config() called")
+            
+            return redirect(url_for('scheduler_admin', message="Dry run settings saved successfully"))
+        except Exception as e:
+            current_app.logger.error(f"Error saving dry run settings: {str(e)}")
+            return redirect(url_for('scheduler_admin', message=f"Error saving settings: {str(e)}"))
+    try:
+        config = load_config()
+        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        return render_template('dry_run_settings.html',
+                             config=config,
+                             global_dry_run=global_dry_run)
+    except Exception as e:
+        current_app.logger.error(f"Error loading dry run settings: {str(e)}")
+        return redirect(url_for('scheduler_admin', message=f"Error loading settings: {str(e)}"))
+
+# ============================================================================
+# CLEANUP LOGS
+# ============================================================================
 
 @app.route('/cleanup-logs')
 def cleanup_logs():
+    """Display cleanup logs."""
     try:
         CLEANUP_LOG_PATH = os.getenv('CLEANUP_LOG_PATH', '/app/logs/cleanup.log')
         if not os.path.exists(CLEANUP_LOG_PATH):
@@ -1188,6 +937,7 @@ def cleanup_logs():
         return render_simple_logs_page(f"Error loading logs: {str(e)}")
 
 def render_simple_logs_page(logs_or_message):
+    """Render simple logs page fallback."""
     if isinstance(logs_or_message, str):
         content = f'<div class="alert alert-warning">{logs_or_message}</div>'
     else:
@@ -1242,96 +992,18 @@ def render_simple_logs_page(logs_or_message):
     '''
     return html
 
-@app.route('/dry-run-settings', methods=['GET', 'POST'])
-def dry_run_settings():
-    if request.method == 'POST':
-        try:
-            app.logger.info(f"Form data received: {dict(request.form)}")
-            config = load_config()
-            app.logger.info(f"Config before changes: {config['rules']['nukeafter90days'].get('dry_run', 'NOT_SET')}")
-            for rule_name in config.get('rules', {}).keys():
-                rule_dry_run_key = f'rule_dry_run_{rule_name}'
-                rule_dry_run = rule_dry_run_key in request.form
-                app.logger.info(f"Setting {rule_name} dry_run to: {rule_dry_run}")
-                config['rules'][rule_name]['dry_run'] = rule_dry_run
-            app.logger.info(f"Config after changes: {config['rules']['nukeafter90days'].get('dry_run', 'NOT_SET')}")
-            save_config(config)
-            app.logger.info("save_config() called")
-            verify_config = load_config()
-            app.logger.info(f"Config after save_config: {verify_config['rules']['nukeafter90days'].get('dry_run', 'NOT_SET')}")
-            return redirect(url_for('scheduler_admin', message="Dry run settings saved successfully"))
-        except Exception as e:
-            current_app.logger.error(f"Error saving dry run settings: {str(e)}")
-            return redirect(url_for('scheduler_admin', message=f"Error saving settings: {str(e)}"))
-    try:
-        config = load_config()
-        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
-        return render_template('dry_run_settings.html',
-                             config=config,
-                             global_dry_run=global_dry_run)
-    except Exception as e:
-        current_app.logger.error(f"Error loading dry run settings: {str(e)}")
-        return redirect(url_for('scheduler_admin', message=f"Error loading settings: {str(e)}"))
+# ============================================================================
+# EPISEERR FUNCTIONALITY
+# ============================================================================
 
-def render_simple_dry_run_page(config, global_dry_run):
-    rules_html = ""
-    for rule_name, rule_details in config.get('rules', {}).items():
-        checked = 'checked' if rule_details.get('dry_run', False) else ''
-        series_count = len(rule_details.get('series', []))
-        rules_html += f'''
-        <div class="mb-3 p-3 border rounded">
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="rule_dry_run_{rule_name}" {checked}>
-                <label class="form-check-label">
-                    <strong>{rule_name.replace('_', ' ').title()}</strong> ({series_count} series)
-                </label>
-            </div>
-        </div>
-        '''
-    html = f'''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Dry Run Settings - OCDarr</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        <style>
-            body {{ background-color: #1a1a1a; color: #e0e0e0; }}
-            .card {{ background-color: #2d2d2d; border: 1px solid #404040; }}
-            .form-control, .form-check-input {{ background-color: #404040; border-color: #606060; }}
-        </style>
-    </head>
-    <body>
-        <div class="container mt-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Dry Run Settings</h5>
-                </div>
-                <div class="card-body">
-                    <form method="POST">
-                        <div class="alert alert-info">
-                            <strong>Global Dry Run:</strong> {'ENABLED' if global_dry_run else 'DISABLED'}<br>
-                            <small>Change via CLEANUP_DRY_RUN environment variable</small>
-                        </div>
-                        <h6>Rule-Specific Settings:</h6>
-                        {rules_html}
-                        <div class="mt-3">
-                            <button type="submit" class="btn btn-primary">Save Settings</button>
-                            <a href="/scheduler" class="btn btn-secondary">Back to Scheduler</a>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    '''
-    return html
-
-# Replace your select_episodes route with this updated version:
+@app.route('/episeerr')
+def episeerr_index():
+    """Episeerr main page."""
+    return render_template('episeerr_index.html')
 
 @app.route('/select-seasons/<tmdb_id>')
 def select_seasons(tmdb_id):
-    """Show season selection page first - this is the missing piece"""
+    """Show season selection page."""
     try:
         # Get TV show details from TMDB
         show_data = get_tmdb_endpoint(f"tv/{tmdb_id}")
@@ -1366,7 +1038,7 @@ def select_seasons(tmdb_id):
 
 @app.route('/select-episodes/<tmdb_id>')
 def select_episodes(tmdb_id):
-    """Show episode selection page after season selection - FIXED VERSION"""
+    """Show episode selection page after season selection."""
     try:
         # Get selected seasons from URL parameter
         selected_seasons_param = request.args.get('seasons', '1')
@@ -1431,14 +1103,15 @@ def select_episodes(tmdb_id):
                              show=formatted_show, 
                              request_id=request_id,
                              series_id=series_id,
-                             selected_seasons=selected_seasons)  # This will be properly JSON-encoded in template
+                             selected_seasons=selected_seasons)
     
     except Exception as e:
         app.logger.error(f"Error in select_episodes: {str(e)}", exc_info=True)
         return render_template('error.html', message=f"Error loading episode selection: {str(e)}")
+
 @app.route('/api/process-episode-selection', methods=['POST'])
 def process_episode_selection():
-    """Process episode selection with multi-season support - FIXED VERSION"""
+    """Process episode selection with multi-season support."""
     try:
         app.logger.info(f"Raw form data: {dict(request.form)}")
         app.logger.info(f"Form lists: episodes={request.form.getlist('episodes')}")
@@ -1550,104 +1223,6 @@ def process_episode_selection():
         app.logger.error(f"Error processing episode selection: {str(e)}", exc_info=True)
         return redirect(url_for('episeerr_index', message="An error occurred while processing episodes"))
 
-# Also add this enhanced function to episeerr_utils.py:
-
-def process_multi_season_selection(series_id, episodes_by_season):
-    """
-    Process episode selections across multiple seasons
-    
-    :param series_id: Sonarr series ID
-    :param episodes_by_season: Dict like {1: [1,2,3], 2: [1,5,8]}
-    :return: Dict with results per season
-    """
-    try:
-        series_id = int(series_id)
-        headers = get_sonarr_headers()
-        
-        # Get series info
-        series_response = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers)
-        if not series_response.ok:
-            logger.error(f"Failed to get series. Status: {series_response.status_code}")
-            return {}
-            
-        series = series_response.json()
-        logger.info(f"Processing multi-season selection for {series['title']}: {episodes_by_season}")
-        
-        results = {}
-        all_episode_ids = []  # Collect all episode IDs for batch search
-        
-        for season_number, episode_numbers in episodes_by_season.items():
-            logger.info(f"Processing Season {season_number}: {episode_numbers}")
-            
-            # Get episodes for this season
-            episodes = get_series_episodes(series_id, season_number, headers)
-            if not episodes:
-                results[season_number] = {"success": False, "error": "No episodes found"}
-                continue
-            
-            # Find matching episodes
-            valid_episodes = []
-            episode_ids = []
-            
-            for num in episode_numbers:
-                matching_episode = next((ep for ep in episodes if ep['episodeNumber'] == num), None)
-                if matching_episode:
-                    valid_episodes.append(num)
-                    episode_ids.append(matching_episode['id'])
-                    all_episode_ids.append(matching_episode['id'])
-                else:
-                    logger.warning(f"Episode {num} not found in Season {season_number}")
-            
-            if not valid_episodes:
-                results[season_number] = {"success": False, "error": "No valid episodes found"}
-                continue
-            
-            # Monitor the episodes for this season
-            monitor_response = requests.put(
-                f"{SONARR_URL}/api/v3/episode/monitor",
-                headers=headers,
-                json={"episodeIds": episode_ids, "monitored": True}
-            )
-            
-            if monitor_response.ok:
-                results[season_number] = {
-                    "success": True, 
-                    "episodes": valid_episodes,
-                    "episode_ids": episode_ids
-                }
-                logger.info(f"✓ Monitored {len(episode_ids)} episodes in Season {season_number}")
-            else:
-                results[season_number] = {
-                    "success": False, 
-                    "error": f"Monitor failed: {monitor_response.status_code}"
-                }
-                logger.error(f"Failed to monitor Season {season_number}: {monitor_response.text}")
-        
-        # Trigger search for ALL episodes at once (more efficient)
-        if all_episode_ids:
-            logger.info(f"Triggering search for {len(all_episode_ids)} total episodes")
-            search_payload = {
-                "name": "EpisodeSearch",
-                "episodeIds": all_episode_ids
-            }
-            
-            search_response = requests.post(
-                f"{SONARR_URL}/api/v3/command",
-                headers=headers,
-                json=search_payload
-            )
-            
-            if search_response.ok:
-                logger.info(f"✓ Search triggered for all {len(all_episode_ids)} episodes")
-            else:
-                logger.error(f"Search failed: {search_response.text}")
-        
-        return results
-        
-    except Exception as e:
-        logger.error(f"Error processing multi-season selection: {str(e)}", exc_info=True)
-        return {}
-
 @app.route('/api/tmdb/season/<tmdb_id>/<season_number>')
 def get_tmdb_season(tmdb_id, season_number):
     """Get season details including episodes from TMDB API."""
@@ -1666,42 +1241,9 @@ def get_tmdb_season(tmdb_id, season_number):
         app.logger.error(f"Error getting TMDB season data: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/delete-request/<request_id>', methods=['POST'])
-def delete_request_fixed(request_id):
-    """Fixed version that properly handles request deletion."""
-    try:
-        app.logger.info(f"Attempting to delete request: {request_id}")
-        
-        # Look for request files that contain this request_id
-        deleted = False
-        for filename in os.listdir(REQUESTS_DIR):
-            if filename.endswith('.json'):
-                filepath = os.path.join(REQUESTS_DIR, filename)
-                try:
-                    with open(filepath, 'r') as f:
-                        request_data = json.load(f)
-                    
-                    # Check if this request matches the request_id (not tmdb_id)
-                    if str(request_data.get('id')) == str(request_id):
-                        os.remove(filepath)
-                        app.logger.info(f"Deleted pending request file {filename} for request ID {request_id}")
-                        deleted = True
-                        break
-                except Exception as e:
-                    app.logger.error(f"Error reading request file {filename}: {str(e)}")
-                    continue
-        
-        if deleted:
-            return jsonify({"status": "success", "message": "Request deleted successfully"}), 200
-        else:
-            app.logger.warning(f"Pending request for request ID {request_id} not found")
-            return jsonify({"status": "error", "message": "Request not found"}), 404
-            
-    except Exception as e:
-        app.logger.error(f"Error deleting request for request ID {request_id}: {str(e)}")
-        return jsonify({"status": "error", "message": "Failed to delete request"}), 500
 @app.route('/api/pending-requests')
 def get_pending_requests():
+    """Get pending requests."""
     if not TMDB_API_KEY:
         return jsonify({"success": False, "requests": [], "count": 0})
     try:
@@ -1722,8 +1264,10 @@ def get_pending_requests():
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/delete-request/<tmdb_id>', methods=['POST'])
 def delete_request(tmdb_id):
+    """Delete a pending request."""
     try:
         # Look for request files that contain this tmdb_id
         deleted = False
@@ -1753,9 +1297,10 @@ def delete_request(tmdb_id):
     except Exception as e:
         app.logger.error(f"Error deleting request for TMDB ID {tmdb_id}: {str(e)}")
         return jsonify({"status": "error", "message": "Failed to delete request"}), 500
-    
-# Webhook Routes
-# Replace your existing sonarr-webhook route with this enhanced version:
+
+# ============================================================================
+# WEBHOOK ROUTES
+# ============================================================================
 
 @app.route('/sonarr-webhook', methods=['POST'])
 def process_sonarr_webhook():
@@ -1823,7 +1368,7 @@ def process_sonarr_webhook():
             app.logger.info(f"Series {series_title} has no episeerr tags, doing nothing")
             return jsonify({"status": "success", "message": "Series has no episeerr tags, no processing needed"}), 200
         
-        # ENHANCED: Check for pending Jellyseerr request with better matching
+        # Check for pending Jellyseerr request
         jellyseerr_request_id = None
         tvdb_id_str = str(tvdb_id) if tvdb_id else None
 
@@ -1851,6 +1396,7 @@ def process_sonarr_webhook():
                     app.logger.error(f"Error processing Jellyseerr request file: {str(e)}")
             else:
                 app.logger.info(f"No Jellyseerr request file found for TVDB ID: {tvdb_id_str}")
+                
         # ALWAYS: Unmonitor all episodes and remove episeerr tags
         app.logger.info(f"Unmonitoring all episodes for {series_title}")
         unmonitor_success = episeerr_utils.unmonitor_series(series_id, headers)
@@ -1891,17 +1437,15 @@ def process_sonarr_webhook():
         if has_episeerr_default:
             app.logger.info(f"Processing {series_title} with episeerr_default tag")
             
-            # SAFE VERSION - Add to default rule with protection
+            # Add to default rule
             try:
                 config = load_config()
                 default_rule_name = config.get('default_rule', 'default')
                 
                 app.logger.info(f"Adding {series_title} to default rule '{default_rule_name}'")
-                app.logger.info(f"Current rules before modification: {list(config['rules'].keys())}")
                 
                 if default_rule_name not in config['rules']:
                     app.logger.error(f"Default rule '{default_rule_name}' not found in config!")
-                    app.logger.info(f"Available rules: {list(config['rules'].keys())}")
                     return jsonify({"status": "error", "message": f"Default rule '{default_rule_name}' not found"}), 500
                 
                 series_id_str = str(series_id)
@@ -1924,14 +1468,11 @@ def process_sonarr_webhook():
                     series_dict[series_id_str] = {'activity_date': None}
                     app.logger.info(f"Added series {series_id_str} to rule '{default_rule_name}'")
                     
-                    # CRITICAL: Validate config before saving
-                    if len(config['rules']) < 2:  # You had 3 rules, so this is a safety check
-                        app.logger.error(f"CONFIG CORRUPTION DETECTED! Only {len(config['rules'])} rules found, expected at least 2")
-                        app.logger.error(f"Current rules: {list(config['rules'].keys())}")
-                        app.logger.error("REFUSING TO SAVE - this would lose your rules!")
+                    # Validate config before saving
+                    if len(config['rules']) < 1:
+                        app.logger.error(f"CONFIG CORRUPTION DETECTED! Only {len(config['rules'])} rules found")
                         return jsonify({"status": "error", "message": "Config corruption detected, save aborted"}), 500
                     
-                    app.logger.info(f"Config validation passed - {len(config['rules'])} rules present: {list(config['rules'].keys())}")
                     save_config(config)
                     app.logger.info(f"✓ Successfully added {series_title} to default rule '{default_rule_name}'")
                 else:
@@ -1941,14 +1482,14 @@ def process_sonarr_webhook():
                 app.logger.error(f"Error adding series to default rule: {str(e)}", exc_info=True)
                 return jsonify({"status": "error", "message": f"Failed to add series to rule: {str(e)}"}), 500
 
-
             # Execute default rule immediately
             try:
                 rule_config = config['rules'][default_rule_name]
-                get_option = rule_config.get('get_option')
+                get_type = rule_config.get('get_type', 'episodes')
+                get_count = rule_config.get('get_count', 1)
                 action_option = rule_config.get('action_option', 'monitor')
                 
-                app.logger.info(f"Executing default rule with get_option '{get_option}' for {series_title}")
+                app.logger.info(f"Executing default rule with get_type '{get_type}', get_count '{get_count}' for {series_title}")
                 
                 # Get all episodes for the series
                 episodes_response = requests.get(
@@ -1968,29 +1509,29 @@ def process_sonarr_webhook():
                     if not season1_episodes:
                         app.logger.warning(f"No Season 1 episodes found for {series_title}")
                     else:
-                        # Determine which episodes to monitor based on get_option
+                        # Determine which episodes to monitor based on get settings
                         episodes_to_monitor = []
                         
-                        if get_option == 'all':
+                        if get_type == 'all':
                             # Get all episodes from all seasons
                             episodes_to_monitor = [ep['id'] for ep in all_episodes]
                             app.logger.info(f"Monitoring all episodes for {series_title}")
                             
-                        elif get_option == 'season':
+                        elif get_type == 'seasons':
                             # Get all episodes from Season 1
                             episodes_to_monitor = [ep['id'] for ep in season1_episodes]
                             app.logger.info(f"Monitoring Season 1 ({len(episodes_to_monitor)} episodes) for {series_title}")
                             
-                        else:
+                        else:  # episodes
                             try:
-                                # Treat as number of episodes to get from Season 1
-                                num_episodes = int(get_option)
+                                # Get specific number of episodes from Season 1
+                                num_episodes = get_count or 1
                                 episodes_to_monitor = [ep['id'] for ep in season1_episodes[:num_episodes]]
                                 app.logger.info(f"Monitoring first {len(episodes_to_monitor)} episodes for {series_title}")
                             except (ValueError, TypeError):
-                                # Fallback to pilot episode if get_option is invalid
+                                # Fallback to pilot episode
                                 episodes_to_monitor = [season1_episodes[0]['id']] if season1_episodes else []
-                                app.logger.warning(f"Invalid get_option '{get_option}', defaulting to pilot episode for {series_title}")
+                                app.logger.warning(f"Invalid get_count, defaulting to pilot episode for {series_title}")
                         
                         if episodes_to_monitor:
                             # Monitor the selected episodes
@@ -2055,7 +1596,7 @@ def process_sonarr_webhook():
                 "source": "sonarr",
                 "source_name": "Sonarr Episode Selection",
                 "needs_attention": True,
-                "jellyseerr_request_id": jellyseerr_request_id,  # Store for potential cleanup
+                "jellyseerr_request_id": jellyseerr_request_id,
                 "created_at": int(time.time())
             }
             
@@ -2070,7 +1611,6 @@ def process_sonarr_webhook():
                 "message": "Episode selection request created"
             }), 200
         
-        # Should not reach here
         return jsonify({
             "status": "success",
             "message": "Processing completed"
@@ -2080,18 +1620,9 @@ def process_sonarr_webhook():
         app.logger.error(f"Error processing Sonarr webhook: {str(e)}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# Add this debug route to check Jellyseerr webhook status
-@app.route('/debug/jellyseerr-pending')
-def debug_jellyseerr_pending():
-    """Debug route to check pending Jellyseerr requests"""
-    return jsonify({
-        "pending_requests": jellyseerr_pending_requests,
-        "count": len(jellyseerr_pending_requests)
-    })
-
 @app.route('/seerr-webhook', methods=['POST'])
 def process_seerr_webhook():
-    """Handle incoming Jellyseerr webhooks - store request info for later with enhanced matching."""
+    """Handle incoming Jellyseerr webhooks."""
     try:
         app.logger.info("=== JELLYSEERR WEBHOOK RECEIVED ===")
         json_data = request.json
@@ -2099,7 +1630,7 @@ def process_seerr_webhook():
         # Log the full webhook data for debugging
         app.logger.info(f"Jellyseerr webhook data: {json.dumps(json_data, indent=2)}")
         
-        # Get the request ID - try multiple possible locations
+        # Get the request ID
         request_info = json_data.get('request', {})
         request_id = (
             request_info.get('request_id') or 
@@ -2152,34 +1683,9 @@ def process_seerr_webhook():
         app.logger.error(f"Error processing Jellyseerr webhook: {str(e)}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
-# Add this debug route to help troubleshoot:
-@app.route('/debug/jellyseerr-state')
-def debug_jellyseerr_state():
-    """Enhanced debug route to check Jellyseerr webhook state"""
-    current_time = int(time.time())
-    
-    debug_info = {
-        "current_timestamp": current_time,
-        "pending_requests": {},
-        "count": len(jellyseerr_pending_requests)
-    }
-    
-    for tvdb_id, request_info in jellyseerr_pending_requests.items():
-        age_seconds = current_time - request_info.get('timestamp', 0)
-        debug_info["pending_requests"][tvdb_id] = {
-            "request_id": request_info.get('request_id'),
-            "title": request_info.get('title'),
-            "tmdb_id": request_info.get('tmdb_id'),
-            "timestamp": request_info.get('timestamp'),
-            "age_seconds": age_seconds,
-            "age_minutes": round(age_seconds / 60, 1)
-        }
-    
-    return jsonify(debug_info)
-
 @app.route('/webhook', methods=['POST'])
 def handle_server_webhook():
+    """Handle Tautulli webhook."""
     app.logger.info("Received webhook from Tautulli")
     data = request.json
     if data:
@@ -2205,6 +1711,7 @@ def handle_server_webhook():
 
 @app.route('/jellyfin-webhook', methods=['POST'])
 def handle_jellyfin_webhook():
+    """Handle Jellyfin webhook."""
     app.logger.info("Received webhook from Jellyfin")
     data = request.json
     if not data:
@@ -2254,98 +1761,140 @@ def handle_jellyfin_webhook():
         app.logger.error(f"Failed to process Jellyfin webhook: {str(e)}", exc_info=True)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/api/safety-status')
-def safety_status():
+# ============================================================================
+# DEBUG & TEST ROUTES (Simplified)
+# ============================================================================
+
+@app.route('/debug-series/<int:series_id>')
+def debug_series(series_id):
+    """Debug series information."""
     try:
+        from servertosonarr import get_activity_date_with_hierarchy, load_config
         config = load_config()
-        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
-        rules_with_dry_run = []
-        for rule_name, rule_details in config.get('rules', {}).items():
-            if rule_details.get('dry_run', False):
-                rules_with_dry_run.append(rule_name.replace('_', ' ').title())
+        rule = None
+        rule_name = None
+        for r_name, r_details in config['rules'].items():
+            if str(series_id) in r_details.get('series', {}):
+                rule = r_details
+                rule_name = r_name
+                break
+        if not rule:
+            return jsonify({"error": f"Series {series_id} not found in any rule"})
+        
+        # Get series data from config
+        series_data = rule.get('series', {}).get(str(series_id), {})
+        activity_date = get_activity_date_with_hierarchy(series_id)
+        
         return jsonify({
-            "global_dry_run": global_dry_run,
-            "rules_with_dry_run": rules_with_dry_run,
-            "total_rules": len(config.get('rules', {})),
-            "status": "success"
+            "series_id": series_id,
+            "rule_name": rule_name,
+            "rule_config": rule,
+            "series_data": series_data,
+            "activity_date": activity_date,
+            "current_time": int(time.time()),
+            "days_since_activity": (int(time.time()) - activity_date) / (24*60*60) if activity_date else "No activity date"
         })
     except Exception as e:
-        current_app.logger.error(f"Error getting safety status: {str(e)}")
-        return jsonify({
-            "global_dry_run": False,
-            "rules_with_dry_run": [],
-            "total_rules": 0,
-            "status": "error",
-            "message": str(e)
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/current-assignments')
-def get_current_assignments():
-    """Get current rule assignments for all series"""
+@app.route('/api/test-cleanup/<int:series_id>')
+def test_cleanup(series_id):
+    """Test cleanup for a specific series."""
     try:
         config = load_config()
-        all_series = get_sonarr_series()
+        rule = None
+        rule_name = None
+        for r_name, r_details in config['rules'].items():
+            if str(series_id) in r_details.get('series', {}):
+                rule = r_details
+                rule_name = r_name
+                break
         
-        assignments = {}
+        if not rule:
+            return jsonify({"status": "error", "message": "Series not assigned to any rule"}), 404
         
-        # Build assignment mapping
-        for rule_name, details in config['rules'].items():
-            series_dict = details.get('series', {})
-            for series_id in series_dict.keys():
-                assignments[str(series_id)] = rule_name
+        test_rule = rule.copy()
+        test_rule['dry_run'] = True
         
-        # Add series without assignments
-        for series in all_series:
-            series_id = str(series['id'])
-            if series_id not in assignments:
-                assignments[series_id] = 'None'
+        from servertosonarr import check_time_based_cleanup
         
-        return jsonify(assignments)
+        should_cleanup, reason = check_time_based_cleanup(series_id, test_rule)
         
+        if should_cleanup:
+            return jsonify({
+                "status": "success",
+                "message": f"Test completed: {reason}",
+                "would_cleanup": True,
+                "rule": rule_name,
+                "reason": reason
+            })
+        else:
+            return jsonify({
+                "status": "success", 
+                "message": f"No cleanup needed: {reason}",
+                "would_cleanup": False,
+                "rule": rule_name,
+                "reason": reason
+            })
     except Exception as e:
-        app.logger.error(f"Error getting current assignments: {str(e)}")
-        return jsonify({}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/api/quick-stats')
-def get_quick_stats():
-    """Get quick stats for change detection"""
+@app.route('/add-test-activity/<int:series_id>', methods=['POST'])
+def add_test_activity(series_id):
+    """Add test activity data for debugging."""
     try:
+        days_ago = int(request.form.get('days_ago', 16))
+        season = int(request.form.get('season', 1))
+        episode = int(request.form.get('episode', 1))
+        current_time = int(time.time())
+        watch_time = current_time - (days_ago * 24 * 60 * 60)
+        
+        # Update config.json directly
         config = load_config()
-        all_series = get_sonarr_series()
+        for rule_name, rule_details in config['rules'].items():
+            series_dict = rule_details.get('series', {})
+            if str(series_id) in series_dict:
+                series_dict[str(series_id)] = {
+                    'activity_date': watch_time,
+                    'last_season': season,
+                    'last_episode': episode
+                }
+                break
         
-        # Count assigned series
-        assigned_count = 0
-        for rule_name, details in config['rules'].items():
-            assigned_count += len(details.get('series', {}))
+        save_config(config)
         
-        stats = {
-            'total_series': len(all_series),
-            'assigned_series': assigned_count,
-            'unassigned_series': len(all_series) - assigned_count,
-            'total_rules': len(config['rules']),
-            'timestamp': int(time.time())
-        }
-        
-        return jsonify(stats)
-        
-    except Exception as e:
-        app.logger.error(f"Error getting quick stats: {str(e)}")
         return jsonify({
-            'total_series': 0,
-            'assigned_series': 0,
-            'unassigned_series': 0,
-            'total_rules': 0,
-            'timestamp': int(time.time())
-        }), 500
+            "status": "success",
+            "message": f"Added activity for series {series_id}: watched S{season}E{episode} {days_ago} days ago",
+            "watch_timestamp": watch_time,
+            "days_ago": days_ago
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/episeerr')
-def episeerr_index():
-    return render_template('episeerr_index.html')
+# ============================================================================
+# ERROR HANDLERS
+# ============================================================================
+
+@app.errorhandler(404)
+def not_found(error):
+    """Handle 404 errors."""
+    return render_template('error.html', message="Page not found"), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle 500 errors."""
+    return render_template('error.html', message="Internal server error"), 500
+
+# ============================================================================
+# INITIALIZATION
+# ============================================================================
+
 def initialize_episeerr():
+    """Initialize episeerr components."""
     app.logger.debug("Entering initialize_episeerr()")
     
-    # Tags are already created in episeerr_utils.py, so skip those calls
-    # Perform other initialization tasks
+    # Check unmonitored downloads
     app.logger.debug("Checking unmonitored downloads")
     try:
         episeerr_utils.check_and_cancel_unmonitored_downloads()
@@ -2361,7 +1910,6 @@ cleanup_scheduler.start_scheduler()
 
 if __name__ == '__main__':
     cleanup_config_rules()
-    migrate_old_rules()  # Add this line
     initialize_episeerr()
     app.logger.info("🚀 Enhanced Episeerr starting")
     app.run(host='0.0.0.0', port=5002, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
