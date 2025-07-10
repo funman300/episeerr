@@ -2,97 +2,165 @@
 
 {% block content %}
 <!-- Stats Cards with CSS Grid -->
+<!-- Replace your stats-row section with these clickable cards -->
 <div class="stats-row">
-    <div class="card stats-card text-white">
-        <div class="card-body">
-            <h5><i class="fas fa-tv me-2"></i>Total Series</h5>
-            <h2 id="total-series">{{ all_series|length }}</h2>
+    <!-- Disk Usage -> System Status -->
+    <a href="{{ SONARR_URL }}/system/status" target="_blank" class="text-decoration-none">
+        <div class="card stats-card text-white clickable-card">
+            <div class="card-body">
+                <h5><i class="fas fa-hdd me-2"></i>Disk Usage <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
+                <h2 id="disk-usage">
+                    {% if sonarr_stats.disk_stats %}
+                        {{ sonarr_stats.disk_stats.used_gb }}GB
+                    {% else %}
+                        --
+                    {% endif %}
+                </h2>
+                <small class="text-muted">
+                    {% if sonarr_stats.disk_stats %}
+                        {{ sonarr_stats.disk_stats.free_gb }}GB free ({{ sonarr_stats.disk_stats.usage_percent }}%)
+                    {% else %}
+                        Unable to get disk info
+                    {% endif %}
+                </small>
+            </div>
         </div>
-    </div>
-    <div class="card stats-card text-white">
-        <div class="card-body">
-            <h5><i class="fas fa-cogs me-2"></i>Total Rules</h5>
-            <h2>{{ config.rules|length }}</h2>
+    </a>
+    
+    <!-- Downloads -> Activity/Queue -->
+    <a href="{{ SONARR_URL }}/activity/queue" target="_blank" class="text-decoration-none">
+        <div class="card stats-card text-white clickable-card">
+            <div class="card-body">
+                <h5><i class="fas fa-download me-2"></i>Downloads <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
+                <h2 id="download-queue">
+                    {% if sonarr_stats.queue_stats %}
+                        {{ sonarr_stats.queue_stats.downloading }}
+                    {% else %}
+                        --
+                    {% endif %}
+                </h2>
+                <small class="text-muted">
+                    {% if sonarr_stats.queue_stats %}
+                        {{ sonarr_stats.queue_stats.queued }} queued, {{ sonarr_stats.queue_stats.total }} total
+                    {% else %}
+                        Unable to get queue info
+                    {% endif %}
+                </small>
+            </div>
         </div>
-    </div>
-    <div class="card stats-card text-white">
-        <div class="card-body">
-            <h5><i class="fas fa-check me-2"></i>Assigned</h5>
-            <h2 id="assigned-series">0</h2>
+    </a>
+    
+    <!-- Missing -> Wanted/Missing -->
+    <a href="{{ SONARR_URL }}/wanted/missing" target="_blank" class="text-decoration-none">
+        <div class="card stats-card text-white clickable-card">
+            <div class="card-body">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Missing <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
+                <h2 id="missing-episodes">
+                    {% if sonarr_stats.missing_stats %}
+                        {{ sonarr_stats.missing_stats.count }}
+                    {% else %}
+                        --
+                    {% endif %}
+                </h2>
+                <small class="text-muted">monitored episodes</small>
+            </div>
         </div>
-    </div>
-    <div class="card stats-card text-white">
-        <div class="card-body">
-            <h5><i class="fas fa-question me-2"></i>Unassigned</h5>
-            <h2 id="unassigned-series">0</h2>
+    </a>
+    
+    <!-- Recent -> Activity/History -->
+    <a href="{{ SONARR_URL }}/activity/history" target="_blank" class="text-decoration-none">
+        <div class="card stats-card text-white clickable-card">
+            <div class="card-body">
+                <h5><i class="fas fa-clock me-2"></i>Recent <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
+                <h2 id="recent-activity">
+                    {% if sonarr_stats.recent_stats %}
+                        {{ sonarr_stats.recent_stats.imported_today }}
+                    {% else %}
+                        --
+                    {% endif %}
+                </h2>
+                <small class="text-muted">imported today</small>
+            </div>
         </div>
-    </div>
+    </a>
 </div>
 <!-- Rules Management -->
 <div class="row">
     <div class="col-md-4">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5><i class="fas fa-list me-2"></i>Rules</h5>
-                <div>
-                    <a href="{{ url_for('cleanup') }}" class="btn btn-outline-light btn-sm me-2" title="Clean up orphaned series from rules">
-                        <i class="fas fa-broom me-1"></i>Clean Config
-                    </a>
-                    <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">
-                        <i class="fas fa-plus me-1"></i>New Rule
-                    </a>
-                </div>
-            </div>
-            <div class="card-body">
-                {% for rule_name, rule_details in config.rules.items() %}
-                <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
-                    <div>
-                        <strong>{{ rule_name.replace('_', ' ').title() }}</strong>
-                        {% if rule_name == config.get('default_rule') %}
-                        <span class="badge bg-success rule-badge">Default</span>
-                        {% endif %}
-                        <br>
-                        <small class="text-muted">{{ rule_details.series|length }} series</small>
-                    </div>
-                    <div class="btn-group btn-group-sm">
-                        <a href="{{ url_for('edit_rule', rule_name=rule_name) }}" class="btn btn-outline-primary btn-sm">
-                            <i class="fas fa-edit"></i>
-                        </a>
-                        {% if rule_name != config.get('default_rule') %}
-                        <form method="POST" action="{{ url_for('delete_rule', rule_name=rule_name) }}" style="display: inline;">
-                            <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this rule?')">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </form>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5><i class="fas fa-list me-2"></i>Rules</h5>
+            <div>
+                <a href="{{ url_for('cleanup') }}" class="btn btn-outline-light btn-sm me-2" title="Clean up orphaned series from rules">
+                    <i class="fas fa-broom me-1"></i>Clean Config
+                </a>
+                <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus me-1"></i>New Rule
+                </a>
             </div>
         </div>
-
-        <!-- Default Rule Setting -->
-        <div class="card mt-3">
-            <div class="card-header">
-                <h6><i class="fas fa-star me-2"></i>Default Rule</h6>
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('set_default_rule') }}">
-                    <div class="input-group">
-                        <select name="rule_name" class="form-select">
-                            {% for rule_name in config.rules.keys() %}
-                            <option value="{{ rule_name }}" {% if rule_name == config.get('default_rule') %}selected{% endif %}>
-                                {{ rule_name.replace('_', ' ').title() }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <button type="submit" class="btn btn-primary">Set</button>
+        <div class="card-body">
+            {% set sorted_rules = [] %}
+            {% set default_rule_name = config.get('default_rule') %}
+            
+            {# First, add the default rule if it exists #}
+            {% if default_rule_name and default_rule_name in config.rules %}
+                {% set _ = sorted_rules.append((default_rule_name, config.rules[default_rule_name])) %}
+            {% endif %}
+            
+            {# Then add all other rules alphabetically #}
+            {% for rule_name, rule_details in config.rules.items()|sort %}
+                {% if rule_name != default_rule_name %}
+                    {% set _ = sorted_rules.append((rule_name, rule_details)) %}
+                {% endif %}
+            {% endfor %}
+            
+            {% for rule_name, rule_details in sorted_rules %}
+            <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded {% if rule_name == default_rule_name %}border-warning bg-warning bg-opacity-10{% endif %}">
+                <div>
+                    <div class="d-flex align-items-center">
+                        <strong>{{ rule_name.replace('_', ' ').title() }}</strong>
+                        {% if rule_name == default_rule_name %}
+                        <span class="badge bg-warning text-dark ms-2">
+                            <i class="fas fa-star me-1"></i>Default
+                        </span>
+                        {% endif %}
                     </div>
-                </form>
+                    <small class="text-muted">{{ rule_details.series|length }} series</small>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <a href="{{ url_for('edit_rule', rule_name=rule_name) }}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    {% if rule_name != default_rule_name %}
+                    <form method="POST" action="{{ url_for('delete_rule', rule_name=rule_name) }}" style="display: inline;">
+                        <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this rule?')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
             </div>
+            {% endfor %}
         </div>
     </div>
 
+    <!-- Quick Links Card -->
+    <div class="card mt-3">
+        <div class="card-header">
+            <h6><i class="fas fa-bookmark me-2"></i>Quick Links</h6>
+        </div>
+        <div class="card-body">
+            <div class="d-grid gap-2">
+                {% for service_key, service in services.items() %}
+                <a href="{{ service.url }}" target="_blank" class="btn btn-outline-primary btn-sm d-flex align-items-center">
+                    <i class="{{ service.icon }} me-2"></i>{{ service.name }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
     <div class="col-md-8">
         <div class="card">
             <div class="card-header">
@@ -145,7 +213,10 @@
                                         <input type="checkbox" name="series_ids" value="{{ series.id }}" class="series-checkbox">
                                     </td>
                                     <td>
-                                        <strong>{{ series.title }}</strong>
+                                        <a href="{{ series | sonarr_url }}" target="_blank" class="text-decoration-none text-light">
+                                            <strong>{{ series.title }}</strong>
+                                            <i class="fas fa-external-link-alt ms-1 text-muted" style="font-size: 0.8em;"></i>
+                                        </a>
                                     </td>
                                     <td>
                                         {% if series.assigned_rule != 'None' %}
@@ -183,9 +254,48 @@
 <script>
 // Update stats on page load
 document.addEventListener('DOMContentLoaded', function() {
-    updateStats();
+    // Update stats immediately
+    updateSonarrStats();
+    
+    // Then update every 30 seconds
+    setInterval(updateSonarrStats, 30000);
 });
-
+function updateSonarrStats() {
+    fetch('/api/sonarr-stats')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.stats) {
+                const stats = data.stats;
+                
+                // Update disk usage
+                if (stats.disk_stats) {
+                    document.getElementById('disk-usage').textContent = `${stats.disk_stats.used_gb}GB`;
+                    const diskSubtext = document.querySelector('#disk-usage').parentElement.querySelector('.text-muted');
+                    diskSubtext.textContent = `${stats.disk_stats.free_gb}GB free (${stats.disk_stats.usage_percent}%)`;
+                }
+                
+                // Update download queue
+                if (stats.queue_stats) {
+                    document.getElementById('download-queue').textContent = stats.queue_stats.downloading;
+                    const queueSubtext = document.querySelector('#download-queue').parentElement.querySelector('.text-muted');
+                    queueSubtext.textContent = `${stats.queue_stats.queued} queued, ${stats.queue_stats.total} total`;
+                }
+                
+                // Update missing episodes
+                if (stats.missing_stats) {
+                    document.getElementById('missing-episodes').textContent = stats.missing_stats.count;
+                }
+                
+                // Update recent activity
+                if (stats.recent_stats) {
+                    document.getElementById('recent-activity').textContent = stats.recent_stats.imported_today;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error updating Sonarr stats:', error);
+        });
+}
 function updateStats() {
     fetch('/api/series-stats')
         .then(response => response.json())

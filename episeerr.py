@@ -1,4 +1,4 @@
-__version__ = "2.3.2"
+__version__ = "2.3.5"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -123,7 +123,105 @@ def get_external_ids(tmdb_id, media_type='tv'):
     """Get external IDs for a TV show or movie."""
     endpoint = f"{media_type}/{tmdb_id}/external_ids"
     return get_tmdb_endpoint(endpoint)
-
+def get_sonarr_stats():
+    """Get comprehensive Sonarr statistics using existing sonarr_utils patterns."""
+    try:
+        sonarr_preferences = sonarr_utils.load_preferences()
+        headers = {
+            'X-Api-Key': sonarr_preferences['SONARR_API_KEY'],
+            'Content-Type': 'application/json'
+        }
+        sonarr_url = sonarr_preferences['SONARR_URL']
+        
+        stats = {
+            'disk_stats': None,
+            'queue_stats': None,
+            'missing_stats': None,
+            'recent_stats': None
+        }
+        
+        # Get disk usage (reuse existing servertosonarr function)
+        try:
+            from servertosonarr import get_sonarr_disk_space
+            disk_info = get_sonarr_disk_space()
+            if disk_info:
+                stats['disk_stats'] = {
+                    'used_gb': round(disk_info['total_space_gb'] - disk_info['free_space_gb'], 1),
+                    'free_gb': disk_info['free_space_gb'],
+                    'total_gb': disk_info['total_space_gb'],
+                    'usage_percent': round(((disk_info['total_space_gb'] - disk_info['free_space_gb']) / disk_info['total_space_gb']) * 100, 1)
+                }
+        except Exception as e:
+            app.logger.warning(f"Could not get disk stats: {str(e)}")
+        
+        # Get queue statistics
+        try:
+            response = requests.get(f"{sonarr_url}/api/v3/queue", headers=headers, timeout=5)
+            if response.ok:
+                queue_data = response.json()
+                records = queue_data.get('records', [])
+                
+                downloading = len([r for r in records if r.get('status') == 'downloading'])
+                queued = len([r for r in records if r.get('status') in ['queued', 'delay']])
+                
+                stats['queue_stats'] = {
+                    'downloading': downloading,
+                    'queued': queued,
+                    'total': len(records)
+                }
+        except Exception as e:
+            app.logger.warning(f"Could not get queue stats: {str(e)}")
+        
+        # Get missing episodes count
+        try:
+            response = requests.get(f"{sonarr_url}/api/v3/wanted/missing", headers=headers, timeout=5)
+            if response.ok:
+                missing_data = response.json()
+                stats['missing_stats'] = {
+                    'count': missing_data.get('totalRecords', 0)
+                }
+        except Exception as e:
+            app.logger.warning(f"Could not get missing stats: {str(e)}")
+        
+        # Get recent activity (imports from today)
+        try:
+            from datetime import datetime, timezone
+            today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+            
+            response = requests.get(
+                f"{sonarr_url}/api/v3/history",
+                headers=headers,
+                params={'page': 1, 'pageSize': 50, 'sortKey': 'date', 'sortDirection': 'descending'},
+                timeout=5
+            )
+            
+            if response.ok:
+                history_data = response.json()
+                records = history_data.get('records', [])
+                
+                imported_today = 0
+                for record in records:
+                    if record.get('eventType') == 'downloadFolderImported':
+                        record_date = record.get('date', '')[:10]
+                        if record_date == today:
+                            imported_today += 1
+                
+                stats['recent_stats'] = {
+                    'imported_today': imported_today
+                }
+        except Exception as e:
+            app.logger.warning(f"Could not get recent stats: {str(e)}")
+        
+        return stats
+        
+    except Exception as e:
+        app.logger.error(f"Error getting Sonarr stats: {str(e)}")
+        return {
+            'disk_stats': None,
+            'queue_stats': None, 
+            'missing_stats': None,
+            'recent_stats': None
+        }
 # Scheduler
 class OCDarrScheduler:
     def __init__(self):
@@ -316,11 +414,19 @@ def get_sonarr_series():
 # WEB UI ROUTES
 # ============================================================================
 
+# Update your index() route to also pass SONARR_URL:
+
 @app.route('/')
 def index():
     """Main rules management page."""
     config = load_config()
     all_series = get_sonarr_series()
+    sonarr_stats = get_sonarr_stats()
+    
+    # Get SONARR_URL for template links
+    sonarr_preferences = sonarr_utils.load_preferences()
+    sonarr_url = sonarr_preferences['SONARR_URL']
+    
     rules_mapping = {}
     for rule_name, details in config['rules'].items():
         series_dict = details.get('series', {})
@@ -329,11 +435,31 @@ def index():
     for series in all_series:
         series['assigned_rule'] = rules_mapping.get(str(series['id']), 'None')
     all_series.sort(key=lambda x: x.get('title', '').lower())
+    
     return render_template('rules_index.html', 
                          config=config,
                          all_series=all_series,
+                         sonarr_stats=sonarr_stats,
+                         SONARR_URL=sonarr_url,  # ADD THIS
                          current_rule=request.args.get('rule', list(config['rules'].keys())[0] if config['rules'] else 'default'))
 
+# Add new API route for real-time stats updates
+@app.route('/api/sonarr-stats')
+def get_sonarr_stats_api():
+    """Get Sonarr statistics via API."""
+    try:
+        stats = get_sonarr_stats()
+        return jsonify({
+            'status': 'success',
+            'stats': stats
+        })
+    except Exception as e:
+        app.logger.error(f"Error in sonarr stats API: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+# Update your create_rule route to handle the default rule checkbox
 @app.route('/create-rule', methods=['GET', 'POST'])
 def create_rule():
     """Create a new rule."""
@@ -379,10 +505,20 @@ def create_rule():
             'dry_run': False
         }
         
+        # Handle default rule setting
+        if 'set_as_default' in request.form:
+            config['default_rule'] = rule_name
+        
         save_config(config)
-        return redirect(url_for('index', message=f"Rule '{rule_name}' created successfully"))
+        
+        message = f"Rule '{rule_name}' created successfully"
+        if 'set_as_default' in request.form:
+            message += " and set as default"
+        
+        return redirect(url_for('index', message=message))
     return render_template('create_rule.html')
 
+# Update your edit_rule route to handle the default rule checkbox
 @app.route('/edit-rule/<rule_name>', methods=['GET', 'POST'])
 def edit_rule(rule_name):
     """Edit an existing rule."""
@@ -423,12 +559,47 @@ def edit_rule(rule_name):
             'dormant_days': dormant_days
         })
         
+        # Handle default rule setting
+        if 'set_as_default' in request.form:
+            config['default_rule'] = rule_name
+        elif rule_name == config.get('default_rule') and 'set_as_default' not in request.form:
+            # If this was the default rule but checkbox is unchecked, we need a new default
+            # Set the first available rule as default, or remove default if this is the only rule
+            other_rules = [r for r in config['rules'].keys() if r != rule_name]
+            if other_rules:
+                config['default_rule'] = other_rules[0]
+            else:
+                config.pop('default_rule', None)
+        
         save_config(config)
-        return redirect(url_for('index', message=f"Rule '{rule_name}' updated successfully"))
+        
+        message = f"Rule '{rule_name}' updated successfully"
+        if 'set_as_default' in request.form and config.get('default_rule') == rule_name:
+            message += " and set as default"
+        
+        return redirect(url_for('index', message=message))
     
     rule = config['rules'][rule_name]
-    return render_template('edit_rule.html', rule_name=rule_name, rule=rule)
+    return render_template('edit_rule.html', rule_name=rule_name, rule=rule, config=config)
 
+@app.template_filter('sonarr_url')
+def sonarr_series_url(series):
+    """Generate Sonarr series URL from series object."""
+    # Use titleSlug if available, otherwise fallback to ID
+    if isinstance(series, dict):
+        if 'titleSlug' in series:
+            return f"{SONARR_URL}/series/{series['titleSlug']}"
+        else:
+            return f"{SONARR_URL}/series/{series.get('id', '')}"
+    else:
+        # If it's just an ID passed directly
+        return f"{SONARR_URL}/series/{series}"
+
+# Alternative: If you prefer a simple ID-based approach
+@app.template_filter('sonarr_url_simple')
+def sonarr_series_url_simple(series_id):
+    """Generate Sonarr series URL from series ID."""
+    return f"{SONARR_URL}/series/{series_id}"
 @app.route('/delete-rule/<rule_name>', methods=['POST'])
 def delete_rule(rule_name):
     """Delete a rule."""
@@ -484,6 +655,61 @@ def assign_rules():
         message += f" (preserved activity data for {preserved_count} series)"
     
     return redirect(url_for('index', message=message))
+
+@app.context_processor
+def inject_service_urls():
+    """Inject service URLs into all templates based on .env configuration."""
+    services = {}
+    
+    # Sonarr (always present)
+    if SONARR_URL:
+        services['sonarr'] = {
+            'name': 'Sonarr',
+            'url': SONARR_URL,
+            'icon': 'fas fa-download'
+        }
+    
+    # Jellyseerr/Overseerr
+    if JELLYSEERR_URL:
+        services['jellyseerr'] = {
+            'name': 'Jellyseerr', 
+            'url': JELLYSEERR_URL,
+            'icon': 'fas fa-search'
+        }
+    elif OVERSEERR_URL:
+        services['overseerr'] = {
+            'name': 'Overseerr',
+            'url': OVERSEERR_URL, 
+            'icon': 'fas fa-search'
+        }
+    
+    # Plex/Jellyfin
+    plex_url = os.getenv('PLEX_URL')
+    jellyfin_url = os.getenv('JELLYFIN_URL')
+    
+    if plex_url:
+        services['plex'] = {
+            'name': 'Plex',
+            'url': plex_url,
+            'icon': 'fas fa-play'
+        }
+    elif jellyfin_url:
+        services['jellyfin'] = {
+            'name': 'Jellyfin',
+            'url': jellyfin_url, 
+            'icon': 'fas fa-film'
+        }
+    
+    # Tautulli
+    tautulli_url = os.getenv('TAUTULLI_URL')
+    if tautulli_url:
+        services['tautulli'] = {
+            'name': 'Tautulli',
+            'url': tautulli_url,
+            'icon': 'fas fa-chart-bar'
+        }
+    
+    return {'services': services}
 
 @app.route('/set-default-rule', methods=['POST'])
 def set_default_rule():

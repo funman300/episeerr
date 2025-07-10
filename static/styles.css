@@ -700,3 +700,26 @@ a:hover {
     background: var(--accent-primary) !important;
     border-color: var(--accent-primary) !important;
 }
+.clickable-card {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.clickable-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.clickable-card:active {
+    transform: translateY(0px);
+}
+
+/* Ensure the link doesn't change text color */
+a:hover .clickable-card .text-white {
+    color: white !important;
+}
+
+a:hover .clickable-card .text-muted {
+    color: #6c757d !important;
+}
