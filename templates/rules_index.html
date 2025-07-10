@@ -2,7 +2,6 @@
 
 {% block content %}
 <!-- Stats Cards with CSS Grid -->
-<!-- Replace your stats-row section with these clickable cards -->
 <div class="stats-row">
     <!-- Disk Usage -> System Status -->
     <a href="{{ SONARR_URL }}/system/status" target="_blank" class="text-decoration-none">
@@ -84,93 +83,102 @@
         </div>
     </a>
 </div>
+
 <!-- Rules Management -->
 <div class="row">
     <div class="col-md-4">
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5><i class="fas fa-list me-2"></i>Rules</h5>
-            <div>
-                <a href="{{ url_for('cleanup') }}" class="btn btn-outline-light btn-sm me-2" title="Clean up orphaned series from rules">
-                    <i class="fas fa-broom me-1"></i>Clean Config
-                </a>
-                <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">
-                    <i class="fas fa-plus me-1"></i>New Rule
-                </a>
-            </div>
-        </div>
-        <div class="card-body">
-            {% set sorted_rules = [] %}
-            {% set default_rule_name = config.get('default_rule') %}
-            
-            {# First, add the default rule if it exists #}
-            {% if default_rule_name and default_rule_name in config.rules %}
-                {% set _ = sorted_rules.append((default_rule_name, config.rules[default_rule_name])) %}
-            {% endif %}
-            
-            {# Then add all other rules alphabetically #}
-            {% for rule_name, rule_details in config.rules.items()|sort %}
-                {% if rule_name != default_rule_name %}
-                    {% set _ = sorted_rules.append((rule_name, rule_details)) %}
-                {% endif %}
-            {% endfor %}
-            
-            {% for rule_name, rule_details in sorted_rules %}
-            <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded {% if rule_name == default_rule_name %}border-warning bg-warning bg-opacity-10{% endif %}">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-list me-2"></i>Rules</h5>
                 <div>
-                    <div class="d-flex align-items-center">
-                        <strong>{{ rule_name.replace('_', ' ').title() }}</strong>
-                        {% if rule_name == default_rule_name %}
-                        <span class="badge bg-warning text-dark ms-2">
-                            <i class="fas fa-star me-1"></i>Default
-                        </span>
+                    <a href="{{ url_for('cleanup') }}" class="btn btn-outline-light btn-sm me-2" title="Clean up orphaned series from rules">
+                        <i class="fas fa-broom me-1"></i>Clean Config
+                    </a>
+                    <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus me-1"></i>New Rule
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% set sorted_rules = [] %}
+                {% set default_rule_name = config.get('default_rule') %}
+                
+                {# First, add the default rule if it exists #}
+                {% if default_rule_name and default_rule_name in config.rules %}
+                    {% set _ = sorted_rules.append((default_rule_name, config.rules[default_rule_name])) %}
+                {% endif %}
+                
+                {# Then add all other rules alphabetically #}
+                {% for rule_name, rule_details in config.rules.items()|sort %}
+                    {% if rule_name != default_rule_name %}
+                        {% set _ = sorted_rules.append((rule_name, rule_details)) %}
+                    {% endif %}
+                {% endfor %}
+                
+                {% for rule_name, rule_details in sorted_rules %}
+                <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded {% if rule_name == default_rule_name %}border-warning bg-warning bg-opacity-10{% endif %}">
+                    <div>
+                        <div class="d-flex align-items-center">
+                            <strong>{{ rule_name.replace('_', ' ').title() }}</strong>
+                            {% if rule_name == default_rule_name %}
+                            <span class="badge bg-warning text-dark ms-2">
+                                <i class="fas fa-star me-1"></i>Default
+                            </span>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">{{ rule_details.series|length }} series</small>
+                    </div>
+                    <div class="btn-group btn-group-sm">
+                        <a href="{{ url_for('edit_rule', rule_name=rule_name) }}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        {% if rule_name != default_rule_name %}
+                        <form method="POST" action="{{ url_for('delete_rule', rule_name=rule_name) }}" style="display: inline;">
+                            <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this rule?')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
                         {% endif %}
                     </div>
-                    <small class="text-muted">{{ rule_details.series|length }} series</small>
                 </div>
-                <div class="btn-group btn-group-sm">
-                    <a href="{{ url_for('edit_rule', rule_name=rule_name) }}" class="btn btn-outline-primary btn-sm">
-                        <i class="fas fa-edit"></i>
-                    </a>
-                    {% if rule_name != default_rule_name %}
-                    <form method="POST" action="{{ url_for('delete_rule', rule_name=rule_name) }}" style="display: inline;">
-                        <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this rule?')">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </form>
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-
-    <!-- Quick Links Card -->
-    <div class="card mt-3">
-        <div class="card-header">
-            <h6><i class="fas fa-bookmark me-2"></i>Quick Links</h6>
-        </div>
-        <div class="card-body">
-            <div class="d-grid gap-2">
-                {% for service_key, service in services.items() %}
-                <a href="{{ service.url }}" target="_blank" class="btn btn-outline-primary btn-sm d-flex align-items-center">
-                    <i class="{{ service.icon }} me-2"></i>{{ service.name }}
-                </a>
                 {% endfor %}
             </div>
         </div>
+
+        <!-- Quick Links Card -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-bookmark me-2"></i>Quick Links</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    {% for service_key, service in services.items() %}
+                    <a href="{{ service.url }}" target="_blank" class="btn btn-outline-primary btn-sm d-flex align-items-center">
+                        <i class="{{ service.icon }} me-2"></i>{{ service.name }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
     </div>
-</div>
+
     <div class="col-md-8">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-tv me-2"></i>Series Management</h5>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="auto_assign_toggle" 
+                           onchange="toggleAutoAssign()">
+                    <label class="form-check-label" for="auto_assign_toggle">
+                        <i class="fas fa-robot me-1"></i>Auto-assign default
+                    </label>
+                </div>
             </div>
             <div class="card-body">
                 <!-- Rule Assignment Form -->
                 <form method="POST" action="{{ url_for('assign_rules') }}" id="assignment-form">
                     <div class="row mb-3">
-                        <div class="col-md-6">
+                        <div class="col-md-3">
                             <select name="rule_name" class="form-select" required>
                                 <option value="">Select Rule to Assign</option>
                                 {% for rule_name in config.rules.keys() %}
@@ -178,7 +186,7 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-9">
                             <div class="btn-group w-100">
                                 <button type="submit" class="btn btn-primary">
                                     <i class="fas fa-link me-1"></i>Assign Selected
@@ -233,17 +241,16 @@
                     </div>
                 </form>
                
-                <!-- Unassign Button -->
+                <!-- Unassign Button and Auto-Assign Toggle -->
                 <form method="POST" action="{{ url_for('unassign_series') }}" class="mt-3" onsubmit="return copySelectedSeries(this)">
-                    <button type="submit" class="btn btn-warning">
-                        <i class="fas fa-unlink me-1"></i>Unassign Selected Series
-                    </button>
-                    <a class="nav-link" href="{{ url_for('cleanup') }}">
-
-
-
-                
+                    <div class="d-flex justify-content-between align-items-center">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-unlink me-1"></i>Unassign Selected Series
+                        </button>
+                        
+                    </div>
                 </form>
+                
             </div>
         </div>
     </div>
@@ -252,14 +259,6 @@
 
 {% block scripts %}
 <script>
-// Update stats on page load
-document.addEventListener('DOMContentLoaded', function() {
-    // Update stats immediately
-    updateSonarrStats();
-    
-    // Then update every 30 seconds
-    setInterval(updateSonarrStats, 30000);
-});
 function updateSonarrStats() {
     fetch('/api/sonarr-stats')
         .then(response => response.json())
@@ -296,15 +295,6 @@ function updateSonarrStats() {
             console.error('Error updating Sonarr stats:', error);
         });
 }
-function updateStats() {
-    fetch('/api/series-stats')
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('assigned-series').textContent = data.assigned_series;
-            document.getElementById('unassigned-series').textContent = data.unassigned_series;
-        })
-        .catch(error => console.error('Error updating stats:', error));
-}
 
 function selectAll() {
     document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = true);
@@ -339,8 +329,58 @@ function copySelectedSeries(form) {
     
     return confirm(`Unassign ${selectedSeries.length} selected series from all rules?`);
 }
-</script>
-<script>
+
+function toggleAutoAssign() {
+    const checkbox = document.getElementById('auto_assign_toggle');
+    const enabled = checkbox.checked;
+    
+    // Show loading state
+    checkbox.disabled = true;
+    
+    // Get current global settings and update
+    fetch('/api/global-settings')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const settings = data.settings;
+                settings.auto_assign_new_series = enabled;
+                
+                // Update the setting
+                return fetch('/api/global-settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(settings)
+                });
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                console.log('Auto-assign setting updated:', enabled);
+                
+                // Show brief success feedback
+                const label = document.querySelector('label[for="auto_assign_toggle"]');
+                const originalText = label.textContent;
+                label.innerHTML = `<i class="fas fa-check text-success me-1"></i>${originalText}`;
+                setTimeout(() => {
+                    label.textContent = originalText;
+                }, 2000);
+            } else {
+                console.error('Failed to update setting:', data.message);
+                checkbox.checked = !enabled; // Revert on error
+            }
+        })
+        .catch(error => {
+            console.error('Error updating auto-assign setting:', error);
+            checkbox.checked = !enabled; // Revert on error
+        })
+        .finally(() => {
+            checkbox.disabled = false;
+        });
+}
+
 // Auto-refresh rules page when series assignments change
 class RulesPageAutoRefresh {
     constructor() {
@@ -458,8 +498,29 @@ class RulesPageAutoRefresh {
     }
 }
 
-// Initialize auto-refresh
+// Initialize everything when page loads - SINGLE DOMContentLoaded listener
 document.addEventListener('DOMContentLoaded', function() {
+    // Update Sonarr stats immediately
+    updateSonarrStats();
+    
+    // Auto-refresh Sonarr stats every 30 seconds
+    setInterval(updateSonarrStats, 30000);
+    
+    // Load auto-assign setting
+    fetch('/api/global-settings')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const autoAssign = data.settings.auto_assign_new_series || false;
+                const toggle = document.getElementById('auto_assign_toggle');
+                if (toggle) {
+                    toggle.checked = autoAssign;
+                }
+            }
+        })
+        .catch(error => console.error('Error loading auto-assign setting:', error));
+    
+    // Initialize auto-refresh for rule changes
     new RulesPageAutoRefresh();
 });
 </script>

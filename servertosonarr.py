@@ -1453,17 +1453,21 @@ def load_global_settings():
             with open(settings_path, 'r') as f:
                 return json.load(f)
         else:
-            # Default settings
+            # Default settings - ADD auto_assign_new_series
             default_settings = {
                 'global_storage_min_gb': None,  # No storage gate by default
                 'cleanup_interval_hours': 6,
-                'dry_run_mode': False
+                'dry_run_mode': False,
+                'auto_assign_new_series': False  # ADD THIS LINE
             }
             save_global_settings(default_settings)
             return default_settings
     except Exception as e:
         logger.error(f"Error loading global settings: {str(e)}")
-        return {'global_storage_min_gb': None}
+        return {
+            'global_storage_min_gb': None, 
+            'auto_assign_new_series': False  # ADD THIS LINE
+        }
 
 def save_global_settings(settings):
     """Save global settings to file."""

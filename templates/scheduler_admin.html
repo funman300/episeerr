@@ -14,7 +14,7 @@
             <div class="card-body">
                 <form id="globalSettingsForm">
                     <div class="row">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="mb-3">
                                 <label for="globalStorageGate" class="form-label">
                                     Storage Threshold (GB)
@@ -28,7 +28,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="mb-3">
                                 <label for="cleanupInterval" class="form-label">
                                     Cleanup Interval (hours)
@@ -40,7 +40,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="mb-3">
                                 <div class="form-check mt-4">
                                     <input class="form-check-input" type="checkbox" id="dryRunMode" name="dry_run_mode">
@@ -48,6 +48,17 @@
                                         <strong>Global Dry Run Mode</strong>
                                     </label>
                                     <div class="form-text">Show what would be deleted without actually deleting</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input" type="checkbox" id="autoAssignNewSeries" name="auto_assign_new_series">
+                                    <label class="form-check-label" for="autoAssignNewSeries">
+                                        <strong>Auto-assign new series</strong>
+                                    </label>
+                                    <div class="form-text">New series without tags go to default rule</div>
                                 </div>
                             </div>
                         </div>
@@ -186,7 +197,7 @@
             </div>
             <div class="card-body">
                 <small>
-                    <p><strong>Global Storage Gate:</strong></p>
+                    <p><strong>Global Settings:</strong></p>
                     <ul>
                         <li><strong>One Threshold:</strong> Set global GB limit (e.g., 20GB)</li>
                         <li><strong>Smart Cleanup:</strong> Only runs when below threshold</li>
@@ -266,6 +277,8 @@ async function loadGlobalSettings() {
                 globalSettings.cleanup_interval_hours || 6;
             document.getElementById('dryRunMode').checked = 
                 globalSettings.dry_run_mode || false;
+            document.getElementById('autoAssignNewSeries').checked = 
+                globalSettings.auto_assign_new_series || false;  // ADD THIS LINE
                 
             // Update storage status if we have disk info
             if (data.disk_info) {
@@ -280,34 +293,15 @@ async function loadGlobalSettings() {
             document.getElementById('globalStorageGate').value = '';
             document.getElementById('cleanupInterval').value = 6;
             document.getElementById('dryRunMode').checked = false;
+            document.getElementById('autoAssignNewSeries').checked = false;  // ADD THIS LINE
         }
     } catch (error) {
         console.error('Error loading global settings:', error);
         document.getElementById('globalStorageGate').value = '';
         document.getElementById('cleanupInterval').value = 6;
         document.getElementById('dryRunMode').checked = false;
+        document.getElementById('autoAssignNewSeries').checked = false;  // ADD THIS LINE
     }
-}
-
-function updateSafetyStatusFromGlobal(settings) {
-    const safetyDiv = document.getElementById('safety-status');
-    
-    let html = '<small>';
-    
-    if (settings.dry_run_mode) {
-        html += '<div class="alert alert-success alert-sm p-2 mb-2">';
-        html += '<i class="fas fa-shield-alt me-1"></i><strong>Global Dry Run: ENABLED</strong><br>';
-        html += 'No files will be deleted system-wide';
-        html += '</div>';
-    } else {
-        html += '<div class="alert alert-warning alert-sm p-2 mb-2">';
-        html += '<i class="fas fa-exclamation-triangle me-1"></i><strong>Live Mode: ACTIVE</strong><br>';
-        html += 'Cleanup will delete files unless overridden';
-        html += '</div>';
-    }
-    
-    html += '</small>';
-    safetyDiv.innerHTML = html;
 }
 
 async function saveGlobalSettings(event) {
@@ -317,7 +311,8 @@ async function saveGlobalSettings(event) {
     const settings = {
         global_storage_min_gb: formData.get('global_storage_min_gb') || null,
         cleanup_interval_hours: parseInt(formData.get('cleanup_interval_hours')) || 6,
-        dry_run_mode: formData.has('dry_run_mode')
+        dry_run_mode: formData.has('dry_run_mode'),
+        auto_assign_new_series: formData.has('auto_assign_new_series')  // ADD THIS LINE
     };
     
     try {
@@ -344,6 +339,29 @@ async function saveGlobalSettings(event) {
         showMessage('Failed to save settings', 'error');
     }
 }
+
+function updateSafetyStatusFromGlobal(settings) {
+    const safetyDiv = document.getElementById('safety-status');
+    
+    let html = '<small>';
+    
+    if (settings.dry_run_mode) {
+        html += '<div class="alert alert-success alert-sm p-2 mb-2">';
+        html += '<i class="fas fa-shield-alt me-1"></i><strong>Global Dry Run: ENABLED</strong><br>';
+        html += 'No files will be deleted system-wide';
+        html += '</div>';
+    } else {
+        html += '<div class="alert alert-warning alert-sm p-2 mb-2">';
+        html += '<i class="fas fa-exclamation-triangle me-1"></i><strong>Live Mode: ACTIVE</strong><br>';
+        html += 'Cleanup will delete files unless overridden';
+        html += '</div>';
+    }
+    
+    html += '</small>';
+    safetyDiv.innerHTML = html;
+}
+
+
 
 // Enhanced scheduler status loading
 function loadSchedulerStatus() {
