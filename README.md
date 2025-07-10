@@ -40,7 +40,7 @@ services:
       - JELLYFIN_USER_ID=
      
       # Optional quicklinks
-      - CUSTOMAPP_URL=http://192.168.254.205:8080 # ecample SABNZBD_URL=http...
+      - CUSTOMAPP_URL=http://192.168.254.205:8080 # example SABNZBD_URL=http...
       - CUSTOMAPP_NAME=My Custom App  # Optional
       - CUSTOMAPP_ICON=fas fa-cog    # Optional
 
