@@ -42,20 +42,14 @@ Rules tell Episeerr how to manage episodes automatically. **Rules are completely
 
 **All grace periods are independent - use any combination that fits your viewing style:**
 
-#### Grace Buffer (Safety Net)
-**Days to protect episodes leaving keep block:**
-- **7 days**: Episodes get recycled before permanent deletion
-- **null/empty**: Immediate deletion when leaving keep block
-- **Use for**: Preventing accidental loss, "oops I wanted to rewatch that"
-
-#### Grace Watched (Rotating Favorites)  
+#### Grace Watched   
 **Days before kept episodes expire from inactivity:**
 - **30 days**: Your watched expire after a month of no series activity
 - **null/empty**: Keep forever (never expire)
 - **Use for**: Rotating collection, making room for new content
 
 #### Grace Unwatched (Watch Deadlines)
-**Days from download before unwatched episodes expire:**
+**Days before unwatched episodes expire:**
 - **14 days**: New episodes have 2 weeks to be watched or deleted
 - **null/empty**: No pressure to watch new content
 - **Use for**: Staying current, preventing backlog buildup
@@ -63,32 +57,22 @@ Rules tell Episeerr how to manage episodes automatically. **Rules are completely
 
 Think of Episeerr like having a smart librarian managing your TV collection:
 
-### 📚 **Grace Buffer: The "Return Cart"**
-Your librarian puts episodes you previously finished watching in a return cart before removing them. This gives you a few days to watch them again if you change your mind.
-```
-Keep: 3
-Grace:3 type  buffer
-```
-### after watching e6 the keep block is now e4,5,6 but wont delete the previous episodes e 1,2,3 until after the grace buffer 3 days
 
 ### 🔄 **Grace Watched: The "Recent Reads" Rotation**
 Your librarian keeps your last watched on the shelf for easy access. After watched grace, they rotate these out to make room for new ones.
 
 ```
-Keep: 3
-Grace:3 type  watched
+Grace: 7 type  watched
 ```
-### after watching e6 the keep block is now e4,5,6 but wont delete them until after the grace 3 days
+### If a series has no activity after x days then the last episode watched and prior ones will be removed
 
 ### ⏰ **Grace Unwatched: The "New Arrivals" Pressure**
 New episodes go on a "new arrivals" shelf with a deadline. If you don't watch them by the deadline, they get removed.
 
 ```
-Get: 3
-
-Grace:3 type  unwatched
+Grace: 7 type  unwatched
 ```
-### after watching e6 will get ep7,8,9 but remove them after the grace 3 days
+### If a series has no activity after x days then any episodes that are after the last episode watched will be removed
 
 ## use none or any combo
 
