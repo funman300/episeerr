@@ -84,7 +84,7 @@ Create rules with two independent grace timers:
 - Example: 14 days = watched rotate out after 2 weeks
 
 **Grace Unwatched (Watch Deadlines):**
-- New episodes get X days from download to be watched
+- New episodes get X days to be watched if no activity
 - Example: 10 days = pressure to watch new content
 
 
@@ -153,11 +153,6 @@ Automatic cleanup when storage gets low (optional upgrade).
 🧠 **Intuitive Grace Logic**: Grace periods now protect recent watches  
 🔧 **Fixed Season Bug**: Properly handles end-of-season transitions  
 💾 **Storage-Aware Dormant**: Dormant cleanup respects storage gates
-
-### Migration from v2.0
-- Existing rules automatically converted to new format
-- No manual changes needed
-- Old behavior preserved with new interface
 
 ---
 
