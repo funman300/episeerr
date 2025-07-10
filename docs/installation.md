@@ -177,20 +177,6 @@ For manual episode selection workflow:
 
 ---
 
-## Migration from v2.0
-
-If upgrading from v2.0:
-
-1. **Stop the container**
-2. **Update docker image** to latest
-3. **Start container** - migration happens automatically
-4. **Check rules** - should show new dropdown format
-5. **Test functionality** with dry run mode
-
-No manual configuration changes needed!
-
----
-
 ## Next Steps
 
 1. **[Create rules](rules-guide.md)** for different types of shows
