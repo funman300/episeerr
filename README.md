@@ -50,6 +50,12 @@ services:
       # Add these ONLY if you want viewing automation
       - TAUTULLI_URL=http://your-tautulli:8181
       - TAUTULLI_API_KEY=your_tautulli_key
+
+      # Optional quicklinks
+      - CUSTOMAPP_URL=http://192.168.254.205:8080 # ecample SABNZBD_URL=http...
+      - CUSTOMAPP_NAME=My Custom App  # Optional
+      - CUSTOMAPP_ICON=fas fa-cog    # Optional
+
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
