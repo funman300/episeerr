@@ -11,29 +11,11 @@ This project started as scratching my own itch - I wanted more granular series m
 Episeerr automates your TV library with three simple features:
 
 🎯 **Episode Selection** - Choose exactly which episodes you want  
-⚡ **Smart Rules** - Next episode ready when you watch, old episodes cleaned up  
-💾 **Storage Gate** - Automatic cleanup when storage gets low
+⚡ **Smart Rules** - For example, next episode ready when you watch, old episodes cleaned up  
+💾 **Smart Cleanup** - Automatic cleanup that can be based on when storage gets low
 
 ## Quick Start
 
-### Minimal Setup (Just Episode Selection)
-```yaml
-version: '3.8'
-services:
-  episeerr:
-    image: vansmak/episeerr:latest
-    environment:
-      # Only 3 required for basic episode selection
-      - SONARR_URL=http://your-sonarr:8989
-      - SONARR_API_KEY=your_sonarr_api_key
-      - TMDB_API_KEY=your_tmdb_api_key
-    volumes:
-      - ./config:/app/config
-      - ./logs:/app/logs
-    ports:
-      - "5002:5002"
-    restart: unless-stopped
-```
 
 ### Full Setup (All Features)
 ```yaml
@@ -43,14 +25,20 @@ services:
     image: vansmak/episeerr:latest
     environment:
       # Required for all features
-      - SONARR_URL=http://your-sonarr:8989
+      - SONARR_URL=http://your-sonarr:8989 # add webhook in sonarr
       - SONARR_API_KEY=your_sonarr_api_key
       - TMDB_API_KEY=your_tmdb_api_key
-      
-      # Add these ONLY if you want viewing automation
+      # Add your seer info if you want to use episeer to manage by episode
+      - JELLYSEERR_URL=http://your overseer or jellyseer url #leave field name as jellyseer even if you use overseerr
+      - JELLYSEERR_API_KEY:
+      # Add these ONLY if you want viewing automation #add webhook in tautulli
       - TAUTULLI_URL=http://your-tautulli:8181
       - TAUTULLI_API_KEY=your_tautulli_key
-
+      # Or
+      - JELLYFIN_URL=http://your-JF_URL  # ADD WEBHOOK IN JELLYFIN
+      - JELLYFIN_API_KEY=your_jf_key
+      - JELLYFIN_USER_ID=
+     
       # Optional quicklinks
       - CUSTOMAPP_URL=http://192.168.254.205:8080 # ecample SABNZBD_URL=http...
       - CUSTOMAPP_NAME=My Custom App  # Optional
