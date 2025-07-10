@@ -1,4 +1,4 @@
-__version__ = "2.4.0"
+__version__ = "2.4.1"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -661,53 +661,51 @@ def inject_service_urls():
     """Inject service URLs into all templates based on .env configuration."""
     services = {}
     
-    # Sonarr (always present)
-    if SONARR_URL:
-        services['sonarr'] = {
-            'name': 'Sonarr',
-            'url': SONARR_URL,
-            'icon': 'fas fa-download'
-        }
+    # Default name and icon mappings for known services
+    default_names = {
+        'sonarr': 'Sonarr',
+        'jellyseerr': 'Jellyseerr',
+        'overseerr': 'Overseerr',
+        'plex': 'Plex',
+        'jellyfin': 'Jellyfin',
+        'tautulli': 'Tautulli',
+        'sabnzbd': 'SABnzbd',
+        'prowlarr': 'Prowlarr',
+        'radarr': 'Radarr'
+    }
     
-    # Jellyseerr/Overseerr
-    if JELLYSEERR_URL:
-        services['jellyseerr'] = {
-            'name': 'Jellyseerr', 
-            'url': JELLYSEERR_URL,
-            'icon': 'fas fa-search'
-        }
-    elif OVERSEERR_URL:
-        services['overseerr'] = {
-            'name': 'Overseerr',
-            'url': OVERSEERR_URL, 
-            'icon': 'fas fa-search'
-        }
+    default_icons = {
+        'sonarr': 'fas fa-tv',              # TV icon for Sonarr (TV show management)
+        'jellyseerr': 'fas fa-search',      # Search icon for Jellyseerr
+        'overseerr': 'fas fa-search',       # Search icon for Overseerr
+        'plex': 'fas fa-play-circle',       # Play icon for Plex
+        'jellyfin': 'fas fa-film',          # Film icon for Jellyfin
+        'tautulli': 'fas fa-chart-bar',     # Chart icon for Tautulli (analytics)
+        'sabnzbd': 'fas fa-download',       # Download icon for SABnzbd (downloader)
+        'prowlarr': 'fas fa-search-plus',   # Advanced search icon for Prowlarr (indexer)
+        'radarr': 'fas fa-video'            # Video icon for Radarr (movie management)
+    }
     
-    # Plex/Jellyfin
-    plex_url = os.getenv('PLEX_URL')
-    jellyfin_url = os.getenv('JELLYFIN_URL')
-    
-    if plex_url:
-        services['plex'] = {
-            'name': 'Plex',
-            'url': plex_url,
-            'icon': 'fas fa-play'
-        }
-    elif jellyfin_url:
-        services['jellyfin'] = {
-            'name': 'Jellyfin',
-            'url': jellyfin_url, 
-            'icon': 'fas fa-film'
-        }
-    
-    # Tautulli
-    tautulli_url = os.getenv('TAUTULLI_URL')
-    if tautulli_url:
-        services['tautulli'] = {
-            'name': 'Tautulli',
-            'url': tautulli_url,
-            'icon': 'fas fa-chart-bar'
-        }
+    # Iterate over environment variables to find those ending with _URL
+    for key, value in os.environ.items():
+        if key.endswith('_URL') and value:
+            # Extract service ID (e.g., 'SONARR' from 'SONARR_URL')
+            service_id = key[:-len('_URL')].lower()
+            
+            # Get name: Use corresponding _NAME variable, default_names, or capitalize service_id
+            name_key = f'{key[:-len("_URL")]}_NAME'
+            service_name = os.getenv(name_key, default_names.get(service_id, service_id.capitalize()))
+            
+            # Get icon: Use corresponding _ICON variable, default_icons, or generic icon
+            icon_key = f'{key[:-len("_URL")]}_ICON'
+            service_icon = os.getenv(icon_key, default_icons.get(service_id, 'fas fa-link'))
+            
+            # Add to services dictionary
+            services[service_id] = {
+                'name': service_name,
+                'url': value,
+                'icon': service_icon
+            }
     
     return {'services': services}
 
