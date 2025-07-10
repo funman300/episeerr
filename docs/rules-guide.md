@@ -84,9 +84,9 @@ Grace_unwatched 14
 Dormant 30
 ```
 ### After s3ep5 is watched it will keep ep 3 4 and 5 and fetch ep 6 7 and 8 until ep 6 is watched then it will have ep 4 5 and 6 and so on
-    # Unless there is no new watch for 7 days then it will delete those trailug 3 episodes regardless
-    # 14 days it will then also remove any unwatched (ep7 8 and 9) as well
-    # 30 days of no activity then noone is watching remove all episodes
+    ** Unless there is no new watch for 7 days then it will delete those trailing 3 episodes regardless
+    * 14 days it will then also remove any unwatched (ep7 8 and 9) as well
+    * 30 days of no activity then noone is watching remove all episodes
 
 ### Dormant Timer (Abandoned Series Cleanup) - Optional
 **Days before complete series cleanup:**
