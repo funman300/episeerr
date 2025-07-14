@@ -88,17 +88,34 @@
 <div class="row">
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <!-- Desktop Header -->
+            <div class="card-header desktop-only">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-list me-2"></i>Rules</h5>
+                    <div>
+                        <a href="{{ url_for('cleanup') }}" class="btn btn-outline-light btn-sm me-2" title="Clean up orphaned series from rules">
+                            <i class="fas fa-broom me-1"></i>Clean Config
+                        </a>
+                        <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus me-1"></i>+ New Rule
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Mobile Header -->
+            <div class="card-header mobile-only">
                 <h5><i class="fas fa-list me-2"></i>Rules</h5>
-                <div>
-                    <a href="{{ url_for('cleanup') }}" class="btn btn-outline-light btn-sm me-2" title="Clean up orphaned series from rules">
+                <div class="mobile-header-buttons">
+                    <a href="{{ url_for('cleanup') }}" class="btn btn-outline-light">
                         <i class="fas fa-broom me-1"></i>Clean Config
                     </a>
-                    <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">
+                    <a href="{{ url_for('create_rule') }}" class="btn btn-primary">
                         <i class="fas fa-plus me-1"></i>New Rule
                     </a>
                 </div>
             </div>
+            
             <div class="card-body">
                 {% set sorted_rules = [] %}
                 {% set default_rule_name = config.get('default_rule') %}
@@ -115,33 +132,67 @@
                     {% endif %}
                 {% endfor %}
                 
-                {% for rule_name, rule_details in sorted_rules %}
-                <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded {% if rule_name == default_rule_name %}border-warning bg-warning bg-opacity-10{% endif %}">
-                    <div>
-                        <div class="d-flex align-items-center">
-                            <strong>{{ rule_name.replace('_', ' ').title() }}</strong>
-                            {% if rule_name == default_rule_name %}
-                            <span class="badge bg-warning text-dark ms-2">
-                                <i class="fas fa-star me-1"></i>Default
-                            </span>
+                <!-- Desktop Rules List -->
+                <div class="desktop-only">
+                    {% for rule_name, rule_details in sorted_rules %}
+                    <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded {% if rule_name == default_rule_name %}border-warning bg-warning bg-opacity-10{% endif %}">
+                        <div>
+                            <div class="d-flex align-items-center">
+                                <strong>{{ rule_name.replace('_', ' ').title() }}</strong>
+                                {% if rule_name == default_rule_name %}
+                                <span class="badge bg-warning text-dark ms-2">
+                                    <i class="fas fa-star me-1"></i>Default
+                                </span>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">{{ rule_details.series|length }} series</small>
+                        </div>
+                        <div class="btn-group btn-group-sm">
+                            <a href="{{ url_for('edit_rule', rule_name=rule_name) }}" class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            {% if rule_name != default_rule_name %}
+                            <form method="POST" action="{{ url_for('delete_rule', rule_name=rule_name) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this rule?')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
                             {% endif %}
                         </div>
-                        <small class="text-muted">{{ rule_details.series|length }} series</small>
                     </div>
-                    <div class="btn-group btn-group-sm">
-                        <a href="{{ url_for('edit_rule', rule_name=rule_name) }}" class="btn btn-outline-primary btn-sm">
-                            <i class="fas fa-edit"></i>
-                        </a>
-                        {% if rule_name != default_rule_name %}
-                        <form method="POST" action="{{ url_for('delete_rule', rule_name=rule_name) }}" style="display: inline;">
-                            <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this rule?')">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </form>
-                        {% endif %}
-                    </div>
+                    {% endfor %}
                 </div>
-                {% endfor %}
+                
+                <!-- Mobile Rules List -->
+                <div class="mobile-only">
+                    {% for rule_name, rule_details in sorted_rules %}
+                    <div class="rule-item-mobile {% if rule_name == default_rule_name %}default{% endif %}">
+                        <div class="rule-info-mobile">
+                            <div class="d-flex align-items-center">
+                                <strong>{{ rule_name.replace('_', ' ').title() }}</strong>
+                                {% if rule_name == default_rule_name %}
+                                <span class="badge bg-warning text-dark ms-2">
+                                    <i class="fas fa-star me-1"></i>Default
+                                </span>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">{{ rule_details.series|length }} series</small>
+                        </div>
+                        <div class="rule-actions-mobile">
+                            <a href="{{ url_for('edit_rule', rule_name=rule_name) }}" class="btn btn-outline-primary btn-touch">
+                                <i class="fas fa-edit me-1"></i>Edit
+                            </a>
+                            {% if rule_name != default_rule_name %}
+                            <form method="POST" action="{{ url_for('delete_rule', rule_name=rule_name) }}" style="display: inline; flex: 1;">
+                                <button type="submit" class="btn btn-outline-danger btn-touch w-100" onclick="return confirm('Delete this rule?')">
+                                    <i class="fas fa-trash me-1"></i>Delete
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
 
@@ -150,10 +201,10 @@
             <div class="card-header">
                 <h6><i class="fas fa-bookmark me-2"></i>Quick Links</h6>
             </div>
-            <div class="card-body">
+            <div class="card-body quick-links-compact">
                 <div class="d-grid gap-2">
                     {% for service_key, service in services.items() %}
-                    <a href="{{ service.url }}" target="_blank" class="btn btn-outline-primary btn-sm d-flex align-items-center">
+                    <a href="{{ service.url }}" target="_blank" class="btn btn-outline-primary btn-sm d-flex align-items-center justify-content-center">
                         <i class="{{ service.icon }} me-2"></i>{{ service.name }}
                     </a>
                     {% endfor %}

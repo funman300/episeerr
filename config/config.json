@@ -19,9 +19,6 @@
                 "245": {
                     "activity_date": null
                 },
-                "383": {
-                    "activity_date": null
-                },
                 "411": {
                     "activity_date": null
                 },
@@ -77,9 +74,6 @@
                     "activity_date": null
                 },
                 "85": {
-                    "activity_date": null
-                },
-                "18": {
                     "activity_date": null
                 },
                 "16": {
@@ -175,9 +169,6 @@
                 "101": {
                     "activity_date": null
                 },
-                "11": {
-                    "activity_date": null
-                },
                 "70": {
                     "activity_date": null
                 },
@@ -209,32 +200,6 @@
                     "activity_date": null
                 }
             }
-        },
-        "season": {
-            "get_type": "seasons",
-            "get_count": 1,
-            "keep_type": "seasons",
-            "keep_count": 1,
-            "action_option": "monitor",
-            "monitor_watched": false,
-            "grace_watched": 7,
-            "grace_unwatched": null,
-            "dormant_days": null,
-            "dry_run": false,
-            "series": {}
-        },
-        "test0keep": {
-            "get_type": "episodes",
-            "get_count": 1,
-            "keep_type": "episodes",
-            "keep_count": 1,
-            "action_option": "monitor",
-            "monitor_watched": false,
-            "grace_watched": 2,
-            "grace_unwatched": 1,
-            "dormant_days": null,
-            "series": {},
-            "dry_run": true
         }
     },
     "field_migration_complete": true,

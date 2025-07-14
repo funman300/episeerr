@@ -175,6 +175,8 @@ body {
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border-color);
     box-shadow: 0 2px 20px var(--shadow-dark);
+    z-index: 1100 !important;
+    position: relative !important;
 }
 
 .navbar-brand {
@@ -220,6 +222,30 @@ body {
     background: var(--glass-bg);
 }
 
+/* Custom navbar toggler button */
+.navbar-toggler {
+    border: 1px solid var(--border-color) !important;
+    border-radius: 8px !important;
+    padding: 6px 8px !important;
+    background: var(--glass-bg) !important;
+    transition: all 0.3s ease !important;
+}
+
+.navbar-toggler:hover {
+    background: var(--bg-card) !important;
+    border-color: var(--accent-primary) !important;
+}
+
+.navbar-toggler:focus {
+    box-shadow: 0 0 0 0.2rem var(--shadow-light) !important;
+}
+
+.navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28245, 245, 247, 0.8%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='m4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
+    width: 20px !important;
+    height: 20px !important;
+}
+
 /* === Card Styles === */
 .card {
     background: var(--bg-card);
@@ -262,7 +288,6 @@ body {
     }
 }
 
-/* Override the stats card styles to work with grid */
 .stats-card {
     background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
     border: none;
@@ -273,9 +298,10 @@ body {
     border-radius: 16px;
     box-shadow: 0 8px 32px var(--shadow-light);
     transition: all 0.3s ease;
+    z-index: 1 !important;
+    position: relative !important;
 }
 
-/* Prevent stats cards from looking clickable */
 .stats-card:hover {
     transform: none !important;
     box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
@@ -285,7 +311,6 @@ body {
     pointer-events: none;
 }
 
-/* Fix stats card text sizes */
 .stats-card h5 {
     font-size: 0.9rem;
     font-weight: 600;
@@ -308,30 +333,6 @@ body {
     padding: 1rem;
 }
 
-/* Mobile optimizations */
-@media (max-width: 767px) {
-    .stats-card .card-body {
-        padding: 0.75rem;
-    }
-    .stats-card h5 {
-        font-size: 0.8rem;
-        margin-bottom: 0.25rem;
-    }
-    .stats-card h2 {
-        font-size: 1.5rem;
-    }
-    .container {
-        padding-left: 0.75rem;
-        padding-right: 0.75rem;
-    }
-}
-
-/* Rule badge */
-.rule-badge {
-    font-size: 0.75rem;
-}
-
-/* Fix regular cards (not stats cards) */
 .card:not(.stats-card):hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 48px var(--shadow-dark);
@@ -386,7 +387,7 @@ body {
     border-color: var(--accent-primary);
 }
 
-/* === Tables - Enhanced Specificity === */
+/* === Tables === */
 .table {
     --bs-table-bg: transparent;
     --bs-table-color: var(--text-primary);
@@ -421,41 +422,27 @@ body {
     color: var(--text-primary) !important;
 }
 
-.table-dark > thead {
+.table-dark > thead, .table-dark > tbody {
     border-color: var(--border-color) !important;
 }
 
-.table-dark > tbody {
-    border-color: var(--border-color) !important;
-}
-
-.table-dark.table-striped > tbody > tr:nth-of-type(odd) > * {
-    background-color: var(--glass-bg) !important;
-    color: var(--text-primary) !important;
-}
-
+.table-dark.table-striped > tbody > tr:nth-of-type(odd) > *,
 .table-dark.table-hover > tbody > tr:hover > * {
     background-color: var(--glass-bg) !important;
     color: var(--text-primary) !important;
 }
 
-/* Force override Bootstrap table colors */
-table.table-dark th,
-table.table-dark td,
-table.table th,
-table.table td {
+table.table-dark th, table.table-dark td, table.table th, table.table td {
     color: var(--text-primary) !important;
     border-color: var(--border-color) !important;
 }
 
-table.table-dark thead th,
-table.table thead th {
+table.table-dark thead th, table.table thead th {
     background-color: var(--glass-bg) !important;
     color: var(--text-primary) !important;
     border-color: var(--border-color) !important;
 }
 
-/* Series Management Table Specific */
 #seriesTable {
     background: var(--bg-card) !important;
 }
@@ -490,7 +477,6 @@ table.table thead th {
     box-shadow: 0 0 0 0.2rem var(--shadow-light) !important;
 }
 
-/* Dropdown menus */
 .dropdown-menu {
     background: var(--bg-card) !important;
     border: 1px solid var(--border-color) !important;
@@ -501,13 +487,11 @@ table.table thead th {
     color: var(--text-primary) !important;
 }
 
-.dropdown-item:hover,
-.dropdown-item:focus {
+.dropdown-item:hover, .dropdown-item:focus {
     background: var(--glass-bg) !important;
     color: var(--accent-primary) !important;
 }
 
-/* Form selects and options */
 select option {
     background: var(--bg-card) !important;
     color: var(--text-primary) !important;
@@ -523,7 +507,7 @@ select option {
     border-color: var(--accent-primary);
 }
 
-/* === Badge Styles === */
+/* === Badges === */
 .badge {
     font-weight: 500;
 }
@@ -541,8 +525,7 @@ select option {
     color: var(--bg-primary) !important;
 }
 
-.badge.bg-info,
-.badge.bg-primary {
+.badge.bg-info, .badge.bg-primary {
     background-color: var(--accent-primary) !important;
 }
 
@@ -551,7 +534,7 @@ select option {
     position: fixed;
     top: 80px;
     right: 20px;
-    z-index: 1000;
+    z-index: 1500 !important;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: 12px;
@@ -588,39 +571,21 @@ select option {
     border: 2px solid var(--border-color);
 }
 
-/* === Responsive Design === */
-@media (max-width: 768px) {
-    .stats-row {
-        gap: 0.75rem;
-    }
-    
-    .stats-card .card-body {
-        padding: 1rem;
-    }
-    
-    .stats-card h2 {
-        font-size: 1.8rem;
-    }
-    
-    .theme-selector {
-        right: 10px;
-        top: 70px;
-        min-width: 180px;
-    }
+/* === Animations === */
+.pulse-warning {
+    animation: pulse-warning 2s infinite;
 }
 
-/* === Glass Effect Utilities === */
-.glass {
-    background: var(--glass-bg);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
+@keyframes pulse-warning {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.2); opacity: 0.7; }
+    100% { transform: scale(1); opacity: 1; }
 }
 
-.glow {
-    box-shadow: 0 0 20px var(--shadow-light);
+.position-relative .badge {
+    z-index: 10;
 }
 
-/* === Animation Classes === */
 .fade-in {
     animation: fadeIn 0.6s ease-out;
 }
@@ -639,8 +604,7 @@ select option {
     to { transform: translateY(0); opacity: 1; }
 }
 
-/* === Additional Global Overrides === */
-/* Ensure all text elements use theme colors */
+/* === Global Overrides === */
 h1, h2, h3, h4, h5, h6 {
     color: var(--text-primary) !important;
 }
@@ -649,7 +613,6 @@ p, span, div, label {
     color: inherit;
 }
 
-/* Ensure links use theme colors */
 a {
     color: var(--accent-primary);
 }
@@ -658,7 +621,6 @@ a:hover {
     color: var(--accent-secondary);
 }
 
-/* Modal styling */
 .modal-content {
     background: var(--bg-card) !important;
     color: var(--text-primary) !important;
@@ -673,7 +635,6 @@ a:hover {
     border-top-color: var(--border-color) !important;
 }
 
-/* List groups */
 .list-group-item {
     background: var(--bg-card) !important;
     color: var(--text-primary) !important;
@@ -684,7 +645,6 @@ a:hover {
     background: var(--glass-bg) !important;
 }
 
-/* Pagination */
 .page-link {
     background: var(--bg-card) !important;
     color: var(--text-primary) !important;
@@ -700,6 +660,17 @@ a:hover {
     background: var(--accent-primary) !important;
     border-color: var(--accent-primary) !important;
 }
+
+.glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+}
+
+.glow {
+    box-shadow: 0 0 20px var(--shadow-light);
+}
+
 .clickable-card {
     transition: all 0.2s ease;
     cursor: pointer;
@@ -715,11 +686,329 @@ a:hover {
     transform: translateY(0px);
 }
 
-/* Ensure the link doesn't change text color */
 a:hover .clickable-card .text-white {
     color: white !important;
 }
 
 a:hover .clickable-card .text-muted {
     color: #6c757d !important;
+}
+
+/* === MOBILE RESPONSIVE STYLES === */
+@media (max-width: 991.98px) {
+    .navbar-collapse {
+        position: absolute !important;
+        top: 100% !important;
+        right: 15px !important;
+        left: auto !important;
+        width: 250px !important;
+        background: var(--bg-card) !important;
+        backdrop-filter: blur(20px) !important;
+        border-radius: 12px !important;
+        border: 1px solid var(--border-color) !important;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+        padding: 15px !important;
+        margin-top: 10px !important;
+        z-index: 2000 !important;
+    }
+    
+    .navbar-nav {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+    
+    .navbar-nav .nav-link {
+        padding: 12px 16px !important;
+        border-radius: 8px !important;
+        margin-bottom: 8px !important;
+        transition: all 0.2s ease !important;
+        background: var(--glass-bg) !important;
+        border: 1px solid transparent !important;
+        color: var(--text-primary) !important;
+    }
+    
+    .navbar-nav .nav-link:hover {
+        background: var(--accent-primary) !important;
+        border-color: var(--accent-primary) !important;
+        transform: translateY(-1px) !important;
+        color: white !important;
+    }
+    
+    .navbar-nav .nav-link:last-child {
+        margin-bottom: 0 !important;
+    }
+    
+    .navbar-nav .nav-link .badge {
+        position: relative !important;
+        top: auto !important;
+        right: auto !important;
+        transform: none !important;
+        margin-left: auto !important;
+    }
+    
+    .navbar-nav .nav-link i.text-warning {
+        margin-left: auto !important;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Hide desktop layout on mobile */
+    .desktop-only {
+        display: none !important;
+    }
+    
+    /* Show mobile layout only on mobile */
+    .mobile-only {
+        display: block !important;
+    }
+    
+    /* Reduce overall spacing */
+    .container.mt-4 {
+        margin-top: 0.75rem !important;
+        padding: 0.5rem !important;
+    }
+    
+    /* Make navbar more compact */
+    .navbar {
+        padding: 0.25rem 0;
+    }
+    
+    .navbar .container {
+        padding: 0 0.75rem;
+    }
+    
+    .navbar-brand {
+        font-size: 1.2rem;
+    }
+    
+    .navbar-brand img {
+        height: 32px;
+        margin-right: 8px;
+    }
+    
+    .nav-link {
+        padding: 0.35rem 0.5rem;
+        margin: 0 2px;
+        font-size: 0.85rem;
+    }
+    
+    /* Make stats cards more compact */
+    .stats-card .card-body {
+        padding: 0.5rem;
+    }
+    
+    .stats-card h5 {
+        font-size: 0.75rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .stats-card h2 {
+        font-size: 1.5rem;
+        margin-bottom: 0.125rem;
+    }
+    
+    .stats-card small {
+        font-size: 0.7rem;
+    }
+    
+    .stats-row {
+        gap: 0.4rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    /* Compact header buttons - horizontal layout */
+    .mobile-header-buttons {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    
+    .mobile-header-buttons .btn {
+        flex: 1;
+        min-height: 44px;
+        padding: 0.75rem;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+    
+    .mobile-header-buttons .btn i {
+        font-size: 1rem;
+        line-height: 1;
+    }
+    
+    /* Compact rule items */
+    .rule-item-compact {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+        background-color: var(--bg-card);
+        min-height: auto;
+    }
+    
+    .rule-item-compact.default {
+        border-color: var(--accent-warning);
+        background-color: rgba(251, 191, 36, 0.1);
+    }
+    
+    .rule-info-compact {
+        flex: 1;
+        min-width: 0;
+        margin-right: 0.75rem;
+    }
+    
+    .rule-info-compact .rule-title {
+        font-weight: 600;
+        margin-bottom: 0.125rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-primary);
+        flex-wrap: wrap;
+    }
+    
+    .rule-info-compact .rule-series-count {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        margin: 0;
+    }
+    
+    .rule-actions-compact {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+    
+    .rule-actions-compact .btn {
+        min-height: 44px !important;
+        min-width: 44px !important;
+        padding: 0.5rem !important;
+        font-size: 1.1rem !important;
+        border-radius: 0.375rem;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border: 2px solid var(--border-color) !important;
+    }
+    
+    .rule-actions-compact .btn i {
+        font-size: 1.1rem !important;
+        line-height: 1;
+    }
+    
+    .rule-actions-compact .btn-outline-primary,
+    .rule-actions-compact .btn-outline-primary.btn-sm {
+        border-color: var(--accent-primary) !important;
+        color: var(--accent-primary) !important;
+    }
+    
+    .rule-actions-compact .btn-outline-danger,
+    .rule-actions-compact .btn-outline-danger.btn-sm {
+        border-color: var(--accent-error) !important;
+        color: var(--accent-error) !important;
+    }
+    
+    /* Compact badges */
+    .badge {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    /* Reduce card padding */
+    .card-body {
+        padding: 0.75rem;
+    }
+    
+    .card-header {
+        padding: 0.75rem;
+    }
+    
+    .card-header h5 {
+        margin-bottom: 0;
+        font-size: 1.1rem;
+    }
+    
+    .card-header h6 {
+        margin-bottom: 0;
+        font-size: 1rem;
+    }
+    
+    /* Compact quick links */
+    .quick-links-compact .btn {
+        min-height: 40px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+    }
+    
+    /* Reduce row gaps */
+    .row {
+        margin-bottom: 0.75rem;
+    }
+    
+    .theme-selector {
+        right: 10px;
+        top: 70px;
+        min-width: 180px;
+    }
+}
+
+/* Desktop styles */
+@media (min-width: 769px) {
+    .mobile-only {
+        display: none !important;
+    }
+    
+    .desktop-only {
+        display: block !important;
+    }
+}
+@media (max-width: 768px) {
+    /* Original working mobile layout */
+    .rule-item-mobile {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        background-color: var(--bg-card);
+    }
+    
+    .rule-item-mobile.default {
+        border-color: var(--accent-warning);
+        background-color: rgba(255, 193, 7, 0.1);
+    }
+    
+    .rule-info-mobile {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .rule-actions-mobile {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .rule-actions-mobile .btn {
+        flex: 1;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+    
+    .btn-touch {
+        min-height: 44px !important;
+        min-width: 44px !important;
+        padding: 0.5rem !important;
+    }
 }
