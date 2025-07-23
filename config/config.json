@@ -8,10 +8,10 @@
             "keep_count": 1,
             "action_option": "search",
             "monitor_watched": false,
-            "grace_watched": 1,
-            "grace_unwatched": 1,
-            "dormant_days": 7,
-            "dry_run": false,
+            "grace_watched": null,
+            "grace_unwatched": null,
+            "dormant_days": null,
+            "dry_run": true,
             "series": {
                 "90": {
                     "activity_date": null
@@ -194,10 +194,17 @@
                     "activity_date": null
                 },
                 "481": {
-                    "activity_date": null
+                    "activity_date": 1753309782,
+                    "last_season": 3,
+                    "last_episode": 5
                 },
                 "385": {
                     "activity_date": null
+                },
+                "485": {
+                    "activity_date": 1753310572,
+                    "last_season": 1,
+                    "last_episode": 2
                 }
             }
         }

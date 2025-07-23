@@ -1362,8 +1362,7 @@ def run_dormant_cleanup():
         
         config = load_config()
         global_settings = load_global_settings()
-        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
-        
+        global_dry_run = global_settings.get('dry_run_mode', False)
         # Check storage gate
         storage_min_gb = global_settings.get('global_storage_min_gb')
         if storage_min_gb:
