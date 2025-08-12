@@ -22,7 +22,7 @@ RUN mkdir -p /app/logs /app/config /app/data /app/temp
 
 # Copy application files
 COPY episeerr.py .
-COPY servertosonarr.py .
+COPY media_processor.py .
 COPY episeerr_utils.py .
 COPY sonarr_utils.py .
 COPY templates/ templates/

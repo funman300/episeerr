@@ -1,4 +1,4 @@
-__version__ = "2.4.6"
+__version__ = "2.4.5"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -143,9 +143,9 @@ def get_sonarr_stats():
             'recent_stats': None
         }
         
-        # Get disk usage (reuse existing media_processor function)
+        # Get disk usage (reuse existing servertosonarr function)
         try:
-            from media_processor import get_sonarr_disk_space
+            from servertosonarr import get_sonarr_disk_space
             disk_info = get_sonarr_disk_space()
             if disk_info:
                 stats['disk_stats'] = {
@@ -236,8 +236,8 @@ class OCDarrScheduler:
     def update_interval_from_settings(self):
         """Update cleanup interval from global settings."""
         try:
-            import media_processor
-            global_settings = media_processor.load_global_settings()
+            import servertosonarr
+            global_settings = servertosonarr.load_global_settings()
             self.cleanup_interval_hours = global_settings.get('cleanup_interval_hours', 6)
         except:
             self.cleanup_interval_hours = 6  # Fallback
@@ -272,16 +272,12 @@ class OCDarrScheduler:
     
     def _run_cleanup(self):
         try:
-            import media_processor
+            import servertosonarr
             # Use subprocess to run the unified cleanup
-            result = subprocess.run(["python3", os.path.join(os.getcwd(), "media_processor.py")], capture_output=True, text=True)
+            result = subprocess.run(["python3", os.path.join(os.getcwd(), "servertosonarr.py")], capture_output=True, text=True)
             
-            # FIXED: Check return code instead of stderr
-            if result.returncode != 0:
-                print(f"Cleanup failed with return code {result.returncode}")
-                if result.stderr:
-                    print(f"Cleanup errors: {result.stderr}")
-            # Remove the automatic stderr logging
+            if result.stderr:
+                print(f"Cleanup errors: {result.stderr}")
             
             print("✓ Scheduled cleanup completed (unified 3-function cleanup)")
             return result
@@ -900,11 +896,11 @@ def scheduler_status():
 def get_global_settings():
     """Get global settings including storage gate."""
     try:
-        import media_processor
-        settings = media_processor.load_global_settings()
+        import servertosonarr
+        settings = servertosonarr.load_global_settings()
         
         # Get current disk space for display
-        disk_info = media_processor.get_sonarr_disk_space()
+        disk_info = servertosonarr.get_sonarr_disk_space()
         
         return jsonify({
             "status": "success",
@@ -919,7 +915,7 @@ def get_global_settings():
 def update_global_settings():
     """Update global settings."""
     try:
-        import media_processor
+        import servertosonarr
         
         data = request.json
         storage_min_gb = data.get('global_storage_min_gb')
@@ -938,7 +934,7 @@ def update_global_settings():
             'auto_assign_new_series': bool(auto_assign_new_series)  # ADD THIS LINE
         }
         
-        media_processor.save_global_settings(settings)
+        servertosonarr.save_global_settings(settings)
         
         app.logger.info(f"Global settings updated: {settings}")
         
@@ -956,7 +952,7 @@ def update_global_settings():
 def scheduler_status_global():
     """Enhanced scheduler status with global settings."""
     try:
-        import media_processor
+        import servertosonarr
         
         if 'cleanup_scheduler' not in globals():
             return jsonify({"status": "error", "message": "Scheduler not initialized"}), 500
@@ -965,11 +961,11 @@ def scheduler_status_global():
         status = cleanup_scheduler.get_status()
         
         # Add global settings
-        global_settings = media_processor.load_global_settings()
+        global_settings = servertosonarr.load_global_settings()
         status["global_settings"] = global_settings
         
         # Add disk info
-        disk_info = media_processor.get_sonarr_disk_space()
+        disk_info = servertosonarr.get_sonarr_disk_space()
         if disk_info:
             status["disk_info"] = disk_info
             
@@ -1599,8 +1595,8 @@ def process_sonarr_webhook():
         # If no episeerr tags, check if auto-assign is enabled
         if not has_episeerr_default and not has_episeerr_select:
             # Check for auto-assign setting from GLOBAL SETTINGS
-            import media_processor
-            global_settings = media_processor.load_global_settings()
+            import servertosonarr
+            global_settings = servertosonarr.load_global_settings()
             auto_assign_enabled = global_settings.get('auto_assign_new_series', False)
             
             if auto_assign_enabled:
@@ -1973,18 +1969,9 @@ def handle_server_webhook():
             }
             with open(os.path.join(temp_dir, 'data_from_server.json'), 'w') as f:
                 json.dump(plex_data, f)
-            result = subprocess.run(["python3", os.path.join(os.getcwd(), "media_processor.py")], capture_output=True, text=True)
-            
-            # FIXED: Check return code instead of just stderr
-            if result.returncode != 0:
-                app.logger.error(f"media_processor.py failed with return code {result.returncode}")
-                if result.stderr:
-                    app.logger.error(f"Error output: {result.stderr}")
-            else:
-                # Success - log as info instead of error
-                if result.stderr:
-                    app.logger.info(f"media_processor.py output: {result.stderr}")
-                    
+            result = subprocess.run(["python3", os.path.join(os.getcwd(), "servertosonarr.py")], capture_output=True, text=True)
+            if result.stderr:
+                app.logger.error(f"Servertosonarr.py error: {result.stderr}")
             app.logger.info("Webhook processing completed - activity tracked, next content processed")
             return jsonify({'status': 'success'}), 200
         except Exception as e:
@@ -1992,135 +1979,70 @@ def handle_server_webhook():
             return jsonify({'status': 'error', 'message': str(e)}), 500
     return jsonify({'status': 'error', 'message': 'No data received'}), 400
 
-# Replace your webhook handler with this version that uses SessionStart
-
 @app.route('/jellyfin-webhook', methods=['POST'])
 def handle_jellyfin_webhook():
-    """Handle Jellyfin webhook - Using SessionStart + PlaybackStop."""
+    """Handle Jellyfin webhook."""
     app.logger.info("Received webhook from Jellyfin")
     data = request.json
     if not data:
         return jsonify({'status': 'error', 'message': 'No data received'}), 400
-
     try:
-        notification_type = data.get('NotificationType')
-        app.logger.info(f"Jellyfin webhook type: {notification_type}")
+        if data.get('NotificationType') == 'PlaybackProgress':
+            position_ticks = int(data.get('PlaybackPositionTicks', 0))
+            total_ticks = int(data.get('RunTimeTicks', 0))
+            if total_ticks > 0:
+                progress_percent = (position_ticks / total_ticks) * 100
+                app.logger.info(f"Jellyfin playback progress: {progress_percent:.2f}%")
+                if 45 <= progress_percent <= 55:
+                    item_type = data.get('ItemType')
+                    if item_type == 'Episode':
+                        series_name = data.get('SeriesName')
+                        season = data.get('SeasonNumber')
+                        episode = data.get('EpisodeNumber')
+                        if all([series_name, season is not None, episode is not None]):
+                            episode_key = f"{series_name}|{season}|{episode}"
+                            current_time = time.time()
+                            five_minutes_ago = current_time - (5 * 60)
 
-        if notification_type == 'SessionStart':  # CHANGED: Use SessionStart instead of PlaybackStart
-            # Start polling for this session
-            item_type = data.get('ItemType')
-            if item_type == 'Episode':
-                series_name = data.get('SeriesName')
-                season = data.get('SeasonNumber')
-                episode = data.get('EpisodeNumber')
-                webhook_id = data.get('Id')
-                user_name = data.get('NotificationUsername', 'Unknown')
+                            with LAST_PROCESSED_LOCK:
+                                last_processed_time = LAST_PROCESSED_JELLYFIN_EPISODES.get(episode_key)
 
-                if all([series_name, season is not None, episode is not None]):
-                    app.logger.info(f"📺 Jellyfin session started: {series_name} S{season}E{episode} (User: {user_name})")
-                    app.logger.info(f"🔄 This handles both NEW episodes and RESUMED episodes")
-                    
-                    # Import and start polling
-                    try:
-                        from media_processor import start_jellyfin_polling
-                        
-                        episode_info = {
-                            'user_name': user_name,
-                            'series_name': series_name,
-                            'season_number': int(season),
-                            'episode_number': int(episode),
-                            'progress_percent': 0.0,
-                            'is_paused': False
-                        }
-                        
-                        polling_started = start_jellyfin_polling(webhook_id, episode_info)
-                        
-                        if polling_started:
-                            app.logger.info(f"✅ Started polling for {series_name} S{season}E{episode}")
-                            return jsonify({
-                                'status': 'success', 
-                                'message': f'Started polling for {series_name} S{season}E{episode}'
-                            }), 200
+                                if last_processed_time and last_processed_time > five_minutes_ago:
+                                    app.logger.info(f"Ignoring duplicate Jellyfin webhook for {series_name} S{season}E{episode} within 5 minutes.")
+                                    return jsonify({"status": "ignored", "reason": "duplicate within 5 minutes"}), 200
+                                else:
+                                    LAST_PROCESSED_JELLYFIN_EPISODES[episode_key] = current_time
+
+                            app.logger.info(f"Processing Jellyfin episode: {series_name} S{season}E{episode}")
+                            jellyfin_data = {
+                                "server_title": series_name,
+                                "server_season_num": str(season),
+                                "server_ep_num": str(episode)
+                            }
+                            temp_dir = os.path.join(os.getcwd(), 'temp')
+                            os.makedirs(temp_dir, exist_ok=True)
+                            with open(os.path.join(temp_dir, 'data_from_server.json'), 'w') as f:
+                                json.dump(jellyfin_data, f)
+                            result = subprocess.run(["python3", os.path.join(os.getcwd(), "servertosonarr.py")], 
+                                                   capture_output=True, text=True)
+                            if result.stderr:
+                                app.logger.error(f"Errors from servertosonarr.py: {result.stderr}")
+                            app.logger.info("Jellyfin webhook processing completed - activity tracked, next content processed")
                         else:
-                            app.logger.warning(f"⚠️ Failed to start polling (may already be active)")
-                            return jsonify({'status': 'warning', 'message': 'Polling may already be active'}), 200
-                            
-                    except Exception as e:
-                        app.logger.error(f"Error starting Jellyfin polling: {str(e)}")
-                        return jsonify({'status': 'error', 'message': f'Failed to start polling: {str(e)}'}), 500
-                else:
-                    missing_fields = []
-                    if not series_name: missing_fields.append('SeriesName')
-                    if season is None: missing_fields.append('SeasonNumber')  
-                    if episode is None: missing_fields.append('EpisodeNumber')
-                    
-                    app.logger.warning(f"Missing required fields: {missing_fields}")
-                    return jsonify({'status': 'error', 'message': f'Missing fields: {missing_fields}'}), 400
-            else:
-                app.logger.info(f"Item type '{item_type}' is not an episode, ignoring session start")
-                return jsonify({'status': 'success', 'message': 'Not an episode'}), 200
-
-        elif notification_type == 'PlaybackStop':
-            # Stop polling for this episode
-            webhook_id = data.get('Id')
-            series_name = data.get('SeriesName', 'Unknown')
-            season = data.get('SeasonNumber')
-            episode = data.get('EpisodeNumber')
-            user_name = data.get('NotificationUsername', 'Unknown')
-            
-            app.logger.info(f"📺 Jellyfin playback stopped: {series_name} S{season}E{episode} (User: {user_name})")
-            
-            if all([series_name, season is not None, episode is not None]):
-                try:
-                    from media_processor import stop_jellyfin_polling
-                    
-                    episode_info = {
-                        'user_name': user_name,
-                        'series_name': series_name,
-                        'season_number': int(season),
-                        'episode_number': int(episode)
-                    }
-                    
-                    stopped = stop_jellyfin_polling(webhook_id, episode_info)
-                    
-                    if stopped:
-                        app.logger.info(f"🛑 Stopped polling for {series_name} S{season}E{episode}")
-                        return jsonify({'status': 'success', 'message': f'Stopped polling for {series_name}'}), 200
+                            app.logger.warning(f"Missing episode info: Series={series_name}, Season={season}, Episode={episode}")
                     else:
-                        app.logger.info(f"ℹ️ No active polling found for {series_name} S{season}E{episode}")
-                        return jsonify({'status': 'success', 'message': 'No active polling found'}), 200
-                        
-                except Exception as e:
-                    app.logger.error(f"Error stopping Jellyfin polling: {str(e)}")
-                    return jsonify({'status': 'error', 'message': f'Failed to stop polling: {str(e)}'}), 500
+                        app.logger.info(f"Item type '{item_type}' is not an episode, ignoring")
+                else:
+                    app.logger.debug(f"Progress {progress_percent:.2f}% outside trigger range (45-55%), ignoring")
             else:
-                app.logger.warning("📺 Jellyfin playback stopped but missing episode info")
-                return jsonify({'status': 'success', 'message': 'Playback stopped (missing episode info)'}), 200
-
+                app.logger.warning("Total ticks is zero, cannot calculate progress")
         else:
-            app.logger.info(f"Jellyfin notification type '{notification_type}' not handled")
-            return jsonify({'status': 'success', 'message': f'Notification type {notification_type} not handled'}), 200
-
+            notification_type = data.get('NotificationType', 'Unknown')
+            app.logger.info(f"Jellyfin notification type '{notification_type}' is not PlaybackProgress, ignoring")
+        return jsonify({'status': 'success'}), 200
     except Exception as e:
         app.logger.error(f"Failed to process Jellyfin webhook: {str(e)}", exc_info=True)
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
-# Add a debug endpoint to check polling status
-@app.route('/api/jellyfin-polling-status')
-def jellyfin_polling_status():
-    """Get current Jellyfin polling status for debugging."""
-    try:
-        from media_processor import get_jellyfin_polling_status
-        status = get_jellyfin_polling_status()
-        return jsonify({
-            'status': 'success',
-            'polling_status': status
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
 
 # ============================================================================
 # DEBUG & TEST ROUTES (Simplified)
@@ -2130,7 +2052,7 @@ def jellyfin_polling_status():
 def debug_series(series_id):
     """Debug series information."""
     try:
-        from media_processor import get_activity_date_with_hierarchy, load_config
+        from servertosonarr import get_activity_date_with_hierarchy, load_config
         config = load_config()
         rule = None
         rule_name = None
@@ -2177,7 +2099,7 @@ def test_cleanup(series_id):
         test_rule = rule.copy()
         test_rule['dry_run'] = True
         
-        from media_processor import check_time_based_cleanup
+        from servertosonarr import check_time_based_cleanup
         
         should_cleanup, reason = check_time_based_cleanup(series_id, test_rule)
         
@@ -2255,41 +2177,14 @@ def initialize_episeerr():
     """Initialize episeerr components."""
     app.logger.debug("Entering initialize_episeerr()")
     
-    # Existing code...
+    # Check unmonitored downloads
+    app.logger.debug("Checking unmonitored downloads")
     try:
         episeerr_utils.check_and_cancel_unmonitored_downloads()
     except Exception as e:
         app.logger.error(f"Error in initial download check: {str(e)}")
-    
-    # NEW: Add Jellyfin active polling
-    try:
-        from media_processor import start_jellyfin_active_polling
-        started = start_jellyfin_active_polling()
-        if started:
-            app.logger.info("✅ Jellyfin active polling started (every 15 minutes)")
-        else:
-            app.logger.info("⏭️ Jellyfin not configured - active polling disabled")
-    except Exception as e:
-        app.logger.error(f"Error starting Jellyfin active polling: {str(e)}")
 
     app.logger.debug("Exiting initialize_episeerr()")
-
-# ADD this new API endpoint to episeerr.py:
-@app.route('/api/jellyfin-active-polling-status')
-def jellyfin_active_polling_status():
-    """Get Jellyfin active polling status."""
-    try:
-        from media_processor import get_jellyfin_active_polling_status
-        status = get_jellyfin_active_polling_status()
-        return jsonify({
-            'status': 'success',
-            'polling_status': status
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
 
 # Create scheduler instance
 cleanup_scheduler = OCDarrScheduler()
