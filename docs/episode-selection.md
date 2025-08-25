@@ -129,23 +129,9 @@ If you select **multiple episodes** or **non-pilot episodes**:
 - Verify season/episode numbers match expectations
 - Review Episeerr logs for processing details
 
-## Best Practices
 
-### For New Shows
-1. **Start with pilot:** Select just S01E01 to try the show
-2. **Expand if interested:** Use episode selection for more episodes
-3. **Switch to rules:** Remove tag and use automated management
-
-### For Storage Management
-1. **Select conservatively:** Choose fewer episodes initially
-2. **Add more later:** Use episode selection multiple times
-3. **Clean up regularly:** Remove `episeerr_select` tag when done
-
-### For Catch-Up Viewing
-1. **Research episodes:** Use episode descriptions to choose carefully
-2. **Select by story arcs:** Group related episodes together
-3. **Consider context:** Include setup/conclusion episodes
 
 ---
 
 **Next:** [Cleanup System Guide](cleanup-guide.md) - Automatic library maintenance
+
