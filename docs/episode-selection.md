@@ -131,7 +131,7 @@ If you select **multiple episodes** or **non-pilot episodes**:
 
 
 
----
+**Next:** [Sonarr Integration](sonarr_integration.md) - Tags, profiles, and webhook setup
 
-**Next:** [Cleanup System Guide](cleanup-guide.md) - Automatic library maintenance
+
 
