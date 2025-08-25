@@ -1,175 +1,99 @@
-# Rules Guide (v2.2)
+# Rule-Based Episode Management
 
-Rules tell Episeerr how to manage episodes automatically. **Rules are completely optional** - you can use just episode selection without any rules.
+Automatic "next episode ready when you watch" system. **Assumes linear viewing** (S1E1 → S1E2 → S1E3).
 
-# ⚠️ **Important: Rules Assume Linear Viewing**
+## Required Setup
 
-**Rules work best when you watch episodes in order (S1E1 → S1E2 → S1E3...).**
+### 1. Media Server Webhook
 
-### ✅ **Perfect for Rules:**
-- Watching new episodes as they air
-- Binge-watching shows in order
-- Following a series from start to finish
+**Tautulli (Plex)**:
+1. Tautulli → Settings → Notification Agents → Webhook
+2. **URL**: `http://your-episeerr:5002/webhook`  
+3. **Triggers**: Playback Stop
+4. **JSON Data**:
+```json
+{
+  "plex_title": "{show_name}",
+  "plex_season_num": "{season_num}",
+  "plex_ep_num": "{episode_num}"
+}
+```
 
-### ❌ **Not Great for Rules:**
-- Jumping between seasons randomly
-- Watching "best episodes" only
-- Non-sequential viewing patterns
+**Jellyfin**:
+1. Dashboard → Plugins → Webhooks → Add New
+2. **URL**: `http://your-episeerr:5002/jellyfin-webhook`
+3. **Events**: Playback Progress (automatically triggers at 50%)
 
-**For non-linear viewing:** Use episode selection instead of rules, or create dormant-only rules (no grace/keep settings).
+### 2. Optional: Sonarr Webhook for Auto-Assignment
+1. **Sonarr** → Settings → Connect → Webhook
+2. **URL**: `http://your-episeerr:5002/sonarr-webhook`
+3. **Triggers**: On Series Add
 
----
+## Create Rules
 
-## Rule Components (NEW!)
+1. **Episeerr** → Rules → Create Rule
+2. **Configure:**
 
-**All components are optional** - set only what you want automated.
-
-### Get Episodes (What to prepare next) - Optional
-**Type + Count:**
-- **Episodes**: Get X individual episodes (e.g., "3 episodes")
-- **Seasons**: Get X full seasons (e.g., "1 season") 
+### Get Episodes (What to prepare next)
+- **Episodes**: Get X individual episodes (e.g., 3)
+- **Seasons**: Get X full seasons (e.g., 1) 
 - **All**: Get everything available
-- **Skip this**: Episodes only managed manually
 
-### Keep Episodes (What to retain after watching) - Optional
-**Type + Count:**
-- **Episodes**: Keep X individual episodes (e.g., "2 episodes")
-- **Seasons**: Keep X full seasons (e.g., "1 season")
+### Keep Episodes (What to retain)
+- **Episodes**: Keep X individual episodes (e.g., 1)
+- **Seasons**: Keep X full seasons (e.g., 1)
 - **All**: Keep everything forever
-- **Skip this**: No automatic retention management
 
-### Grace Periods (Multi-Timer System) - Optional
+### Action
+- **Monitor**: Just mark for monitoring
+- **Search**: Monitor and start searching immediately
 
-**All grace periods are independent - use any combination that fits your viewing style:**
+3. **Save**
 
-#### Grace Watched   
-**Days before kept episodes expire from inactivity:**
-- **30 days**: Your watched expire after a month of no series activity
-- **null/empty**: Keep forever (never expire)
-- **Use for**: Rotating collection, making room for new content
+## Assign Series to Rules
 
-#### Grace Unwatched (Watch Deadlines)
-**Days before unwatched episodes expire:**
-- **14 days**: New episodes have 2 weeks to be watched or deleted
-- **null/empty**: No pressure to watch new content
-- **Use for**: Staying current, preventing backlog buildup
-## The "Automatic Librarian" System
+### Method 1: Manual Assignment
+1. **Episeerr** → Series Management
+2. Select series → Choose rule → Assign
 
-Think of Episeerr like having a smart librarian managing your TV collection:
+### Method 2: Sonarr Tags (with webhook)
+- Add series with `episeerr_default` tag → Auto-assigned to default rule
 
-
-### 🔄 **Grace Watched: The "Recent Reads" Rotation**
-Your librarian keeps your last watched on the shelf for easy access. After watched grace, they rotate these out to make room for new ones.
+## How It Works
 
 ```
-Grace: 7 type  watched
+Watch S1E2 → Webhook → Episeerr processes → Sonarr gets S1E3 ready
 ```
-### If a series has no activity after x days then the last episode watched and prior ones will be removed
 
-### ⏰ **Grace Unwatched: The "New Arrivals" Pressure**
-New episodes go on a "new arrivals" shelf with a deadline. If you don't watch them by the deadline, they get removed.
+**Linear viewing example:**
+- Rule: Get 2, Keep 1
+- Watch S1E3 → Get S1E4+S1E5, Keep S1E3, Delete S1E1+S1E2
 
+## Common Rules
+
+### Binge Watcher
 ```
-Grace: 7 type  unwatched
+Get: 3 episodes
+Keep: 1 episode  
+Action: Search
 ```
-### If a series has no activity after x days then any episodes that are after the last episode watched will be removed
 
-## use none or any combo
-## Example:
+### Current Shows
 ```
-Get 3
-Keep 3
-Grace_watched 7
-Grace_unwatched 14
-Dormant 30
+Get: 1 episode
+Keep: 3 episodes
+Action: Monitor
 ```
-### After s3ep5 is watched it will keep ep 3 4 and 5 and fetch ep 6 7 and 8 until ep 6 is watched then it will have ep 4 5 and 6 and so on
-    ** Unless there is no new watch for 7 days then it will delete those trailing 3 episodes regardless
-    * 14 days it will then also remove any unwatched (ep7 8 and 9) as well
-    * 30 days of no activity then noone is watching remove all episodes
 
-### Dormant Timer (Abandoned Series Cleanup) - Optional
-**Days before complete series cleanup:**
-- **90 days**: If no activity for 3 months, clean up when storage is low
-- **null/empty**: Never clean up abandoned series (protected)
-- **Use for**: Reclaiming space from shows you've stopped watching
-
----
-
-## Simple Rule Examples
-
-### Minimal Automation (Just Next Episode)
+### Season Watcher  
 ```
-Get: 1 episode, Action: Search
-Keep: null, Grace: all null, Dormant: null
+Get: 1 season
+Keep: 1 season
+Action: Search
 ```
-**Result**: Next episode ready, everything else manual
 
-### Viewing Only (No Storage Management)
-```
-Get: 3 episodes, Keep: 1 episode
-Grace: all null, Dormant: null
-```
-**Result**: Episode management when you watch, no automatic cleanup
+## Troubleshooting
 
-### Storage Only (No Viewing Automation)
-```
-Get: null, Keep: null
-Grace: all null, Dormant: 60 days
-```
-**Result**: Only storage cleanup, no viewing automation
-
-
-### Key Insights
-- **Multiple timers run independently** - each serves a different purpose
-- **Buffer protects against mistakes** - short-term safety net
-- **Watched manages your collection** - medium-term rotation
-- **Unwatched creates pressure** - forces you to stay current  
-- **Dormant handles abandonment** - long-term space reclamation
-
-
----
-
-## Season Count Logic
-
-### Get Seasons
-- **1 season**: Rest of current season + next full season if current is finished
-- **2 seasons**: Rest of current + next 2 full seasons
-- **3 seasons**: Rest of current + next 3 full seasons
-
-### Keep Seasons  
-- **1 season**: Keep current season only
-- **2 seasons**: Keep current + previous season
-- **3 seasons**: Keep current + previous 2 seasons
-
-### Example: Currently on S2E8 (Season 2 has 10 episodes)
-**Get 1 season**: Episodes S2E9, S2E10 + all of S3  
-**Keep 1 season**: Keep all of S2
-
----
-
-## Migration from Single Grace
-
-If upgrading from v2.1 single grace system:
-- **Old grace_days** becomes **grace_buffer** automatically
-- **Add grace_watched/grace_unwatched** as desired
-- **No behavior change** unless you add new grace types
-
-This gives you the same safety as before, plus new options for more control.
-
----
-
-## Quick Troubleshooting
-
-### Rule Not Working
-- ✅ Check series is assigned to the rule (Series Management page)
-- ✅ Verify webhook setup if using viewing automation
-- ✅ Test with dry run mode first
-
-### Wrong Episodes  
-- ✅ Review Get vs Keep settings
-- ✅ Check if series is assigned to correct rule
-
----
-
-**Next**: [Episode Selection Guide](episode-selection.md) - Manual episode management
+**Episodes not updating**: Check webhook setup and logs  
+**Wrong episodes**: Verify rule settings match your viewing pattern  
+**Series not managed**: Ensure series is assigned to a rule
