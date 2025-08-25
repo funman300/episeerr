@@ -51,11 +51,11 @@ Episeerr has 3 independent features. Pick what you want:
 
 ### 2. Rule-Based Episode Management  
 **What**: Next episode ready when you watch, automatic management
-**Setup**: [Rule-Based Management Guide](rule-management.md)
+**Setup**: [Rule-Based Management Guide](rule-guide.md)
 
 ### 3. Storage Cleanup
 **What**: Automatic cleanup based on time and viewing
-**Setup**: [Storage Cleanup Guide](storage-cleanup.md)
+**Setup**: [Storage Cleanup Guide](global_storage_guide.md)
 
 ### All Three Together
 Follow all three guides. Features work independently or together.
@@ -69,3 +69,4 @@ Follow all three guides. Features work independently or together.
 **TMDB errors**: Use the Read Access Token, not the API key
 
 **Next**: Choose your feature guide above
+
