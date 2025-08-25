@@ -55,7 +55,7 @@ Episeerr has 3 independent features. Pick what you want:
 
 ### 3. Storage Cleanup
 **What**: Automatic cleanup based on time and viewing
-**Setup**: [Storage Cleanup Guide](global_storage_guide.md)
+**Setup**: [Storage Cleanup Guide](global_storage_gate_guide.md)
 
 ### All Three Together
 Follow all three guides. Features work independently or together.
@@ -69,5 +69,6 @@ Follow all three guides. Features work independently or together.
 **TMDB errors**: Use the Read Access Token, not the API key
 
 **Next**: Choose your feature guide above
+
 
 
