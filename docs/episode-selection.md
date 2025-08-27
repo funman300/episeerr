@@ -1,151 +1,65 @@
-# Episode Selection Guide
+# Episode Selection
 
-Episeerr's episode selection system allows you to choose exactly which episodes you want across multiple seasons, giving you surgical precision over your downloads.
+Choose specific episodes manually across multiple seasons.
 
-## When to Use Episode Selection
+## Critical Sonarr Setup (Do This First)
 
-Perfect for:
-- **Pilot episodes:** Try new shows without committing to full seasons
-- **Specific episodes:** Get episodes you missed or want to rewatch  
-- **Limited storage:** Precise control over what gets downloaded
-- **Catch-up viewing:** Get specific episodes to catch up on a series
+**Without this step, episodes download immediately instead of waiting for selection.**
 
-## How Episode Selection Works
+1. **Sonarr** → Settings → Profiles → Release Profiles → **Add New**
+2. **Settings:**
+   - Name: `Episeerr Episode Selection Delay`
+   - Delay: `10519200` (20 years)
+   - Tags: `episeerr-select`
+3. **Save**
 
-### Workflow Overview
-1. **Request initiated** (via Sonarr, Jellyseerr, Overseerr ot other third party app using tag)
-2. **Series added to Sonarr** with `episeerr_select` tag
-3. **All episodes unmonitored** (prevents automatic downloads)
-4. **Selection interface appears** in Episeerr pending requests
-5. **User selects episodes** across any seasons
-6. **Only selected episodes monitored** and searched
-**Note, if requested on jellyseer or overseer with an episeerr tag then the request will be deleted from seer after it is processed. rhis is necessary to prevent seer app from readding it.
+## Sonarr Webhook (Optional but Recommended)
 
-## Episode Selection Interface
+1. **Sonarr** → Settings → Connect → Webhook → **Add New**
+2. **URL**: `http://your-episeerr:5002/sonarr-webhook`
+3. **Triggers**: On Series Add only
+4. **Save**
 
-### Season Selection
-- Choose which seasons you want to work with
-- Can select multiple seasons (e.g., Season 1 and 3)
-- Seasons not selected won't appear in episode selection
+## How to Use
 
-### Episode Selection  
-- Browse episodes with descriptions
-- Select episodes across different seasons
-- Visual indicators show:
-  - Episode numbers and titles
-  - Episode descriptions
-  - Selection counts per season
+### Method 1: Sonarr Tags
+1. Add series to Sonarr with `episeerr_select` tag
+2. Go to Episeerr → Pending Requests
+3. Click "Select Seasons" → Choose seasons
+4. Click "Select Episodes" → Choose specific episodes
+5. Submit
 
-### Selection Tools
-- **Select All (Current Season):** Select all episodes in active season
-- **Clear Current:** Deselect all episodes in active season  
-- **Clear All:** Deselect all episodes across all seasons
-- **Selection Summary:** Shows total episodes and breakdown by season
+### Method 2: Jellyseerr/Overseerr Integration
+1. Set up Jellyseerr webhook:
+   - **URL**: `http://your-episeerr:5002/seerr-webhook`
+   - **Triggers**: Request Approved
+2. Request series in Jellyseerr/Overseerr
+3. Add `episeerr_select` tag in Sonarr after it's added
+4. Follow selection process above
 
-## Multi-Season Selection
+## What Happens
 
-### Example: Catching Up on "Lost"
-Want to watch:
-- Season 1: Episodes 1-3 (pilot + setup)
-- Season 2: Episode 1 (season premiere)  
-- Season 4: Episodes 12-14 (specific arc)
+- **Series added** with `episeerr_select` tag
+- **All episodes unmonitored** (prevents downloads)  
+- **Selection interface appears** in Episeerr
+- **Choose episodes** across any seasons
+- **Only selected episodes monitored** and searched
+- **Jellyseerr request cancelled** (if applicable)
 
-**Process:**
-1. Select Seasons: 1, 2, 4
-2. Season 1: Check episodes 1, 2, 3
-3. Season 2: Check episode 1  
-4. Season 4: Check episodes 12, 13, 14
-5. Submit: Only these 6 episodes get monitored
+## Use Cases
 
-### Benefits of Multi-Season Support
-- **Precise control:** Get exactly what you want
-- **Storage efficient:** No unwanted episodes
-- **Flexible viewing:** Support non-linear viewing patterns
-- **Custom collections:** Create your own "best of" collections
+- **Try pilots**: Just episode 1 to test new shows
+- **Specific episodes**: Get episodes you missed  
+- **Limited storage**: Surgical control over downloads
+- **Multi-season selection**: Episodes from seasons 1, 3, and 5
 
-## Special Behaviors
+## Special Behavior
 
-### Pilot Episode Detection
-If you select **only the first episode** of Season 1:
-- `episeerr_select` tag is **removed**
-- Series is **assigned to default rule**
-- Treated as "pilot viewing" - normal automation takes over
-
-### Multiple Episode Selection
-If you select **multiple episodes** or **non-pilot episodes**:
-- `episeerr_select` tag is **kept**
-- **Only selected episodes** are monitored
-- **No automatic rule assignment** (manual management)
-
-## Integration with Rules System
-
-### Episode Selection vs Rules
-- **Episode Selection:** Manual, precise, one-time selection
-- **Rules System:** Automatic, ongoing management based on viewing
-
-### Combining Both Systems
-1. **Use episode selection** for initial precise requests
-2. **Switch to rules** for ongoing automation by removing `episeerr_select` tag
-3. **Keep episode selection** for shows you want manual control over
-
-## Managing Pending Requests
-
-### Viewing Pending Requests
-- Go to Episeerr → Pending Requests
-- Shows all series awaiting episode selection
-- Notification indicators alert you to new requests
-
-### Request Actions
-- **Select Seasons:** Choose which seasons to work with
-- **Select Episodes:** Choose specific episodes within seasons
-- **Delete Request:** Cancel the request entirely
-
-### Request States
-| State | Description | Action Available |
-|-------|-------------|------------------|
-| **Needs Season Selection** | New request, no seasons chosen | Select Seasons |
-| **Needs Episode Selection** | Seasons chosen, need episodes | Select Episodes |
-| **Processing** | Episodes selected, being processed | None (automatic) |
+**If you select only S1E1**: Tag removed, series assigned to default rule (becomes normal automation)  
+**If you select multiple episodes**: Tag kept, manual management only
 
 ## Troubleshooting
 
-### Request Not Appearing
-- Check if series was added to Sonarr
-- Verify `episeerr_select` tag is present
-- Check Episeerr logs for errors
-
-### Episodes Not Loading
-- Verify TMDB API key is configured
-- Check network connectivity to TMDB
-- Review browser console for JavaScript errors
-
-### Selection Not Working
-- Ensure episodes are actually selected (checkboxes checked)
-- Verify you clicked "Request Selected" 
-- Check that selected episodes exist in Sonarr
-
-### Wrong Episodes Monitored
-- Check selection summary before submitting
-- Verify season/episode numbers match expectations
-- Review Episeerr logs for processing details
-
-## Best Practices
-
-### For New Shows
-1. **Start with pilot:** Select just S01E01 to try the show
-2. **Expand if interested:** Use episode selection for more episodes
-3. **Switch to rules:** Remove tag and use automated management
-
-### For Storage Management
-1. **Select conservatively:** Choose fewer episodes initially
-2. **Add more later:** Use episode selection multiple times
-3. **Clean up regularly:** Remove `episeerr_select` tag when done
-
-### For Catch-Up Viewing
-1. **Research episodes:** Use episode descriptions to choose carefully
-2. **Select by story arcs:** Group related episodes together
-3. **Consider context:** Include setup/conclusion episodes
-
----
-
-**Next:** [Cleanup System Guide](cleanup-guide.md) - Automatic library maintenance
+**Episodes downloading immediately**: Missing delayed release profile  
+**Selection interface not appearing**: Check TMDB API key, check logs  
+**Wrong episodes monitored**: Verify selection summary before submitting

@@ -326,6 +326,15 @@ def get_server_activity():
     
     return None, None, None
 
+def better_partial_match(webhook_title, sonarr_title):
+    webhook_clean = webhook_title.lower().strip()
+    sonarr_clean = sonarr_title.lower().strip()
+    
+    # Either the webhook title contains the sonarr title
+    # OR the sonarr title contains the webhook title
+    return (webhook_clean in sonarr_clean or 
+            sonarr_clean in webhook_clean)
+
 def get_series_id(series_name):
     """Fetch series ID by name from Sonarr with improved matching."""
     url = f"{SONARR_URL}/api/v3/series"
@@ -352,10 +361,10 @@ def get_series_id(series_name):
                 logger.info(f"Found match ignoring year: '{series['title']}' matches '{series_name}'")
                 return series['id']
         
-        # 3. Partial match
+        # 3. Bidirectional partial match
         for series in series_list:
-            if series_name.lower() in series['title'].lower():
-                logger.info(f"Found partial match: '{series['title']}' contains '{series_name}'")
+            if better_partial_match(series_name, series['title']):
+                logger.info(f"Found partial match: '{series['title']}' matches '{series_name}'")
                 return series['id']
         
         # 4. Check alternate titles
