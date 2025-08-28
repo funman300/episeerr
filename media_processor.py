@@ -361,33 +361,32 @@ def get_series_id(series_name):
                 logger.info(f"Found match ignoring year: '{series['title']}' matches '{series_name}'")
                 return series['id']
         
-        # 3. TMDB translation matching
-        import tmdb_utils
-        for series in series_list:
-            tmdb_id = series.get('tmdbId')
-            if tmdb_id:
-                all_titles = tmdb_utils.get_all_titles_for_series(tmdb_id)
-                for title in all_titles:
-                    if title.lower() == series_name.lower():
-                        logger.info(f"Found TMDB translation match: '{series['title']}' matches '{series_name}' via '{title}'")
-                        return series['id']
-        
-        # 4. Partial matching (fallback)
+        # 3. Find best partial match (longest title wins)
         partial_matches = []
         for series in series_list:
             if better_partial_match(series_name, series['title']):
+                logger.info(f"DEBUG: '{series['title']}' matches '{series_name}' (length: {len(series['title'])})")
                 partial_matches.append(series)
-        
+
         if partial_matches:
+            logger.info(f"DEBUG: Found {len(partial_matches)} partial matches")
             best_match = max(partial_matches, key=lambda s: len(s['title']))
             logger.info(f"Found best partial match: '{best_match['title']}' matches '{series_name}'")
             return best_match['id']
         
+        # 4. Check alternate titles
+        for series in series_list:
+            alternate_titles = series.get('alternateTitles', [])
+            for alt_title in alternate_titles:
+                alt_title_text = alt_title.get('title', '')
+                if alt_title_text.lower() == series_name.lower():
+                    logger.info(f"Found match in alternate title: {series['title']}")
+                    return series['id']
         
         # 5. Log close matches for debugging
         close_matches = []
         for series in series_list:
-            if better_partial_match(series_name, series['title']):
+            if series_name.lower() in series['title'].lower():
                 close_matches.append(series['title'])
         
         if close_matches:
