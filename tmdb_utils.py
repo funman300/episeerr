@@ -67,6 +67,34 @@ def is_talk_show(title):
     
     title_lower = title.lower()
     return any(keyword in title_lower for keyword in keywords)
+
+def get_all_titles_for_series(tmdb_id):
+    """Get all possible titles for a series from TMDB translations."""
+    try:
+        titles = set()
+        
+        # Get the main series details first
+        series_details = get_tv_show_details(tmdb_id)
+        if series_details:
+            titles.add(series_details.get('name', ''))
+            titles.add(series_details.get('original_name', ''))
+        
+        # Get translations
+        translations = get_tmdb_endpoint(f"tv/{tmdb_id}/translations")
+        if translations and 'translations' in translations:
+            for translation in translations['translations']:
+                data = translation.get('data', {})
+                name = data.get('name')
+                if name:
+                    titles.add(name)
+        
+        # Remove empty strings and return as list
+        return [title for title in titles if title.strip()]
+        
+    except Exception as e:
+        print(f"Error getting TMDB titles for {tmdb_id}: {str(e)}")
+        return []
+    
 def get_quality_movies():
     """Get quality movies avoiding duplicates with your Radarr library."""
     # Import radarr_utils here to avoid circular imports
