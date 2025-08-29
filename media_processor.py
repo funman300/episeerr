@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import threading
 import subprocess
 
+
 # Add these imports at the top if missing
 LAST_PROCESSED_JELLYFIN_EPISODES = {}
 LAST_PROCESSED_LOCK = threading.Lock()
@@ -330,12 +331,17 @@ def better_partial_match(webhook_title, sonarr_title):
     webhook_clean = webhook_title.lower().strip()
     sonarr_clean = sonarr_title.lower().strip()
     
-    # Either the webhook title contains the sonarr title
-    # OR the sonarr title contains the webhook title
-    return (webhook_clean in sonarr_clean or 
-            sonarr_clean in webhook_clean)
+    # Original bidirectional matching
+    if webhook_clean in sonarr_clean or sonarr_clean in webhook_clean:
+        return True
+    
+    # Check if they start with the same base title (for international variants)
+    webhook_base = webhook_clean.split(':')[0].strip()
+    sonarr_base = sonarr_clean.split(':')[0].strip()
+    
+    return webhook_base == sonarr_base and len(webhook_base) > 3
 
-def get_series_id(series_name):
+def get_series_id(series_name, thetvdb_id=None, themoviedb_id=None):
     """Fetch series ID by name from Sonarr with improved matching."""
     url = f"{SONARR_URL}/api/v3/series"
     headers = {'X-Api-Key': SONARR_API_KEY}
@@ -347,44 +353,41 @@ def get_series_id(series_name):
         
         series_list = response.json()
         
-        # 1. Exact match
+        # 1. TVDB ID matching (most reliable)
+        if thetvdb_id:
+            try:
+                tvdb_id_int = int(thetvdb_id)
+                for series in series_list:
+                    if series.get('tvdbId') == tvdb_id_int:
+                        logger.info(f"Found TVDB ID match: {series['title']} (TVDB: {thetvdb_id})")
+                        return series['id']
+            except (ValueError, TypeError):
+                pass
+        
+        # 2. TMDB ID matching
+        if themoviedb_id:
+            try:
+                tmdb_id_int = int(themoviedb_id)
+                for series in series_list:
+                    if series.get('tmdbId') == tmdb_id_int:
+                        logger.info(f"Found TMDB ID match: {series['title']} (TMDB: {themoviedb_id})")
+                        return series['id']
+            except (ValueError, TypeError):
+                pass
+        
+        # 3. Exact title match
         for series in series_list:
             if series['title'].lower() == series_name.lower():
                 logger.info(f"Found exact match: {series['title']}")
                 return series['id']
         
-        # 2. Match without year suffixes
+        # 4. Match without year suffixes
         webhook_title_clean = re.sub(r'\s*\(\d{4}\)$', '', series_name).strip()
         for series in series_list:
             sonarr_title_clean = re.sub(r'\s*\(\d{4}\)$', '', series['title']).strip()
             if sonarr_title_clean.lower() == webhook_title_clean.lower():
                 logger.info(f"Found match ignoring year: '{series['title']}' matches '{series_name}'")
                 return series['id']
-        
-        # 3. TMDB translation matching
-        try:
-            import tmdb_utils
-            for series in series_list:
-                tmdb_id = series.get('tmdbId')
-                if tmdb_id:
-                    all_titles = tmdb_utils.get_all_titles_for_series(tmdb_id)
-                    for title in all_titles:
-                        if title.lower().strip() == series_name.lower().strip():
-                            logger.info(f"Found TMDB translation match: '{series['title']}' matches '{series_name}' via '{title}'")
-                            return series['id']
-        except Exception as e:
-            logger.error(f"TMDB translation matching failed: {str(e)}")
-        
-        # 4. Partial matching (fallback)
-        partial_matches = []
-        for series in series_list:
-            if better_partial_match(series_name, series['title']):
-                partial_matches.append(series)
-        
-        if partial_matches:
-            best_match = max(partial_matches, key=lambda s: len(s['title']))
-            logger.info(f"Found best partial match: '{best_match['title']}' matches '{series_name}'")
-            return best_match['id']
         
         
         
@@ -2220,7 +2223,7 @@ def get_jellyfin_active_polling_status():
 def main():
     """Main entry point - FIXED webhook vs cleanup logic"""
     # Check if this is a webhook call (has recent webhook data)
-    series_name, season_number, episode_number = get_server_activity()
+    series_name, season_number, episode_number, thetvdb_id, themoviedb_id = get_server_activity()
     
     # ONLY process as webhook if this was called BY a webhook (not manual cleanup)
     # Add a flag or check timestamp to distinguish
@@ -2238,7 +2241,7 @@ def main():
     
     if series_name and is_recent_webhook:
         # Webhook mode - process the episode that was just watched
-        series_id = get_series_id(series_name)
+        series_id = get_series_id(series_name, thetvdb_id, themoviedb_id)
         if series_id:
             config = load_config()
             rule = None

@@ -1967,9 +1967,11 @@ def handle_server_webhook():
             temp_dir = os.path.join(os.getcwd(), 'temp')
             os.makedirs(temp_dir, exist_ok=True)
             plex_data = {
-                "server_title": data.get('plex_title'),
-                "server_season_num": data.get('plex_season_num'),
-                "server_ep_num": data.get('plex_ep_num')
+                "server_title": data.get('plex_title') or data.get('server_title'),
+                "server_season_num": data.get('plex_season_num') or data.get('server_season_num'),
+                "server_ep_num": data.get('plex_ep_num') or data.get('server_ep_num'),
+                "thetvdb_id": data.get('thetvdb_id'),
+                "themoviedb_id": data.get('themoviedb_id')
             }
             with open(os.path.join(temp_dir, 'data_from_server.json'), 'w') as f:
                 json.dump(plex_data, f)
