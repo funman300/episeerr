@@ -296,19 +296,19 @@ def get_activity_date_with_hierarchy(series_id, series_title=None, return_comple
 def get_server_activity():
     """Read current viewing details from server webhook stored data."""
     try:
-        # First try the standardized filename
         filepath = '/app/temp/data_from_server.json'
         if not os.path.exists(filepath):
-            # Fallback to the Tautulli-specific filename for backward compatibility
             filepath = '/app/temp/data_from_tautulli.json'
             
         with open(filepath, 'r') as file:
             data = json.load(file)
         
-        # Try server-prefix fields first (standardized format)
+        # Try server-prefix fields first (new format)
         series_title = data.get('server_title')
         season_number = data.get('server_season_num')
         episode_number = data.get('server_ep_num')
+        thetvdb_id = data.get('thetvdb_id')
+        themoviedb_id = data.get('themoviedb_id')
         
         # If not found, try plex-prefix fields (backward compatibility)
         if not all([series_title, season_number, episode_number]):
@@ -317,15 +317,15 @@ def get_server_activity():
             episode_number = data.get('plex_ep_num')
         
         if all([series_title, season_number, episode_number]):
-            return series_title, int(season_number), int(episode_number)
+            return series_title, int(season_number), int(episode_number), thetvdb_id, themoviedb_id
             
         logger.error(f"Required data fields not found in {filepath}")
-        logger.debug(f"Data contents: {data}")
+        return None, None, None, None, None
         
     except Exception as e:
         logger.error(f"Failed to read or parse data from server webhook: {str(e)}")
     
-    return None, None, None
+    return None, None, None, None, None
 
 def better_partial_match(webhook_title, sonarr_title):
     webhook_clean = webhook_title.lower().strip()
