@@ -15,7 +15,9 @@ Automatic "next episode ready when you watch" system. **Assumes linear viewing**
 {
   "plex_title": "{show_name}",
   "plex_season_num": "{season_num}",
-  "plex_ep_num": "{episode_num}"
+  "plex_ep_num": "{episode_num}",
+  "thetvdb_id": "{thetvdb_id}",
+  "themoviedb_id": "{themoviedb_id}"
 }
 ```
 
@@ -97,4 +99,5 @@ Action: Search
 **Episodes not updating**: Check webhook setup and logs  
 **Wrong episodes**: Verify rule settings match your viewing pattern  
 **Series not managed**: Ensure series is assigned to a rule
+
 
