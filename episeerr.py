@@ -1,4 +1,4 @@
-__version__ = "2.5.5"
+__version__ = "2.5.6"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -901,6 +901,63 @@ def cleanup():
     """Clean up configuration."""
     cleanup_config_rules()
     return redirect(url_for('index', message="Configuration cleaned up successfully"))
+
+@app.route('/api/series-with-status')
+def api_series_with_status():
+    """Get series with enhanced status information for the sortable table."""
+    try:
+        config = load_config()
+        all_series = get_sonarr_series()
+        
+        # Build assignment mapping
+        assignments = {}
+        for rule_name, details in config['rules'].items():
+            series_dict = details.get('series', {})
+            for series_id in series_dict.keys():
+                assignments[str(series_id)] = rule_name
+        
+        enhanced_series = []
+        for series in all_series:
+            series_id = str(series['id'])
+            
+            # Get assigned rule
+            assigned_rule = assignments.get(series_id, 'None')
+            
+            # Determine status from Sonarr data
+            status = 'unknown'
+            if series.get('ended'):
+                status = 'ended'
+            elif series.get('status') == 'continuing':
+                status = 'continuing'
+            elif series.get('status') == 'upcoming':
+                status = 'upcoming'
+            
+            # Get last episode info
+            last_episode = None
+            if series.get('lastInfoSync'):
+                last_episode = series['lastInfoSync'][:10]  # Extract date part
+            elif series.get('previousAiring'):
+                last_episode = series['previousAiring'][:10]
+            
+            enhanced_series.append({
+                'id': series['id'],
+                'title': series['title'],
+                'assigned_rule': assigned_rule,
+                'status': status,
+                'year': series.get('year'),
+                'lastEpisode': last_episode,
+                'titleSlug': series.get('titleSlug'),
+                'ended': series.get('ended', False)
+            })
+        
+        return jsonify({
+            'success': True,
+            'series': enhanced_series
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error in series-with-status API: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 # ============================================================================
 # SCHEDULER & SETTINGS ROUTES

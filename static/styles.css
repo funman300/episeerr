@@ -1012,3 +1012,44 @@ a:hover .clickable-card .text-muted {
         padding: 0.5rem !important;
     }
 }
+.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+}
+
+.sortable:hover {
+    background-color: rgba(255,255,255,0.1);
+}
+
+.sort-icon {
+    opacity: 0.5;
+    font-size: 0.8em;
+    margin-left: 5px;
+}
+
+.sortable.sort-asc .sort-icon::before {
+    content: "\f0de"; /* fa-sort-up */
+    opacity: 1;
+}
+
+.sortable.sort-desc .sort-icon::before {
+    content: "\f0dd"; /* fa-sort-down */
+    opacity: 1;
+}
+
+.status-continuing {
+    color: #28a745;
+}
+
+.status-ended {
+    color: #dc3545;
+}
+
+.status-upcoming {
+    color: #ffc107;
+}
+
+.status-unknown {
+    color: #6c757d;
+}

@@ -97,7 +97,7 @@
                             <i class="fas fa-broom me-1"></i>Clean Config
                         </a>
                         <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">
-                            <i class="fas fa-plus me-1"></i>+ New Rule
+                            <i class="fas fa-plus me-1"></i> New Rule
                         </a>
                     </div>
                 </div>
@@ -214,91 +214,74 @@
     </div>
 
     <div class="col-md-8">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5><i class="fas fa-tv me-2"></i>Series Management</h5>
-                
-            </div>
-            <div class="card-body">
-                <!-- Rule Assignment Form -->
-                <form method="POST" action="{{ url_for('assign_rules') }}" id="assignment-form">
-                    <div class="row mb-3">
-                        <div class="col-md-3">
-                            <select name="rule_name" class="form-select" required>
-                                <option value="">Select Rule to Assign</option>
-                                {% for rule_name in config.rules.keys() %}
-                                <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-9">
-                            <div class="btn-group w-100">
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-link me-1"></i>Assign Selected
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary" onclick="selectAll()">
-                                    Select All
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary" onclick="selectNone()">
-                                    Select None
-                                </button>
-                            </div>
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5><i class="fas fa-tv me-2"></i>Series Management</h5>
+        </div>
+        <div class="card-body">
+            <!-- Rule Assignment Form -->
+            <form method="POST" action="{{ url_for('assign_rules') }}" id="assignment-form">
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <select name="rule_name" class="form-select" required>
+                            <option value="">Select Rule to Assign</option>
+                            {% for rule_name in config.rules.keys() %}
+                            <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-9">
+                        <div class="btn-group w-100">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-link me-1"></i>Assign Selected
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="selectAll()">
+                                Select All
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="selectNone()">
+                                Select None
+                            </button>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Series List -->
-                    <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
-                        <table class="table table-dark table-striped table-sm">
-                            <thead class="sticky-top">
-                                <tr>
-                                    <th width="50">
-                                        <input type="checkbox" id="select-all-checkbox" onchange="toggleAll()">
-                                    </th>
-                                    <th>Series</th>
-                                    <th>Current Rule</th>
-                                    <th>Year</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for series in all_series %}
-                                <tr>
-                                    <td>
-                                        <input type="checkbox" name="series_ids" value="{{ series.id }}" class="series-checkbox">
-                                    </td>
-                                    <td>
-                                        <a href="{{ series | sonarr_url }}" target="_blank" class="text-decoration-none text-light">
-                                            <strong>{{ series.title }}</strong>
-                                            <i class="fas fa-external-link-alt ms-1 text-muted" style="font-size: 0.8em;"></i>
-                                        </a>
-                                    </td>
-                                    <td>
-                                        {% if series.assigned_rule != 'None' %}
-                                        <span class="badge bg-primary">{{ series.assigned_rule.replace('_', ' ').title() }}</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary">Unassigned</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ series.year or 'N/A' }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </form>
-               
-                <!-- Unassign Button and Auto-Assign Toggle -->
-                <form method="POST" action="{{ url_for('unassign_series') }}" class="mt-3" onsubmit="return copySelectedSeries(this)">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <button type="submit" class="btn btn-warning">
-                            <i class="fas fa-unlink me-1"></i>Unassign Selected Series
-                        </button>
-                        
-                    </div>
-                </form>
-                
-            </div>
+                <!-- Enhanced Series Table with Sorting -->
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                    <table class="table table-dark table-striped table-sm" id="seriesTable">
+                        <thead class="sticky-top">
+                            <tr>
+                                <th width="50">
+                                    <input type="checkbox" id="select-all-checkbox" onchange="toggleAll()">
+                                </th>
+                                <th class="sortable" data-column="title">
+                                    Series <i class="fas fa-sort sort-icon"></i>
+                                </th>
+                                <th class="sortable" data-column="rule">
+                                    Current Rule <i class="fas fa-sort sort-icon"></i>
+                                </th>
+                                <th class="sortable" data-column="status">
+                                    Status <i class="fas fa-sort sort-icon"></i>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="seriesTableBody">
+                            <!-- Series rows will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+           
+            <!-- Unassign Button -->
+            <form method="POST" action="{{ url_for('unassign_series') }}" class="mt-3" onsubmit="return copySelectedSeries(this)">
+                <div class="d-flex justify-content-between align-items-center">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-unlink me-1"></i>Unassign Selected Series
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
+</div>
 </div>
 {% endblock %}
 
@@ -426,12 +409,11 @@ function toggleAutoAssign() {
         });
 }
 
-// Auto-refresh rules page when series assignments change
+// FIXED: Auto-refresh with proper change detection
 class RulesPageAutoRefresh {
     constructor() {
-        this.lastSeriesCount = 0;
-        this.lastRuleAssignments = new Map();
-        this.checkInterval = 15000; // Check every 15 seconds
+        this.lastSeriesData = new Map(); // Store actual series data with assignments
+        this.checkInterval = 45000; // 45 seconds
         this.init();
     }
 
@@ -441,26 +423,26 @@ class RulesPageAutoRefresh {
             return;
         }
 
-        this.captureCurrentState();
-        this.startChecking();
+        // Wait for initial data load
+        setTimeout(() => {
+            this.captureCurrentState();
+            this.startChecking();
+        }, 2000);
     }
 
     captureCurrentState() {
-        // Count total series
-        const seriesRows = document.querySelectorAll('tbody tr');
-        this.lastSeriesCount = seriesRows.length;
-
-        // Capture rule assignments
-        this.lastRuleAssignments.clear();
-        seriesRows.forEach(row => {
-            const seriesId = row.querySelector('input[type="checkbox"]')?.value;
-            const ruleCell = row.querySelector('.rule-assignment');
-            if (seriesId && ruleCell) {
-                this.lastRuleAssignments.set(seriesId, ruleCell.textContent.trim());
-            }
-        });
-
-        console.log(`Captured state: ${this.lastSeriesCount} series, ${this.lastRuleAssignments.size} assignments`);
+        // Capture the actual series data from the enhanced table
+        if (seriesData && seriesData.length > 0) {
+            this.lastSeriesData.clear();
+            seriesData.forEach(series => {
+                this.lastSeriesData.set(series.id.toString(), {
+                    title: series.title,
+                    assigned_rule: series.assigned_rule || 'None',
+                    status: series.status
+                });
+            });
+            console.log(`Captured ${this.lastSeriesData.size} series with assignments`);
+        }
     }
 
     startChecking() {
@@ -471,36 +453,47 @@ class RulesPageAutoRefresh {
 
     async checkForChanges() {
         try {
-            // Get current series data from server
-            const response = await fetch('/api/series-stats');
-            const stats = await response.json();
+            // Get fresh data from the API
+            const response = await fetch('/api/series-with-status');
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            if (!data.success || !data.series) return;
+            
+            const currentSeriesData = new Map();
+            data.series.forEach(series => {
+                currentSeriesData.set(series.id.toString(), {
+                    title: series.title,
+                    assigned_rule: series.assigned_rule || 'None',
+                    status: series.status
+                });
+            });
 
-            // Check if series count changed
-            if (stats.total_series !== this.lastSeriesCount) {
-                console.log(`Series count changed: ${this.lastSeriesCount} → ${stats.total_series}`);
-                this.refreshPage('New series detected');
-                return;
+            // Check for changes
+            let hasChanges = false;
+            let changeType = '';
+
+            // Check for new or removed series
+            if (currentSeriesData.size !== this.lastSeriesData.size) {
+                hasChanges = true;
+                changeType = currentSeriesData.size > this.lastSeriesData.size ? 'New series detected' : 'Series removed';
             }
 
-            // Check if rule assignments changed by getting fresh data
-            const seriesResponse = await fetch('/api/current-assignments');
-            if (seriesResponse.ok) {
-                const assignments = await seriesResponse.json();
-                
-                // Compare assignments
-                let assignmentChanged = false;
-                for (const [seriesId, oldRule] of this.lastRuleAssignments) {
-                    const newRule = assignments[seriesId] || 'None';
-                    if (oldRule !== newRule) {
-                        console.log(`Rule assignment changed for series ${seriesId}: ${oldRule} → ${newRule}`);
-                        assignmentChanged = true;
+            // Check for assignment changes
+            if (!hasChanges) {
+                for (const [seriesId, currentData] of currentSeriesData) {
+                    const lastData = this.lastSeriesData.get(seriesId);
+                    if (!lastData || lastData.assigned_rule !== currentData.assigned_rule) {
+                        hasChanges = true;
+                        changeType = 'Rule assignments updated';
                         break;
                     }
                 }
+            }
 
-                if (assignmentChanged) {
-                    this.refreshPage('Rule assignments updated');
-                }
+            if (hasChanges) {
+                console.log(`Detected changes: ${changeType}`);
+                this.refreshPage(changeType);
             }
 
         } catch (error) {
@@ -511,17 +504,14 @@ class RulesPageAutoRefresh {
     refreshPage(reason) {
         console.log(`Auto-refreshing page: ${reason}`);
         
-        // Show brief notification
         this.showRefreshNotification(reason);
         
-        // Refresh after short delay
         setTimeout(() => {
             window.location.reload();
         }, 1500);
     }
 
     showRefreshNotification(reason) {
-        // Create temporary notification
         const notification = document.createElement('div');
         notification.innerHTML = `
             <div class="alert alert-info alert-dismissible fade show position-fixed" 
@@ -534,7 +524,6 @@ class RulesPageAutoRefresh {
         
         document.body.appendChild(notification);
         
-        // Auto-remove after 3 seconds
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
@@ -542,8 +531,216 @@ class RulesPageAutoRefresh {
         }, 3000);
     }
 }
+// Enhanced Series Table with Sorting
+let seriesData = [];
+let currentSort = {
+    column: localStorage.getItem('episeerr-sort-column') || null,
+    direction: localStorage.getItem('episeerr-sort-direction') || 'asc'
+};
 
-// Initialize everything when page loads - SINGLE DOMContentLoaded listener
+// Load enhanced series data with status information
+function loadEnhancedSeriesData() {
+    fetch('/api/series-with-status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                seriesData = data.series;
+                
+                // Apply saved sort if exists
+                if (currentSort.column) {
+                    applySavedSort();
+                } else {
+                    renderTable();
+                }
+            } else {
+                console.error('Failed to load enhanced series data:', data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading enhanced series data:', error);
+        });
+}
+
+// Apply saved sort without changing indicators
+function applySavedSort() {
+    if (currentSort.column) {
+        // Sort the data
+        sortDataByColumn(currentSort.column);
+        
+        // Update visual indicator
+        const header = document.querySelector(`[data-column="${currentSort.column}"]`);
+        if (header) {
+            header.classList.add(`sort-${currentSort.direction}`);
+        }
+    }
+    
+    renderTable();
+}
+
+// Setup sorting handlers
+function setupSortHandlers() {
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.addEventListener('click', function() {
+            const column = this.dataset.column;
+            sortTable(column);
+        });
+    });
+}
+
+// Sort table by column
+function sortTable(column) {
+    // Reset all sort indicators
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // Determine sort direction
+    if (currentSort.column === column) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.direction = 'asc';
+    }
+    currentSort.column = column;
+    
+    // Save sort preferences
+    localStorage.setItem('episeerr-sort-column', currentSort.column);
+    localStorage.setItem('episeerr-sort-direction', currentSort.direction);
+    
+    // Update sort indicator
+    const header = document.querySelector(`[data-column="${column}"]`);
+    header.classList.add(`sort-${currentSort.direction}`);
+    
+    // Sort and render
+    sortDataByColumn(column);
+    renderTable();
+}
+
+// Separate function to sort data by column
+function sortDataByColumn(column) {
+    seriesData.sort((a, b) => {
+        let valueA, valueB;
+        
+        switch(column) {
+            case 'title':
+                valueA = a.title.toLowerCase();
+                valueB = b.title.toLowerCase();
+                break;
+            case 'rule':
+                valueA = (a.assigned_rule === 'None' ? 'zzz_unassigned' : a.assigned_rule.toLowerCase());
+                valueB = (b.assigned_rule === 'None' ? 'zzz_unassigned' : b.assigned_rule.toLowerCase());
+                break;
+            case 'status':
+                const statusPriority = {
+                    'continuing': 1,
+                    'upcoming': 2,
+                    'ended': 3,
+                    'unknown': 4
+                };
+                valueA = statusPriority[a.status] || 4;
+                valueB = statusPriority[b.status] || 4;
+                break;
+            default:
+                return 0;
+        }
+        
+        let result;
+        if (typeof valueA === 'string') {
+            result = valueA.localeCompare(valueB);
+        } else {
+            result = valueA - valueB;
+        }
+        
+        return currentSort.direction === 'desc' ? -result : result;
+    });
+}
+
+// Render the table with current data
+function renderTable() {
+    const tbody = document.getElementById('seriesTableBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    seriesData.forEach(series => {
+        const row = createSeriesRow(series);
+        tbody.appendChild(row);
+    });
+    
+    updateCheckboxStates();
+}
+
+// Create a series table row
+function createSeriesRow(series) {
+    const row = document.createElement('tr');
+    
+    const statusClass = `status-${series.status || 'unknown'}`;
+    const statusText = getStatusText(series);
+    
+    const ruleText = series.assigned_rule && series.assigned_rule !== 'None' 
+        ? series.assigned_rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+        : 'Unassigned';
+    
+    const ruleBadgeClass = series.assigned_rule && series.assigned_rule !== 'None' 
+        ? 'bg-primary' : 'bg-secondary';
+    
+    row.innerHTML = `
+        <td>
+            <input type="checkbox" name="series_ids" value="${series.id}" class="series-checkbox">
+        </td>
+        <td>
+            <a href="{{ SONARR_URL }}/series/${series.titleSlug || series.title.toLowerCase().replace(/\\s+/g, '-')}" target="_blank" class="text-decoration-none text-light">
+                <strong>${series.title}</strong>
+                <i class="fas fa-external-link-alt ms-1 text-muted" style="font-size: 0.8em;"></i>
+            </a>
+        </td>
+        <td>
+            <span class="badge ${ruleBadgeClass}">${ruleText}</span>
+        </td>
+        <td>
+            <span class="${statusClass}">${statusText}</span>
+            <br><small class="text-muted">${getStatusDetails(series)}</small>
+        </td>
+    `;
+    
+    return row;
+}
+
+// Get formatted status text
+function getStatusText(series) {
+    switch(series.status) {
+        case 'continuing': return '📺 Continuing';
+        case 'ended': return '🏁 Ended';
+        case 'upcoming': return '🔜 Upcoming';
+        default: return '❓ Unknown';
+    }
+}
+
+// Get status details
+function getStatusDetails(series) {
+    if (series.lastEpisode) {
+        const lastDate = new Date(series.lastEpisode);
+        const year = lastDate.getFullYear();
+        const monthDay = lastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return `Last: ${monthDay}, ${year}`;
+    } else if (series.year) {
+        return `Year: ${series.year}`;
+    }
+    return 'No date info';
+}
+
+// Update checkbox states after re-rendering
+function updateCheckboxStates() {
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    const seriesCheckboxes = document.querySelectorAll('.series-checkbox');
+    
+    if (selectAllCheckbox && seriesCheckboxes.length > 0) {
+        const allChecked = Array.from(seriesCheckboxes).every(cb => cb.checked);
+        const someChecked = Array.from(seriesCheckboxes).some(cb => cb.checked);
+        
+        selectAllCheckbox.checked = allChecked;
+        selectAllCheckbox.indeterminate = someChecked && !allChecked;
+    }
+}
 document.addEventListener('DOMContentLoaded', function() {
     // Update Sonarr stats immediately
     updateSonarrStats();
@@ -565,7 +762,11 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .catch(error => console.error('Error loading auto-assign setting:', error));
     
-    // Initialize auto-refresh for rule changes
+    // Initialize enhanced sortable series table
+    loadEnhancedSeriesData();
+    setupSortHandlers();
+    
+    // Initialize auto-refresh with better change detection
     new RulesPageAutoRefresh();
 });
 </script>
