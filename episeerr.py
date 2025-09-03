@@ -1,4 +1,4 @@
-__version__ = "2.5.1"
+__version__ = "2.5.5"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -399,7 +399,7 @@ def save_config(config):
         raise
 
 def get_sonarr_series():
-    """Get series list from Sonarr."""
+    """Get series list from Sonarr, excluding series with 'watched' tag."""
     try:
         sonarr_preferences = sonarr_utils.load_preferences()
         headers = {
@@ -407,12 +407,37 @@ def get_sonarr_series():
             'Content-Type': 'application/json'
         }
         sonarr_url = sonarr_preferences['SONARR_URL']
+        
+        # Get all series
         response = requests.get(f"{sonarr_url}/api/v3/series", headers=headers)
-        if response.ok:
-            return response.json()
-        else:
+        if not response.ok:
             app.logger.error(f"Failed to fetch series from Sonarr: {response.status_code}")
             return []
+        
+        all_series = response.json()
+        
+        # Get all tags to find 'watched' tag ID
+        tags_response = requests.get(f"{sonarr_url}/api/v3/tag", headers=headers)
+        if tags_response.ok:
+            tags = tags_response.json()
+            watched_tag_id = None
+            for tag in tags:
+                if tag.get('label', '').lower() == 'watched':
+                    watched_tag_id = tag.get('id')
+                    break
+            
+            # Filter out series with 'watched' tag
+            if watched_tag_id:
+                filtered_series = []
+                for series in all_series:
+                    series_tags = series.get('tags', [])
+                    if watched_tag_id not in series_tags:
+                        filtered_series.append(series)
+                app.logger.debug(f"Filtered out {len(all_series) - len(filtered_series)} series with 'watched' tag")
+                return filtered_series
+        
+        return all_series
+        
     except Exception as e:
         app.logger.error(f"Error fetching Sonarr series: {str(e)}")
         return []

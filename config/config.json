@@ -13,9 +13,6 @@
             "dormant_days": null,
             "dry_run": false,
             "series": {
-                "90": {
-                    "activity_date": null
-                },
                 "245": {
                     "activity_date": null
                 },
@@ -86,9 +83,6 @@
                     "activity_date": null
                 },
                 "243": {
-                    "activity_date": null
-                },
-                "480": {
                     "activity_date": null
                 },
                 "29": {
