@@ -18,7 +18,7 @@ from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 import requests
 import episeerr_utils
-from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID
+from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID, normalize_url
 
 app = Flask(__name__)
 
@@ -27,13 +27,13 @@ load_dotenv()
 BASE_DIR = os.getcwd()
 
 # Sonarr variables
-SONARR_URL = os.getenv('SONARR_URL')
+SONARR_URL = normalize_url(os.getenv('SONARR_URL'))
 SONARR_API_KEY = os.getenv('SONARR_API_KEY')
 
 # Jellyseerr/Overseerr variables
-JELLYSEERR_URL = os.getenv('JELLYSEERR_URL', '')
+JELLYSEERR_URL = normalize_url(os.getenv('JELLYSEERR_URL', ''))
 JELLYSEERR_API_KEY = os.getenv('JELLYSEERR_API_KEY')
-OVERSEERR_URL = os.getenv('OVERSEERR_URL')
+OVERSEERR_URL = normalize_url(os.getenv('OVERSEERR_URL'))
 OVERSEERR_API_KEY = os.getenv('OVERSEERR_API_KEY')
 SEERR_ENABLED = bool((JELLYSEERR_URL and JELLYSEERR_API_KEY) or (OVERSEERR_URL and OVERSEERR_API_KEY))
 
