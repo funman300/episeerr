@@ -42,6 +42,16 @@ Automatic cleanup based on time and viewing activity. **Completely optional** - 
 - Example: `14` = New episodes have 2 weeks to be watched or deleted
 - Use for: Staying current, preventing backlog
 
+### Grace Period Scope (New!)
+
+By default, grace timers apply to the entire series - watching ANY episode resets the timer for all kept episodes.
+
+For **multi-viewer households** (e.g., one person watching Season 1 while another watches Season 2), 
+you can set **Grace Period Scope: Per Season** to track each season independently.
+
+- **Per Series** (default): Simple, traditional behavior. One timer for the whole show.
+- **Per Season**: Each season has its own grace timer. Perfect when different people watch different seasons.
+
 ### Dormant (Abandoned Series)
 
 - **Days before complete series cleanup**

@@ -206,7 +206,8 @@
                 "385": {
                     "activity_date": null
                 }
-            }
+            },
+            "grace_scope": "series"
         }
     },
     "field_migration_complete": true,

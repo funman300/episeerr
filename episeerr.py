@@ -1,4 +1,4 @@
-__version__ = "2.6.1"
+__version__ = "2.6.5"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -363,6 +363,18 @@ def load_config():
             config = json.load(file)
         if 'rules' not in config:
             config['rules'] = {}
+        
+        # Migration: Add grace_scope to existing rules
+        migrated = False
+        for rule_name, rule_details in config.get('rules', {}).items():
+            if 'grace_scope' not in rule_details:
+                rule_details['grace_scope'] = 'series'  # Default to current behavior
+                migrated = True
+        
+        if migrated:
+            save_config(config)
+            app.logger.info("✓ Migrated rules to include grace_scope field (defaulted to 'series')")
+        
         return config
     except FileNotFoundError:
         default_config = {
@@ -377,6 +389,7 @@ def load_config():
                     'grace_watched': None,
                     'grace_unwatched': None,
                     'dormant_days': None,
+                    'grace_scope': 'series',
                     'series': {},
                     'dry_run': False
                 }
@@ -517,6 +530,7 @@ def create_rule():
         grace_watched = request.form.get('grace_watched', '').strip()
         grace_unwatched = request.form.get('grace_unwatched', '').strip()
         dormant_days = request.form.get('dormant_days', '').strip()
+        grace_scope = request.form.get('grace_scope', 'series')  # Default to 'series'
         
         grace_watched = None if not grace_watched else int(grace_watched)
         grace_unwatched = None if not grace_unwatched else int(grace_unwatched)
@@ -533,6 +547,7 @@ def create_rule():
             'grace_watched': grace_watched,
             'grace_unwatched': grace_unwatched,
             'dormant_days': dormant_days,
+            'grace_scope': grace_scope,
             'series': {},
             'dry_run': False
         }
@@ -573,6 +588,7 @@ def edit_rule(rule_name):
         grace_watched = request.form.get('grace_watched', '').strip()
         grace_unwatched = request.form.get('grace_unwatched', '').strip()
         dormant_days = request.form.get('dormant_days', '').strip()
+        grace_scope = request.form.get('grace_scope', 'series')  # Default to 'series'
         
         grace_watched = None if not grace_watched else int(grace_watched)
         grace_unwatched = None if not grace_unwatched else int(grace_unwatched)
@@ -588,7 +604,8 @@ def edit_rule(rule_name):
             'monitor_watched': 'monitor_watched' in request.form,
             'grace_watched': grace_watched,
             'grace_unwatched': grace_unwatched,
-            'dormant_days': dormant_days
+            'dormant_days': dormant_days,
+            'grace_scope': grace_scope
         })
         
         # Handle default rule setting

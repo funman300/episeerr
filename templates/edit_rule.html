@@ -152,6 +152,22 @@
                                             <small>Complete cleanup for abandoned series</small>
                                         </div>
                                     </div>
+                                    <div class="mb-3">
+                                        <label for="grace_scope" class="form-label">
+                                            Grace Period Scope
+                                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                            title="Choose how grace timers are tracked"></i>
+                                        </label>
+                                        <select class="form-select" id="grace_scope" name="grace_scope">
+                                            <option value="series" {% if rule.get('grace_scope', 'series') == 'series' %}selected{% endif %}>Per Series (all seasons share timer)</option>
+                                            <option value="season" {% if rule.get('grace_scope') == 'season' %}selected{% endif %}>Per Season (independent timers)</option>
+                                        </select>
+                                        <div class="form-text text-muted">
+                                            <small><strong>Per Series:</strong> Any watch resets grace for all episodes<br>
+                                            <strong>Per Season:</strong> Each season has independent grace timer (better for multi-viewer)</small>
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
 
