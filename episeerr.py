@@ -1,4 +1,4 @@
-__version__ = "2.6.0"
+__version__ = "2.6.1"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -1642,6 +1642,43 @@ def process_sonarr_webhook():
         }
         sonarr_url = sonarr_preferences['SONARR_URL']
 
+        # ============================================================================
+        # MOVED UP: Check for and clean up Jellyseerr request FIRST (before tag check)
+        # This ensures Jellyseerr files are deleted even when no episeerr tags are used
+        # ============================================================================
+        jellyseerr_request_id = None
+        jellyseerr_requested_seasons = None
+        tvdb_id_str = str(tvdb_id) if tvdb_id else None
+
+        app.logger.info(f"Looking for Jellyseerr request with TVDB ID: {tvdb_id_str}")
+
+        if tvdb_id_str:
+            request_file = os.path.join(REQUESTS_DIR, f"jellyseerr-{tvdb_id_str}.json")
+            if os.path.exists(request_file):
+                try:
+                    with open(request_file, 'r') as f:
+                        request_data = json.load(f)
+                    jellyseerr_request_id = request_data.get('request_id')
+                    jellyseerr_requested_seasons = request_data.get('requested_seasons')
+                    app.logger.info(f"✓ Found Jellyseerr request file: {jellyseerr_request_id}")
+                    
+                    # Cancel the Jellyseerr request
+                    app.logger.info(f"Cancelling Jellyseerr request {jellyseerr_request_id}")
+                    cancel_result = episeerr_utils.delete_overseerr_request(jellyseerr_request_id)
+                    app.logger.info(f"Jellyseerr cancellation result: {cancel_result}")
+                    
+                    # Delete the file after processing
+                    os.remove(request_file)
+                    app.logger.info(f"✓ Removed Jellyseerr request file for TVDB ID {tvdb_id_str}")
+                    
+                except Exception as e:
+                    app.logger.error(f"Error processing Jellyseerr request file: {str(e)}")
+            else:
+                app.logger.info(f"No Jellyseerr request file found for TVDB ID: {tvdb_id_str}")
+        
+        # ============================================================================
+        # NOW check tags (Jellyseerr cleanup already done above)
+        # ============================================================================
         # Get all tags from Sonarr to map IDs to labels
         tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers)
         if not tags_response.ok:
@@ -1724,36 +1761,9 @@ def process_sonarr_webhook():
                 app.logger.info(f"Series {series_title} has no episeerr tags, doing nothing")
                 return jsonify({"status": "success", "message": "Series has no episeerr tags, no processing needed"}), 200
         
-        # Check for pending Jellyseerr request
-        jellyseerr_request_id = None
-        jellyseerr_requested_seasons = None  # ADD THIS LINE
-        tvdb_id_str = str(tvdb_id) if tvdb_id else None
-
-        app.logger.info(f"Looking for Jellyseerr request with TVDB ID: {tvdb_id_str}")
-
-        if tvdb_id_str:
-            request_file = os.path.join(REQUESTS_DIR, f"jellyseerr-{tvdb_id_str}.json")
-            if os.path.exists(request_file):
-                try:
-                    with open(request_file, 'r') as f:
-                        request_data = json.load(f)
-                    jellyseerr_request_id = request_data.get('request_id')
-                    jellyseerr_requested_seasons = request_data.get('requested_seasons')  # ADD THIS LINE
-                    app.logger.info(f"✓ Found Jellyseerr request file: {jellyseerr_request_id}")
-                    
-                    # Cancel the Jellyseerr request
-                    app.logger.info(f"Cancelling Jellyseerr request {jellyseerr_request_id}")
-                    cancel_result = episeerr_utils.delete_overseerr_request(jellyseerr_request_id)
-                    app.logger.info(f"Jellyseerr cancellation result: {cancel_result}")
-                    
-                    # Delete the file after processing
-                    os.remove(request_file)
-                    app.logger.info(f"✓ Removed Jellyseerr request file for TVDB ID {tvdb_id_str}")
-                    
-                except Exception as e:
-                    app.logger.error(f"Error processing Jellyseerr request file: {str(e)}")
-            else:
-                app.logger.info(f"No Jellyseerr request file found for TVDB ID: {tvdb_id_str}")
+        # ============================================================================
+        # REMOVED: Jellyseerr cleanup code that was here (now at top of function)
+        # ============================================================================
                 
         # ALWAYS: Unmonitor all episodes and remove episeerr tags
         app.logger.info(f"Unmonitoring all episodes for {series_title}")
