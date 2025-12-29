@@ -8,6 +8,7 @@ Choose specific episodes manually across multiple seasons.
   - [How to Use](#how-to-use)
     - [Method 1: Sonarr Tags](#method-1-sonarr-tags)
     - [Method 2: Jellyseerr/Overseerr Integration](#method-2-jellyseerroverseerr-integration)
+    - [Method 3: Jellyseerr with episeerr\_default Tag](#method-3-jellyseerr-with-episeerr_default-tag)
   - [What Happens](#what-happens)
   - [Use Cases](#use-cases)
   - [Special Behavior](#special-behavior)
@@ -50,6 +51,26 @@ Choose specific episodes manually across multiple seasons.
 3. Add `episeerr_select` tag in Sonarr after it's added
 4. Follow selection process above
 
+### Method 3: Jellyseerr with episeerr_default Tag
+
+**Best for:** Starting automated management from a specific season
+
+1. Set up Jellyseerr webhook (see [Webhook Setup](webhooks.md))
+2. Request specific season(s) in Jellyseerr (e.g., Season 3)
+3. Series added to Sonarr with `episeerr_default` tag
+4. Episeerr starts from your requested season automatically
+
+**Example:**
+- Request Season 3 from Jellyseerr
+- Add series with `episeerr_default` tag  
+- Default rule: "Get 2 episodes"
+- Result: S03E01 and S03E02 monitored/searched
+
+**Important Notes:**
+- Jellyseerr request will be **automatically deleted** after processing
+- Without Jellyseerr webhook, `episeerr_default` always starts from Season 1
+- If you want to keep requests in Jellyseerr, use "Auto-assign new series" setting instead
+
 ## What Happens
 
 - **Series added** with `episeerr_select` tag
@@ -65,6 +86,7 @@ Choose specific episodes manually across multiple seasons.
 - **Specific episodes**: Get episodes you missed  
 - **Limited storage**: Surgical control over downloads
 - **Multi-season selection**: Episodes from seasons 1, 3, and 5
+- **Season-specific automation**: Start automated management from a specific season
 
 ## Special Behavior
 
@@ -75,4 +97,5 @@ Choose specific episodes manually across multiple seasons.
 
 **Episodes downloading immediately**: Missing delayed release profile  
 **Selection interface not appearing**: Check TMDB API key, check logs  
-**Wrong episodes monitored**: Verify selection summary before submitting
+**Wrong episodes monitored**: Verify selection summary before submitting  
+**episeerr_default starting from Season 1**: Jellyseerr webhook not configured (see [Webhook Setup](webhooks.md))

@@ -72,6 +72,24 @@ Add to Sonarr → Normal Sonarr behavior (Episeerr ignores it)
 Add with episeerr_default tag → Auto-assigned to default rule → Automation starts
 ```
 
+**With Jellyseerr Integration:**
+
+If you requested a specific season from Jellyseerr (e.g., Season 3), Episeerr will:
+1. Capture the requested season from the Jellyseerr webhook
+2. Apply your default rule starting from that season (not Season 1)
+3. Cancel the Jellyseerr request automatically
+
+**Example:**
+- Jellyseerr request: Season 2 only
+- Default rule: Get 1 episode
+- Result: Downloads S02E01 (not S01E01)
+
+**Without Jellyseerr webhook:**
+- Always starts from Season 1
+- Use the "Auto-assign new series" setting (Episeerr → Scheduler → Global Settings) if you don't want to use tags
+
+**Important:** The Jellyseerr request will be **automatically deleted** after processing. If you want to keep requests in Jellyseerr for tracking purposes, use "Auto-assign new series" instead of the tag.
+
 ### Episode Selection
 
 ```log
@@ -96,6 +114,12 @@ Add with episeerr_select tag → Episodes unmonitored → Selection interface �
 
 - Verify series is assigned to a rule in Episeerr
 - Check that webhook received the series addition
+
+**episeerr_default starting from Season 1 instead of requested season:**
+
+- Ensure Jellyseerr webhook is configured (see [Webhook Setup](webhooks.md))
+- Check Episeerr logs for "Stored Jellyseerr request" message
+- Verify the Jellyseerr request was made before the series was added to Sonarr
 
 ---
 

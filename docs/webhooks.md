@@ -118,13 +118,32 @@ Webhooks enable viewing-based automation - Episeerr responds when you watch epis
 
 ## Jellyseerr/Overseerr Webhook Setup
 
-*This is used with the episeerr tags to cancel the request after it's added to Sonarr. If you want requests to stay in Jellyseerr/Overseerr, don't use the episeerr tags when requesting.*
+**Required for `episeerr_default` tag with specific seasons.** Optional otherwise.
+
+**What it does:**
+- Captures which season(s) you requested from Jellyseerr
+- Allows `episeerr_default` to start from the requested season instead of Season 1
+- Automatically cancels the Jellyseerr request after Episeerr processes it
+
+**Example use case:**
+- Request Season 3 from Jellyseerr
+- Series added to Sonarr with `episeerr_default` tag
+- Episeerr starts from Season 3 (not Season 1) based on your Jellyseerr request
+- Jellyseerr request is deleted (Episeerr manages the series now)
+
+**Setup:**
 
 1. **In Jellyseerr/Overseerr, go to Settings → Notifications**
 2. **Add a new webhook notification**
 3. **Set the webhook URL to** `http://your-episeerr-ip:5002/seerr-webhook`
 4. **Enable notifications for "Request Approved"**
 5. **Save the webhook configuration**
+
+**Important Notes:**
+- Jellyseerr requests are **automatically deleted** after Episeerr processes them
+- This prevents Jellyseerr from conflicting with Episeerr's episode management
+- If you want to keep requests in Jellyseerr for tracking purposes, use the "Auto-assign new series" setting (in Episeerr → Scheduler → Global Settings) instead of the `episeerr_default` tag
+- Without this webhook, `episeerr_default` will always start from Season 1
 
 ---
 
@@ -186,5 +205,4 @@ Webhooks enable viewing-based automation - Episeerr responds when you watch epis
 
 ---
 
-**Next:** [Rules System Guide](rules-guide.md) - Configure how Episeerr responds to
-viewing events
+**Next:** [Rules System Guide](rules-guide.md) - Configure how Episeerr responds to viewing events
