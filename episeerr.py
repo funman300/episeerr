@@ -1726,6 +1726,7 @@ def process_sonarr_webhook():
         
         # Check for pending Jellyseerr request
         jellyseerr_request_id = None
+        jellyseerr_requested_seasons = None  # ADD THIS LINE
         tvdb_id_str = str(tvdb_id) if tvdb_id else None
 
         app.logger.info(f"Looking for Jellyseerr request with TVDB ID: {tvdb_id_str}")
@@ -1737,6 +1738,7 @@ def process_sonarr_webhook():
                     with open(request_file, 'r') as f:
                         request_data = json.load(f)
                     jellyseerr_request_id = request_data.get('request_id')
+                    jellyseerr_requested_seasons = request_data.get('requested_seasons')  # ADD THIS LINE
                     app.logger.info(f"✓ Found Jellyseerr request file: {jellyseerr_request_id}")
                     
                     # Cancel the Jellyseerr request
@@ -1793,6 +1795,21 @@ def process_sonarr_webhook():
         if has_episeerr_default:
             app.logger.info(f"Processing {series_title} with episeerr_default tag")
             
+            # FIXED: Use saved season info from earlier file read
+            starting_season = 1  # Default fallback
+            
+            if jellyseerr_requested_seasons:
+                try:
+                    # Handle formats like "2" or "2,3" or "2, 3"
+                    season_numbers = [int(s.strip()) for s in str(jellyseerr_requested_seasons).split(',')]
+                    if season_numbers:
+                        starting_season = min(season_numbers)
+                        app.logger.info(f"✓ Using requested season {starting_season} from Jellyseerr (requested: {season_numbers})")
+                except ValueError as e:
+                    app.logger.warning(f"Could not parse requested seasons '{jellyseerr_requested_seasons}': {str(e)}")
+            else:
+                app.logger.info(f"No Jellyseerr request found, using Season 1")
+            
             # Add to default rule
             try:
                 config = load_config()
@@ -1838,14 +1855,14 @@ def process_sonarr_webhook():
                 app.logger.error(f"Error adding series to default rule: {str(e)}", exc_info=True)
                 return jsonify({"status": "error", "message": f"Failed to add series to rule: {str(e)}"}), 500
 
-            # Execute default rule immediately
+            # Execute default rule immediately using starting_season
             try:
                 rule_config = config['rules'][default_rule_name]
                 get_type = rule_config.get('get_type', 'episodes')
                 get_count = rule_config.get('get_count', 1)
                 action_option = rule_config.get('action_option', 'monitor')
                 
-                app.logger.info(f"Executing default rule with get_type '{get_type}', get_count '{get_count}' for {series_title}")
+                app.logger.info(f"Executing default rule with get_type '{get_type}', get_count '{get_count}' starting from Season {starting_season} for {series_title}")
                 
                 # Get all episodes for the series
                 episodes_response = requests.get(
@@ -1856,38 +1873,45 @@ def process_sonarr_webhook():
                 if episodes_response.ok:
                     all_episodes = episodes_response.json()
                     
-                    # Get Season 1 episodes, sorted by episode number
-                    season1_episodes = sorted(
-                        [ep for ep in all_episodes if ep.get('seasonNumber') == 1],
+                    # CHANGED: Get episodes from the REQUESTED season instead of hardcoded Season 1
+                    requested_season_episodes = sorted(
+                        [ep for ep in all_episodes if ep.get('seasonNumber') == starting_season],
                         key=lambda x: x.get('episodeNumber', 0)
                     )
                     
-                    if not season1_episodes:
-                        app.logger.warning(f"No Season 1 episodes found for {series_title}")
+                    if not requested_season_episodes:
+                        app.logger.warning(f"No Season {starting_season} episodes found for {series_title}")
                     else:
                         # Determine which episodes to monitor based on get settings
                         episodes_to_monitor = []
                         
                         if get_type == 'all':
-                            # Get all episodes from all seasons
-                            episodes_to_monitor = [ep['id'] for ep in all_episodes]
-                            app.logger.info(f"Monitoring all episodes for {series_title}")
+                            # Get all episodes from the starting season onward
+                            episodes_to_monitor = [
+                                ep['id'] for ep in all_episodes 
+                                if ep.get('seasonNumber') >= starting_season
+                            ]
+                            app.logger.info(f"Monitoring all episodes from Season {starting_season} onward for {series_title}")
                             
                         elif get_type == 'seasons':
-                            # Get all episodes from Season 1
-                            episodes_to_monitor = [ep['id'] for ep in season1_episodes]
-                            app.logger.info(f"Monitoring Season 1 ({len(episodes_to_monitor)} episodes) for {series_title}")
+                            # Get all episodes from the requested season(s)
+                            num_seasons = get_count or 1
+                            episodes_to_monitor = [
+                                ep['id'] for ep in all_episodes 
+                                if starting_season <= ep.get('seasonNumber') < (starting_season + num_seasons)
+                            ]
+                            app.logger.info(f"Monitoring {num_seasons} season(s) starting from Season {starting_season} ({len(episodes_to_monitor)} episodes) for {series_title}")
                             
                         else:  # episodes
                             try:
-                                # Get specific number of episodes from Season 1
+                                # Get specific number of episodes from the requested season
                                 num_episodes = get_count or 1
-                                episodes_to_monitor = [ep['id'] for ep in season1_episodes[:num_episodes]]
-                                app.logger.info(f"Monitoring first {len(episodes_to_monitor)} episodes for {series_title}")
+                                episodes_to_monitor = [ep['id'] for ep in requested_season_episodes[:num_episodes]]
+                                app.logger.info(f"Monitoring first {len(episodes_to_monitor)} episodes of Season {starting_season} for {series_title}")
                             except (ValueError, TypeError):
-                                # Fallback to pilot episode
-                                episodes_to_monitor = [season1_episodes[0]['id']] if season1_episodes else []
-                                app.logger.warning(f"Invalid get_count, defaulting to pilot episode for {series_title}")
+                                # Fallback to first episode
+                                episodes_to_monitor = [requested_season_episodes[0]['id']] if requested_season_episodes else []
+                                app.logger.warning(f"Invalid get_count, defaulting to first episode of Season {starting_season}")
                         
                         if episodes_to_monitor:
                             # Monitor the selected episodes
@@ -2013,6 +2037,14 @@ def process_seerr_webhook():
         
         app.logger.info(f"TVDB ID: {tvdb_id}, TMDB ID: {tmdb_id}, Title: {title}")
         
+        # ADDED: Extract requested seasons from webhook
+        requested_seasons_str = None
+        extra = json_data.get('extra', [])
+        for item in extra:
+            if item.get('name') == 'Requested Seasons':
+                requested_seasons_str = item.get('value')
+                break
+        
         if tvdb_id and request_id:
             tvdb_id_str = str(tvdb_id)
             request_file = os.path.join(REQUESTS_DIR, f"jellyseerr-{tvdb_id_str}.json")
@@ -2022,6 +2054,7 @@ def process_seerr_webhook():
                 'title': title,
                 'tmdb_id': tmdb_id,
                 'tvdb_id': tvdb_id,
+                'requested_seasons': requested_seasons_str,  # ADDED: Store season info
                 'timestamp': int(time.time())
             }
             
@@ -2029,7 +2062,7 @@ def process_seerr_webhook():
             with open(request_file, 'w') as f:
                 json.dump(request_data, f)
             
-            app.logger.info(f"✓ Stored Jellyseerr request {request_id} for TVDB ID {tvdb_id_str} ({title})")
+            app.logger.info(f"✓ Stored Jellyseerr request {request_id} for TVDB ID {tvdb_id_str} ({title}) - Seasons: {requested_seasons_str}")
         else:
             app.logger.warning(f"Missing required data - TVDB ID: {tvdb_id}, Request ID: {request_id}")
 
