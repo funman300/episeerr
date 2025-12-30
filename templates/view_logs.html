@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Log Viewer - Episeerr{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col">
+            <h2><i class="fas fa-file-alt me-2"></i>Log Viewer</h2>
+        </div>
+    </div>
+
+    <!-- Filters Card -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h5>
+        </div>
+        <div class="card-body">
+            <form id="logFilterForm" method="GET">
+                <div class="row g-3">
+                    <!-- Log File Selection -->
+                    <div class="col-md-3">
+                        <label for="log_file" class="form-label">Log File</label>
+                        <select class="form-select" id="log_file" name="log_file" onchange="this.form.submit()">
+                            <option value="episeerr.log" {% if log_file == 'episeerr.log' %}selected{% endif %}>episeerr.log (Main)</option>
+                            <option value="cleanup.log" {% if log_file == 'cleanup.log' %}selected{% endif %}>cleanup.log (Cleanup)</option>
+                            <option value="app.log" {% if log_file == 'app.log' %}selected{% endif %}>app.log (Flask)</option>
+                        </select>
+                    </div>
+
+                    <!-- Number of Lines -->
+                    <div class="col-md-2">
+                        <label for="lines" class="form-label">Lines</label>
+                        <select class="form-select" id="lines" name="lines" onchange="this.form.submit()">
+                            <option value="50" {% if lines == 50 %}selected{% endif %}>Last 50</option>
+                            <option value="100" {% if lines == 100 %}selected{% endif %}>Last 100</option>
+                            <option value="250" {% if lines == 250 %}selected{% endif %}>Last 250</option>
+                            <option value="500" {% if lines == 500 %}selected{% endif %}>Last 500</option>
+                            <option value="1000" {% if lines == 1000 %}selected{% endif %}>Last 1000</option>
+                        </select>
+                    </div>
+
+                    <!-- Log Level Filter -->
+                    <div class="col-md-2">
+                        <label for="level" class="form-label">Level</label>
+                        <select class="form-select" id="level" name="level" onchange="this.form.submit()">
+                            <option value="ALL" {% if level == 'ALL' %}selected{% endif %}>All Levels</option>
+                            <option value="DEBUG" {% if level == 'DEBUG' %}selected{% endif %}>DEBUG</option>
+                            <option value="INFO" {% if level == 'INFO' %}selected{% endif %}>INFO</option>
+                            <option value="WARNING" {% if level == 'WARNING' %}selected{% endif %}>WARNING</option>
+                            <option value="ERROR" {% if level == 'ERROR' %}selected{% endif %}>ERROR</option>
+                        </select>
+                    </div>
+
+                    <!-- Search Text -->
+                    <div class="col-md-3">
+                        <label for="search" class="form-label">Search Text</label>
+                        <input type="text" class="form-control" id="search" name="search" 
+                               placeholder="Series name, error, etc..." value="{{ search }}">
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="col-md-2">
+                        <label class="form-label d-block">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-search me-1"></i>Filter
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-12">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshLogs()">
+                                <i class="fas fa-sync-alt me-1"></i>Refresh
+                            </button>
+                            <button type="button" class="btn btn-outline-info btn-sm" onclick="downloadLogs()">
+                                <i class="fas fa-download me-1"></i>Download Filtered
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="clearOldLogs()" 
+                                    data-bs-toggle="tooltip" title="Delete rotated log files older than 7 days">
+                                <i class="fas fa-trash me-1"></i>Clear Old Logs
+                            </button>
+                        </div>
+                        <span class="ms-3 text-muted">
+                            <i class="fas fa-info-circle"></i>
+                            Showing {{ log_lines|length }} lines
+                            {% if total_lines %}({{ total_lines }} total in file){% endif %}
+                        </span>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Log Display Card -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-terminal me-2"></i>
+                {{ log_file }}
+                {% if search %}<span class="badge bg-info ms-2">Filtered: "{{ search }}"</span>{% endif %}
+                {% if level != 'ALL' %}<span class="badge bg-warning ms-2">{{ level }}</span>{% endif %}
+            </h5>
+            <div>
+                <button class="btn btn-sm btn-outline-secondary" onclick="toggleWrap()">
+                    <i class="fas fa-align-left me-1"></i>Toggle Wrap
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="logContainer" style="background-color: #1e1e1e; color: #d4d4d4; font-family: 'Courier New', monospace; 
+                                         font-size: 13px; max-height: 600px; overflow-y: auto; white-space: pre;">
+                {% if log_lines %}
+                    {% for line in log_lines %}
+                        <div class="log-line {% if 'ERROR' in line %}text-danger{% elif 'WARNING' in line %}text-warning{% elif 'INFO' in line %}text-info{% endif %}" 
+                             style="padding: 2px 10px; border-bottom: 1px solid #333;">{{ line }}</div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center text-muted p-5">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <p>No log entries found matching your filters.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-footer text-muted">
+            <small>
+                <i class="fas fa-clock me-1"></i>Last updated: {{ current_time }}
+                <span class="ms-3"><i class="fas fa-hdd me-1"></i>Log file size: {{ log_size }}</span>
+            </small>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshLogs() {
+    document.getElementById('logFilterForm').submit();
+}
+
+function toggleWrap() {
+    const container = document.getElementById('logContainer');
+    if (container.style.whiteSpace === 'pre-wrap') {
+        container.style.whiteSpace = 'pre';
+    } else {
+        container.style.whiteSpace = 'pre-wrap';
+    }
+}
+
+function downloadLogs() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('download', 'true');
+    window.location.href = '{{ url_for("view_logs") }}?' + params.toString();
+}
+
+function clearOldLogs() {
+    if (confirm('Delete rotated log files older than 7 days? Current log files will NOT be deleted.')) {
+        fetch('{{ url_for("clear_old_logs") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('✓ ' + data.message);
+                refreshLogs();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Error clearing logs: ' + error);
+        });
+    }
+}
+
+// Auto-scroll to bottom on load
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('logContainer');
+    container.scrollTop = container.scrollHeight;
+    
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

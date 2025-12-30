@@ -1,4 +1,4 @@
-__version__ = "2.6.5"
+__version__ = "2.6.6"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -351,6 +351,155 @@ def setup_cleanup_logging():
     return cleanup_logger
 
 cleanup_logger = setup_cleanup_logging()
+
+# Add these routes to episeerr.py
+
+@app.route('/logs')
+def view_logs():
+    """View and filter log files."""
+    import os
+    from datetime import datetime
+    
+    # Get parameters
+    log_file = request.args.get('log_file', 'episeerr.log')
+    lines = int(request.args.get('lines', 100))
+    level = request.args.get('level', 'ALL')
+    search = request.args.get('search', '')
+    download = request.args.get('download', 'false') == 'true'
+    
+    # Security: Only allow specific log files
+    allowed_logs = ['episeerr.log', 'cleanup.log', 'app.log']
+    if log_file not in allowed_logs:
+        log_file = 'episeerr.log'
+    
+    # Get log file path
+    log_path = os.path.join(os.getcwd(), 'logs', log_file)
+    
+    if not os.path.exists(log_path):
+        return render_template('view_logs.html', 
+                             log_file=log_file,
+                             log_lines=[],
+                             total_lines=0,
+                             lines=lines,
+                             level=level,
+                             search=search,
+                             log_size='0 KB',
+                             current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    
+    try:
+        # Get file size
+        file_size = os.path.getsize(log_path)
+        if file_size < 1024:
+            log_size = f"{file_size} bytes"
+        elif file_size < 1024*1024:
+            log_size = f"{file_size/1024:.1f} KB"
+        else:
+            log_size = f"{file_size/(1024*1024):.1f} MB"
+        
+        # Read last N lines efficiently
+        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+            # Get total line count
+            total_lines = sum(1 for _ in f)
+            
+            # Go back to start and read last N lines
+            f.seek(0)
+            all_lines = f.readlines()
+            log_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        
+        # Filter by log level
+        if level != 'ALL':
+            log_lines = [line for line in log_lines if level in line]
+        
+        # Filter by search text
+        if search:
+            log_lines = [line for line in log_lines if search.lower() in line.lower()]
+        
+        # Strip newlines for display
+        log_lines = [line.rstrip('\n') for line in log_lines]
+        
+        # Download filtered logs
+        if download:
+            from flask import Response
+            content = '\n'.join(log_lines)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{log_file.replace('.log', '')}_{timestamp}.txt"
+            
+            return Response(
+                content,
+                mimetype='text/plain',
+                headers={'Content-Disposition': f'attachment; filename={filename}'}
+            )
+        
+        return render_template('view_logs.html',
+                             log_file=log_file,
+                             log_lines=log_lines,
+                             total_lines=total_lines,
+                             lines=lines,
+                             level=level,
+                             search=search,
+                             log_size=log_size,
+                             current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    
+    except Exception as e:
+        app.logger.error(f"Error reading log file: {str(e)}")
+        return render_template('view_logs.html',
+                             log_file=log_file,
+                             log_lines=[f"Error reading log: {str(e)}"],
+                             total_lines=0,
+                             lines=lines,
+                             level=level,
+                             search=search,
+                             log_size='Unknown',
+                             current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
+
+@app.route('/logs/clear', methods=['POST'])
+def clear_old_logs():
+    """Delete rotated log files older than 7 days."""
+    import os
+    import time
+    from datetime import datetime, timedelta
+    
+    try:
+        logs_dir = os.path.join(os.getcwd(), 'logs')
+        cutoff_time = time.time() - (7 * 24 * 60 * 60)  # 7 days ago
+        
+        deleted_files = []
+        
+        # Look for rotated log files (*.log.1, *.log.2, etc.)
+        for filename in os.listdir(logs_dir):
+            filepath = os.path.join(logs_dir, filename)
+            
+            # Skip current log files
+            if filename in ['episeerr.log', 'cleanup.log', 'app.log', 'missing.log']:
+                continue
+            
+            # Only delete rotated logs (have numbers)
+            if '.log.' in filename and os.path.isfile(filepath):
+                file_mtime = os.path.getmtime(filepath)
+                
+                if file_mtime < cutoff_time:
+                    os.remove(filepath)
+                    deleted_files.append(filename)
+                    app.logger.info(f"Deleted old log file: {filename}")
+        
+        if deleted_files:
+            return jsonify({
+                'status': 'success',
+                'message': f"Deleted {len(deleted_files)} old log files: {', '.join(deleted_files)}"
+            })
+        else:
+            return jsonify({
+                'status': 'success',
+                'message': 'No old log files to delete (all files are less than 7 days old)'
+            })
+    
+    except Exception as e:
+        app.logger.error(f"Error clearing old logs: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 # ============================================================================
 # SIMPLIFIED CONFIG MANAGEMENT
