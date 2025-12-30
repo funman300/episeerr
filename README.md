@@ -154,8 +154,8 @@ Good for picking specific episodes. Even across seasons.
 
 - **Setup**: Just the 3 required environment variables
 - **create sonarr and optional seer webhooks**
-- **No rules needed, no webhooks required**
-- **Use**: Manual episode selection interface only
+- **No rules needed**
+- **Use**: Manual episode selection interface
 
 ### ⚡ **Add Viewing Automation**
 
