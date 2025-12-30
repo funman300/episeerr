@@ -25,7 +25,7 @@ Choose specific episodes manually across multiple seasons.
    - Tags: `episeerr_select`
 3. **Save**
 
-## Sonarr Webhook (Optional but Recommended)
+## Sonarr Webhook 
 
 1. **Sonarr** → Settings → Connect → Webhook → **Add New**
 2. **URL**: `http://your-episeerr:5002/sonarr-webhook`
@@ -48,7 +48,7 @@ Choose specific episodes manually across multiple seasons.
    - **URL**: `http://your-episeerr:5002/seerr-webhook`
    - **Triggers**: Request Approved
 2. Request series in Jellyseerr/Overseerr
-3. Add `episeerr_select` tag in Sonarr after it's added
+3. Add `episeerr_select` tag 
 4. Follow selection process above
 
 ### Method 3: Jellyseerr with episeerr_default Tag
