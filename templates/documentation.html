@@ -1,0 +1,966 @@
+{% extends "base.html" %}
+
+{% block title %}Documentation - Episeerr{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col">
+            <h2><i class="fas fa-book me-2"></i>Episeerr Documentation</h2>
+            <p class="text-muted">Complete guide to episode management and automation</p>
+        </div>
+    </div>
+
+    <!-- Quick Navigation -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5><i class="fas fa-compass me-2"></i>Quick Navigation</h5>
+            <div class="row">
+                <div class="col-md-3">
+                    <a href="#overview" class="btn btn-outline-primary btn-sm w-100 mb-2">Overview</a>
+                    <a href="#getting-started" class="btn btn-outline-success btn-sm w-100 mb-2">Getting Started</a>
+                    <a href="#rules" class="btn btn-outline-primary btn-sm w-100 mb-2">Rules System</a>
+                </div>
+                <div class="col-md-3">
+                    <a href="#grace-periods" class="btn btn-outline-primary btn-sm w-100 mb-2">Grace Periods</a>
+                    <a href="#workflows" class="btn btn-outline-primary btn-sm w-100 mb-2">Workflows</a>
+                    <a href="#delay-profiles" class="btn btn-outline-warning btn-sm w-100 mb-2">Delay Profiles</a>
+                </div>
+                <div class="col-md-3">
+                    <a href="#integration" class="btn btn-outline-primary btn-sm w-100 mb-2">Webhooks</a>
+                    <a href="#auto-assign" class="btn btn-outline-info btn-sm w-100 mb-2">Auto-Assign</a>
+                    <a href="#troubleshooting" class="btn btn-outline-primary btn-sm w-100 mb-2">Troubleshooting</a>
+                </div>
+                <div class="col-md-3">
+                    <a href="#examples" class="btn btn-outline-primary btn-sm w-100 mb-2">Examples</a>
+                    <a href="#faq" class="btn btn-outline-primary btn-sm w-100 mb-2">FAQ</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overview -->
+    <div class="card mb-3" id="overview">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0"><i class="fas fa-info-circle me-2"></i>What is Episeerr?</h4>
+        </div>
+        <div class="card-body">
+            <p class="lead">Episeerr is an intelligent episode management system that automates content delivery and cleanup for Sonarr-managed TV shows.</p>
+            
+            <h5 class="mt-4">Three Ways to Manage Episodes:</h5>
+            <div class="row mt-3">
+                <div class="col-md-4">
+                    <div class="card h-100 border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <h6><i class="fas fa-hand-pointer me-2"></i>Manual Selection</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>Select specific episodes across multiple seasons</p>
+                            <ul>
+                                <li>Pick any episodes you want</li>
+                                <li>Multi-season support</li>
+                                <li>Perfect for catching up</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 border-success">
+                        <div class="card-header bg-success text-white">
+                            <h6><i class="fas fa-eye me-2"></i>Viewing-Based</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>Automatic based on what you watch</p>
+                            <ul>
+                                <li>Watch episode → Get next</li>
+                                <li>Webhook integration</li>
+                                <li>Zero manual work</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 border-warning">
+                        <div class="card-header bg-warning">
+                            <h6><i class="fas fa-clock me-2"></i>Time-Based</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>Automatic cleanup after inactivity</p>
+                            <ul>
+                                <li>Grace periods</li>
+                                <li>Dormant timers</li>
+                                <li>Smart cleanup</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Getting Started -->
+    <div class="card mb-3" id="getting-started">
+        <div class="card-header bg-success text-white">
+            <h4 class="mb-0"><i class="fas fa-rocket me-2"></i>Getting Started - Initial Setup</h4>
+        </div>
+        <div class="card-body">
+            <p class="lead">Before using Episeerr, you need to configure Sonarr and set up a default rule.</p>
+            
+            <h5 class="mt-4"><i class="fas fa-cog text-primary me-2"></i>Step 1: Sonarr Delay Profile (CRITICAL)</h5>
+            <div class="alert alert-danger">
+                <strong><i class="fas fa-exclamation-triangle me-2"></i>IMPORTANT:</strong> You MUST set up a delay profile in Sonarr or episodes will download immediately, bypassing Episeerr!
+            </div>
+            
+            <div class="card mb-3">
+                <div class="card-header bg-light">
+                    <strong>Why Delay Profiles?</strong>
+                </div>
+                <div class="card-body">
+                    <p>Without a delay profile:</p>
+                    <ul>
+                        <li>❌ Sonarr downloads ALL available episodes immediately</li>
+                        <li>❌ Episeerr can't control what gets downloaded</li>
+                        <li>❌ Your rules don't work</li>
+                    </ul>
+                    <p class="mb-0">With a delay profile:</p>
+                    <ul class="mb-0">
+                        <li>✅ Episodes stay "monitored" but don't auto-download</li>
+                        <li>✅ Episeerr decides which episodes to grab</li>
+                        <li>✅ Your rules work perfectly</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h6>How to Set Up Delay Profile in Sonarr:</h6>
+            <ol>
+                <li>Go to <strong>Sonarr → Settings → Profiles → Delay Profiles</strong></li>
+                <li>Click <strong>Add New Delay Profile</strong> or edit existing</li>
+                <li>Set delays:
+                    <ul>
+                        <li><strong>Usenet Delay:</strong> 999999 minutes (essentially infinite)</li>
+                        <li><strong>Torrent Delay:</strong> 999999 minutes (essentially infinite)</li>
+                    </ul>
+                </li>
+                <li>Set <strong>Tags:</strong> <code>episeerr_default</code> and/or <code>episeerr_select</code></li>
+                <li>Save</li>
+            </ol>
+
+            <div class="alert alert-info">
+                <strong><i class="fas fa-lightbulb me-2"></i>Pro Tip:</strong> Create a delay profile specifically for Episeerr-managed shows. This way, other shows can still auto-download normally.
+            </div>
+
+            <h5 class="mt-4"><i class="fas fa-list text-success me-2"></i>Step 2: Create Your First Rule</h5>
+            <ol>
+                <li>Go to <strong>Admin Panel</strong></li>
+                <li>Scroll to <strong>Rule Management</strong></li>
+                <li>Click <strong>Create New Rule</strong></li>
+                <li>Configure:
+                    <ul>
+                        <li><strong>Rule Name:</strong> e.g., "Default Weekly Shows"</li>
+                        <li><strong>Get:</strong> 1 episode</li>
+                        <li><strong>Keep:</strong> 0 or 1 episodes</li>
+                        <li><strong>Grace Unwatched:</strong> 7 days</li>
+                        <li><strong>Grace Watched:</strong> 3 days</li>
+                        <li><strong>Dormant Timer:</strong> 30 days</li>
+                    </ul>
+                </li>
+                <li>Save</li>
+            </ol>
+
+            <h5 class="mt-4"><i class="fas fa-tags text-warning me-2"></i>Step 3: Add Shows to Episeerr</h5>
+            <p>There are two ways to add shows:</p>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card border-success mb-3">
+                        <div class="card-header bg-success text-white">
+                            <h6><i class="fas fa-magic me-2"></i>Method 1: Sonarr Tags (Recommended)</h6>
+                        </div>
+                        <div class="card-body">
+                            <ol>
+                                <li>In Sonarr, select a show</li>
+                                <li>Add tag: <code>episeerr_default</code></li>
+                                <li>Save</li>
+                                <li>Sonarr webhook triggers</li>
+                                <li>Episeerr automatically adds to default rule</li>
+                                <li>Tag is removed automatically</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card border-warning mb-3">
+                        <div class="card-header bg-warning">
+                            <h6><i class="fas fa-hand-pointer me-2"></i>Method 2: Manual Selection</h6>
+                        </div>
+                        <div class="card-body">
+                            <ol>
+                                <li>In Sonarr, select a show</li>
+                                <li>Add tag: <code>episeerr_select</code></li>
+                                <li>Save</li>
+                                <li>Sonarr webhook triggers</li>
+                                <li>Creates selection request in Episeerr</li>
+                                <li>You manually pick episodes</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-4"><i class="fas fa-bolt text-info me-2"></i>Step 4: Set Up Webhooks</h5>
+            <p>Configure webhooks for automation (see <a href="#integration">Integration</a> section below for details):</p>
+            <ul>
+                <li><strong>Sonarr webhook:</strong> ✅ REQUIRED - <code>http://your-server:5002/sonarr-webhook</code></li>
+                <li><strong>Jellyseerr/Overseerr:</strong> ✅ REQUIRED if using *seerr</li>
+                <li><strong>Tautulli/Jellyfin:</strong> ⚙️ OPTIONAL - For viewing-based automation</li>
+            </ul>
+
+            <div class="alert alert-success mt-3">
+                <h6><i class="fas fa-check-circle me-2"></i>You're Ready!</h6>
+                <p class="mb-0">With delay profiles set and a rule created, Episeerr is now managing your shows. Add tags to shows and watch the automation happen!</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rules System -->
+    <div class="card mb-3" id="rules">
+        <div class="card-header bg-success text-white">
+            <h4 class="mb-0"><i class="fas fa-sliders-h me-2"></i>Rules System</h4>
+        </div>
+        <div class="card-body">
+            <p>Rules define how episodes are managed for different shows. Each rule has four main settings:</p>
+            
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <h5><i class="fas fa-download text-primary me-2"></i>Get Settings</h5>
+                    <p>Controls what new content to download after watching:</p>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Behavior</th>
+                                <th>Example</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Episodes</strong></td>
+                                <td>Get X episodes ahead</td>
+                                <td>Get 2 = next 2 episodes</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Seasons</strong></td>
+                                <td>Get X seasons ahead</td>
+                                <td>Get 1 = entire next season</td>
+                            </tr>
+                            <tr>
+                                <td><strong>All</strong></td>
+                                <td>Get everything available</td>
+                                <td>All = complete series</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="col-md-6">
+                    <h5><i class="fas fa-shield-alt text-success me-2"></i>Keep Settings</h5>
+                    <p>Controls what watched content to retain:</p>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Behavior</th>
+                                <th>Example</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Episodes</strong></td>
+                                <td>Keep X watched episodes</td>
+                                <td>Keep 1 = last watched only</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Seasons</strong></td>
+                                <td>Keep X watched seasons</td>
+                                <td>Keep 1 = current season</td>
+                            </tr>
+                            <tr>
+                                <td><strong>All</strong></td>
+                                <td>Keep everything watched</td>
+                                <td>Never delete watched</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="alert alert-info mt-3">
+                <strong><i class="fas fa-lightbulb me-2"></i>Rule Examples:</strong>
+                <ul class="mb-0">
+                    <li><strong>Get 1, Keep 1:</strong> Rolling window - always have 1 watched + 1 unwatched</li>
+                    <li><strong>Get 3, Keep 0:</strong> Binge mode - get 3 ahead, delete after watching</li>
+                    <li><strong>Get 1 season, Keep 1 season:</strong> Season-based - entire seasons at a time</li>
+                    <li><strong>Get All, Keep All:</strong> Hoarder mode - download everything, keep forever</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grace Periods -->
+    <div class="card mb-3" id="grace-periods">
+        <div class="card-header bg-warning">
+            <h4 class="mb-0"><i class="fas fa-clock me-2"></i>Grace Periods & Time-Based Cleanup</h4>
+        </div>
+        <div class="card-body">
+            <p>Grace periods protect your content from immediate deletion, giving shows a chance to be watched.</p>
+            
+            <div class="row mt-3">
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6><i class="fas fa-eye text-success me-2"></i>Grace Watched</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>What:</strong> Keep watched episodes for X days after last activity</p>
+                            <p><strong>When it expires:</strong> Deletes episodes you've already watched</p>
+                            <p><strong>Reset by:</strong> Watching ANY episode in the series</p>
+                            <p><strong>Example:</strong> Grace Watched: 14 days<br>
+                            → Watch S2E5<br>
+                            → 14 days later (no activity)<br>
+                            → Delete S2E5</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6><i class="fas fa-forward text-warning me-2"></i>Grace Unwatched</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>What:</strong> Watch deadline for new episodes</p>
+                            <p><strong>When it expires:</strong> Deletes episodes you haven't watched yet</p>
+                            <p><strong>Reset by:</strong> Watching ANY episode in the series</p>
+                            <p><strong>Example:</strong> Grace Unwatched: 10 days<br>
+                            → Get S2E6<br>
+                            → 10 days later (not watched)<br>
+                            → Delete S2E6</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6><i class="fas fa-ban text-danger me-2"></i>Dormant Timer</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>What:</strong> Nuclear option for abandoned shows</p>
+                            <p><strong>When it expires:</strong> Deletes EVERYTHING (all episodes)</p>
+                            <p><strong>Reset by:</strong> Watching ANY episode in the series</p>
+                            <p><strong>Example:</strong> Dormant: 60 days<br>
+                            → No activity for 60 days<br>
+                            → Delete entire show</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert alert-success mt-3">
+                <h6><i class="fas fa-star me-2"></i>NEW: Grace Period Scope</h6>
+                <p>Choose how grace timers are tracked:</p>
+                <ul class="mb-0">
+                    <li><strong>Per Series (default):</strong> One timer for entire show - watching ANY episode resets grace for ALL episodes</li>
+                    <li><strong>Per Season:</strong> Independent timers per season - perfect for multi-viewer households where different people watch different seasons</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflows -->
+    <div class="card mb-3" id="workflows">
+        <div class="card-header bg-info text-white">
+            <h4 class="mb-0"><i class="fas fa-project-diagram me-2"></i>Sonarr Workflows</h4>
+        </div>
+        <div class="card-body">
+            <p>Episeerr integrates with Sonarr using tags to trigger different workflows:</p>
+            
+            <h5 class="mt-3">Tag-Based Workflows:</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card border-success mb-3">
+                        <div class="card-header bg-success text-white">
+                            <h6><i class="fas fa-magic me-2"></i>episeerr_default</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Automatic Processing</strong></p>
+                            <ol>
+                                <li>Add tag to show in Sonarr</li>
+                                <li>Episeerr automatically adds to default rule</li>
+                                <li>Processes based on rule settings</li>
+                                <li>Tag removed after processing</li>
+                            </ol>
+                            <p class="text-muted"><small>Perfect for shows you want automated immediately</small></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card border-warning mb-3">
+                        <div class="card-header bg-warning">
+                            <h6><i class="fas fa-hand-pointer me-2"></i>episeerr_select</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Manual Episode Selection</strong></p>
+                            <ol>
+                                <li>Add tag to show in Sonarr</li>
+                                <li>Creates selection request in Episeerr</li>
+                                <li>You manually pick episodes</li>
+                                <li>Tag removed after selection</li>
+                            </ol>
+                            <p class="text-muted"><small>Perfect for catching up or selecting specific episodes</small></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-3">Jellyseerr/Overseerr Integration:</h5>
+            <div class="alert alert-info">
+                <p>When requesting shows through Jellyseerr/Overseerr:</p>
+                <ul class="mb-0">
+                    <li>Request gets sent to Sonarr</li>
+                    <li>Episeerr captures the requested seasons</li>
+                    <li>If <code>episeerr_default</code> tag is set, processes those specific seasons automatically</li>
+                    <li>Season-aware: starts from the season you requested, not always Season 1</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Integration -->
+    <div class="card mb-3" id="integration">
+        <div class="card-header bg-secondary text-white">
+            <h4 class="mb-0"><i class="fas fa-plug me-2"></i>Webhook Integration</h4>
+        </div>
+        <div class="card-body">
+            <h5>Supported Services:</h5>
+            <div class="row">
+                <div class="col-md-4">
+                    <h6><i class="fas fa-chart-bar text-primary me-2"></i>Tautulli</h6>
+                    <p>Tracks viewing activity in Plex</p>
+                    <pre class="bg-dark text-light p-2"><code>Webhook URL:
+http://your-server:5002/tautulli-webhook
+
+Trigger:
+Playback Stop</code></pre>
+                </div>
+                
+                <div class="col-md-4">
+                    <h6><i class="fas fa-film text-success me-2"></i>Jellyfin</h6>
+                    <p>Tracks viewing activity in Jellyfin</p>
+                    <pre class="bg-dark text-light p-2"><code>Webhook URL:
+http://your-server:5002/jellyfin-webhook
+
+Trigger:
+Playback Stop</code></pre>
+                </div>
+                
+                <div class="col-md-4">
+                    <h6><i class="fas fa-tv text-warning me-2"></i>Sonarr</h6>
+                    <p>Detects new series additions</p>
+                    <pre class="bg-dark text-light p-2"><code>Webhook URL:
+http://your-server:5002/sonarr-webhook
+
+Trigger:
+On Series Add</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delay Profiles Deep Dive -->
+    <div class="card mb-3" id="delay-profiles">
+        <div class="card-header bg-warning">
+            <h4 class="mb-0"><i class="fas fa-stopwatch me-2"></i>Delay Profiles - Critical Setup</h4>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-danger">
+                <strong><i class="fas fa-exclamation-triangle me-2"></i>CRITICAL:</strong> Without delay profiles configured correctly in Sonarr, Episeerr CANNOT control episode downloads!
+            </div>
+
+            <h5>What Delay Profiles Do:</h5>
+            <p>Delay profiles tell Sonarr to <strong>wait</strong> before automatically downloading episodes. This gives Episeerr control over which episodes get downloaded.</p>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card border-danger mb-3">
+                        <div class="card-header bg-danger text-white">
+                            <strong>❌ WITHOUT Delay Profile</strong>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>What happens:</strong></p>
+                            <ol>
+                                <li>Add show to Sonarr</li>
+                                <li>Sonarr immediately downloads ALL episodes</li>
+                                <li>Episeerr can't control anything</li>
+                                <li>Your disk fills up</li>
+                                <li>Rules don't work</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card border-success mb-3">
+                        <div class="card-header bg-success text-white">
+                            <strong>✅ WITH Delay Profile</strong>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>What happens:</strong></p>
+                            <ol>
+                                <li>Add show to Sonarr</li>
+                                <li>Episodes stay "monitored" but NOT downloaded</li>
+                                <li>Episeerr tells Sonarr which episodes to grab</li>
+                                <li>Only get what you need</li>
+                                <li>Rules work perfectly</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-3">Step-by-Step Setup:</h5>
+            <ol>
+                <li>
+                    <strong>Open Sonarr</strong>
+                    <ul>
+                        <li>Navigate to <strong>Settings → Profiles → Delay Profiles</strong></li>
+                    </ul>
+                </li>
+                <li>
+                    <strong>Create New Profile or Edit Default</strong>
+                    <ul>
+                        <li>Click the <strong>+</strong> button to add new</li>
+                    </ul>
+                </li>
+                <li>
+                    <strong>Set Infinite Delays</strong>
+                    <ul>
+                        <li><strong>Usenet Delay:</strong> <code>999999</code> minutes</li>
+                        <li><strong>Torrent Delay:</strong> <code>999999</code> minutes</li>
+                        <li>This essentially disables auto-downloading</li>
+                    </ul>
+                </li>
+                <li>
+                    <strong>Assign Tags (IMPORTANT)</strong>
+                    <ul>
+                        <li><strong>Tags:</strong> <code>episeerr_default</code>, <code>episeerr_select</code></li>
+                        <li>Any show with these tags will use this delay profile</li>
+                    </ul>
+                </li>
+                <li>
+                    <strong>Set Priority</strong>
+                    <ul>
+                        <li>Preferred Protocol: Doesn't matter (Episeerr will handle it)</li>
+                    </ul>
+                </li>
+                <li>
+                    <strong>Save</strong>
+                </li>
+            </ol>
+
+            <div class="card bg-light mt-3">
+                <div class="card-body">
+                    <h6><i class="fas fa-info-circle text-info me-2"></i>Example Configuration:</h6>
+                    <pre class="bg-dark text-light p-2 mb-0"><code>Delay Profile Name: Episeerr Managed Shows
+Usenet Delay: 999999 minutes
+Torrent Delay: 999999 minutes
+Tags: episeerr_default, episeerr_select
+Order: 1 (higher priority)</code></pre>
+                </div>
+            </div>
+
+            <div class="alert alert-info mt-3">
+                <h6><i class="fas fa-lightbulb me-2"></i>Pro Tips:</h6>
+                <ul class="mb-0">
+                    <li><strong>Multiple Profiles:</strong> Create separate delay profiles for Episeerr shows vs regular shows</li>
+                    <li><strong>Order Matters:</strong> Episeerr delay profile should be higher priority (lower order number)</li>
+                    <li><strong>Test It:</strong> Add a show with <code>episeerr_default</code> tag and verify it doesn't auto-download</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto-Assign -->
+    <div class="card mb-3" id="auto-assign">
+        <div class="card-header bg-info text-white">
+            <h4 class="mb-0"><i class="fas fa-magic me-2"></i>Auto-Assign New Series</h4>
+        </div>
+        <div class="card-body">
+            <p>Auto-assign automatically adds new shows to your default rule when they're added to Sonarr.</p>
+
+            <h5>How It Works:</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card border-secondary mb-3">
+                        <div class="card-header bg-light">
+                            <strong>❌ Auto-Assign: OFF</strong>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>What happens:</strong></p>
+                            <ol>
+                                <li>Add show to Sonarr</li>
+                                <li>Add <code>episeerr_default</code> tag manually</li>
+                                <li>Episeerr processes it</li>
+                                <li>Must tag EVERY show manually</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card border-success mb-3">
+                        <div class="card-header bg-success text-white">
+                            <strong>✅ Auto-Assign: ON</strong>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>What happens:</strong></p>
+                            <ol>
+                                <li>Add show to Sonarr (no tags)</li>
+                                <li>Episeerr automatically assigns to default rule</li>
+                                <li>Starts managing immediately</li>
+                                <li>Zero manual work!</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-3">When to Enable Auto-Assign:</h5>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Scenario</th>
+                        <th>Auto-Assign Setting</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>All shows managed by Episeerr</td>
+                        <td><span class="badge bg-success">ON</span></td>
+                        <td>Automatic - every new show gets managed</td>
+                    </tr>
+                    <tr>
+                        <td>Mix of Episeerr + regular shows</td>
+                        <td><span class="badge bg-danger">OFF</span></td>
+                        <td>Manual control - only tagged shows managed</td>
+                    </tr>
+                    <tr>
+                        <td>Using Jellyseerr/Overseerr</td>
+                        <td><span class="badge bg-success">ON</span></td>
+                        <td>Requests automatically managed</td>
+                    </tr>
+                    <tr>
+                        <td>Testing/Learning Episeerr</td>
+                        <td><span class="badge bg-danger">OFF</span></td>
+                        <td>Better control during learning phase</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h5 class="mt-3">How to Enable/Disable:</h5>
+            <ol>
+                <li>Go to <strong>Admin Panel</strong></li>
+                <li>Find <strong>Global Storage Gate</strong> card at top</li>
+                <li>Check/Uncheck <strong>"Auto-assign new series"</strong></li>
+                <li>Click <strong>Save Global Settings</strong></li>
+            </ol>
+
+            <div class="alert alert-warning mt-3">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Important Notes:</h6>
+                <ul class="mb-0">
+                    <li><strong>Only affects NEW shows:</strong> Existing shows are not automatically assigned</li>
+                    <li><strong>Requires default rule:</strong> Must have at least one rule marked as "default"</li>
+                    <li><strong>Tags override:</strong> If a show has <code>episeerr_default</code> or <code>episeerr_select</code> tag, it's processed regardless of auto-assign setting</li>
+                    <li><strong>Works with *seerr:</strong> Shows requested through Jellyseerr/Overseerr are auto-assigned if enabled</li>
+                </ul>
+            </div>
+
+            <h5 class="mt-3">Workflow Comparison:</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Manual Workflow (Auto-Assign OFF):</h6>
+                    <ol>
+                        <li>Add show in Sonarr</li>
+                        <li>Go to Sonarr → Series → Select show</li>
+                        <li>Add tag: <code>episeerr_default</code></li>
+                        <li>Save</li>
+                        <li>Episeerr processes via webhook</li>
+                    </ol>
+                </div>
+                <div class="col-md-6">
+                    <h6>Automatic Workflow (Auto-Assign ON):</h6>
+                    <ol>
+                        <li>Add show in Sonarr</li>
+                        <li><em>That's it!</em></li>
+                        <li>Episeerr automatically assigns and manages</li>
+                        <li>Zero extra steps</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Examples -->
+    <div class="card mb-3" id="examples">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Example Scenarios</h4>
+        </div>
+        <div class="card-body">
+            <div class="accordion" id="examplesAccordion">
+                <!-- Example 1 -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="example1">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse1">
+                            <strong>Scenario 1: Weekly Show (The Office)</strong>
+                        </button>
+                    </h2>
+                    <div id="collapse1" class="accordion-collapse collapse show" data-bs-parent="#examplesAccordion">
+                        <div class="accordion-body">
+                            <strong>Goal:</strong> Always have next episode ready, delete after watching<br>
+                            <strong>Rule Settings:</strong>
+                            <ul>
+                                <li>Get: 1 episode</li>
+                                <li>Keep: 0 episodes</li>
+                                <li>Grace Unwatched: 7 days</li>
+                            </ul>
+                            <strong>Behavior:</strong> Watch S1E1 → Get S1E2 → Delete S1E1 immediately
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Example 2 -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="example2">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse2">
+                            <strong>Scenario 2: Binge Watching (Stranger Things)</strong>
+                        </button>
+                    </h2>
+                    <div id="collapse2" class="accordion-collapse collapse" data-bs-parent="#examplesAccordion">
+                        <div class="accordion-body">
+                            <strong>Goal:</strong> Get 3 episodes ahead, keep last watched<br>
+                            <strong>Rule Settings:</strong>
+                            <ul>
+                                <li>Get: 3 episodes</li>
+                                <li>Keep: 1 episode</li>
+                                <li>Grace Watched: 14 days</li>
+                            </ul>
+                            <strong>Behavior:</strong> Always have 3 unwatched + 1 watched episode available
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Example 3 -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="example3">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse3">
+                            <strong>Scenario 3: Family Show (Landman - Multi-Viewer)</strong>
+                        </button>
+                    </h2>
+                    <div id="collapse3" class="accordion-collapse collapse" data-bs-parent="#examplesAccordion">
+                        <div class="accordion-body">
+                            <strong>Goal:</strong> Wife watches S2, son watches S1 - keep both protected<br>
+                            <strong>Rule Settings:</strong>
+                            <ul>
+                                <li>Get: 1 episode</li>
+                                <li>Keep: 1 season</li>
+                                <li>Grace Watched: 14 days</li>
+                                <li><strong>Grace Scope: Per Season</strong></li>
+                            </ul>
+                            <strong>Behavior:</strong> S1 and S2 have independent grace timers - son watching S1 doesn't reset S2's timer
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Example 4 -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="example4">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse4">
+                            <strong>Scenario 4: Limited Storage (Budget Seedbox)</strong>
+                        </button>
+                    </h2>
+                    <div id="collapse4" class="accordion-collapse collapse" data-bs-parent="#examplesAccordion">
+                        <div class="accordion-body">
+                            <strong>Goal:</strong> Aggressive cleanup, only keep what's needed<br>
+                            <strong>Rule Settings:</strong>
+                            <ul>
+                                <li>Get: 1 episode</li>
+                                <li>Keep: 0 episodes</li>
+                                <li>Grace Unwatched: 3 days</li>
+                                <li>Dormant: 30 days</li>
+                            </ul>
+                            <strong>Global Settings:</strong>
+                            <ul>
+                                <li>Storage Threshold: 20 GB</li>
+                            </ul>
+                            <strong>Behavior:</strong> Only cleans up when storage drops below 20GB, aggressive deletion
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Troubleshooting -->
+    <div class="card mb-3" id="troubleshooting">
+        <div class="card-header bg-danger text-white">
+            <h4 class="mb-0"><i class="fas fa-wrench me-2"></i>Troubleshooting</h4>
+        </div>
+        <div class="card-body">
+            <h5>Common Issues:</h5>
+            
+            <div class="card mb-3">
+                <div class="card-header">
+                    <strong>Episodes aren't being processed</strong>
+                </div>
+                <div class="card-body">
+                    <p><strong>Check:</strong></p>
+                    <ul>
+                        <li>Is the series assigned to a rule?</li>
+                        <li>Are webhooks configured and firing?</li>
+                        <li>Check logs: Admin → View Logs → episeerr.log</li>
+                        <li>Verify Sonarr tags are correct (episeerr_default or episeerr_select)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <strong>Episodes deleted too quickly</strong>
+                </div>
+                <div class="card-body">
+                    <p><strong>Solution:</strong></p>
+                    <ul>
+                        <li>Increase Grace Watched/Unwatched periods</li>
+                        <li>Check if Dormant timer is too short</li>
+                        <li>Consider changing Keep settings to retain more episodes</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <strong>Nothing is being deleted</strong>
+                </div>
+                <div class="card-body">
+                    <p><strong>Check:</strong></p>
+                    <ul>
+                        <li>Is cleanup scheduler running? (Admin → Scheduler Status)</li>
+                        <li>Check Storage Gate - cleanup only runs when below threshold</li>
+                        <li>Verify grace periods aren't too long</li>
+                        <li>Check if Dry Run Mode is enabled globally</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FAQ -->
+    <div class="card mb-3" id="faq">
+        <div class="card-header bg-dark text-white">
+            <h4 class="mb-0"><i class="fas fa-question-circle me-2"></i>Frequently Asked Questions</h4>
+        </div>
+        <div class="card-body">
+            <dl>
+                <dt>Q: Which webhooks do I need?</dt>
+                <dd>
+                    <strong>A: It depends on your setup:</strong>
+                    <ul>
+                        <li><strong>Sonarr webhook:</strong> ✅ REQUIRED - Detects new series and processes tags (episeerr_default/episeerr_select)</li>
+                        <li><strong>Jellyseerr/Overseerr webhook:</strong> ✅ REQUIRED if you use *seerr - Captures requested seasons for proper automation</li>
+                        <li><strong>Tautulli/Jellyfin webhook:</strong> ⚙️ OPTIONAL - Only needed for viewing-based automation (auto-get next episode after watching)</li>
+                    </ul>
+                    <p class="mb-0"><em>Without viewing webhooks, you can still use manual selection and time-based cleanup rules.</em></p>
+                </dd>
+                
+                <dt>Q: Can I use multiple rules?</dt>
+                <dd>A: Yes! Create different rules for different types of shows (weekly vs binge, kids vs adults, etc.)</dd>
+                
+                <dt>Q: What happens if I don't set grace periods?</dt>
+                <dd>A: Without grace periods, episodes are deleted immediately based on Keep settings only.</dd>
+                
+                <dt>Q: Can I test rules without actually deleting?</dt>
+                <dd>A: Yes! Enable Dry Run Mode in Admin → Global Settings, or set it per-rule.</dd>
+                
+                <dt>Q: How do I know what's being deleted?</dt>
+                <dd>A: Check Admin → View Logs → cleanup.log for detailed deletion logs.</dd>
+                
+                <dt>Q: Can different family members watch different seasons?</dt>
+                <dd>A: Yes! Use "Grace Scope: Per Season" in your rule settings.</dd>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Support -->
+    <div class="card mb-3">
+        <div class="card-header bg-info text-white">
+            <h4 class="mb-0"><i class="fas fa-life-ring me-2"></i>Need Help?</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <h6><i class="fab fa-github me-2"></i>GitHub</h6>
+                    <p>Report issues or request features</p>
+                    <a href="https://github.com/vansmak/episeerr/issues" target="_blank" class="btn btn-sm btn-outline-dark">
+                        <i class="fas fa-external-link-alt me-1"></i>GitHub Issues
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <h6><i class="fab fa-docker me-2"></i>Docker Hub</h6>
+                    <p>Check for updates and releases</p>
+                    <a href="https://hub.docker.com/r/vansmak/episeerr" target="_blank" class="btn btn-sm btn-outline-info">
+                        <i class="fas fa-external-link-alt me-1"></i>Docker Hub
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <h6><i class="fas fa-book me-2"></i>README</h6>
+                    <p>Full documentation on GitHub</p>
+                    <a href="https://github.com/vansmak/episeerr#readme" target="_blank" class="btn btn-sm btn-outline-success">
+                        <i class="fas fa-external-link-alt me-1"></i>Documentation
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Smooth scrolling for anchor links */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Style for code blocks */
+pre {
+    border-radius: 5px;
+    font-size: 0.85em;
+}
+
+/* Ensure cards have consistent height in rows */
+.row .card {
+    height: 100%;
+}
+</style>
+
+<script>
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

@@ -145,6 +145,11 @@
                             <button type="button" class="btn btn-warning" onclick="viewCleanupLogs()">
                                 <i class="fas fa-file-alt me-1"></i>View Logs
                             </button>
+                            
+                            <!-- NEW: Documentation Button -->
+                            <a href="/docs" class="btn btn-success" target="_blank">
+                                <i class="fas fa-book me-1"></i>Documentation
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -180,43 +185,7 @@
 
         
 
-        <!-- How It Works -->
-        <div class="card">
-            <div class="card-header">
-                <h6><i class="fas fa-info-circle me-2"></i>How It Works</h6>
-            </div>
-            <div class="card-body">
-                <small>
-                    <p><strong>Global Settings:</strong></p>
-                    <ul>
-                        <li><strong>One Threshold:</strong> Set global GB limit (e.g., 20GB)</li>
-                        <li><strong>Smart Cleanup:</strong> Only runs when below threshold</li>
-                        <li><strong>Rule Protection:</strong> Rules without grace/dormant are never touched</li>
-                        <li><strong>Safe by Default:</strong> Global dry run mode available</li>
-                    </ul>
-                    
-                    <p><strong>Your Two-Layer System:</strong></p>
-                    <ul>
-                        <li><strong>Webhook Layer:</strong> When you watch episodes, immediately manages next content and deletes old episodes</li>
-                        <li><strong>Scheduler Layer:</strong> Runs every X hours to handle time-based cleanup</li>
-                    </ul>
-                    
-                    <p><strong>Time-Based Cleanup:</strong></p>
-                    <ul>
-                        <li><strong>Watched Grace Period:</strong> Delete watched content after X days of last activity</li>
-                        <li><strong>Unwatched Grace Period:</strong> Delete unwatched content after X days of last activity</li>
-                        <li><strong>Dormant Timer:</strong> Delete everything and reset show after Y days of no activity</li>
-                    </ul>
-                    
-                    <p><strong>⚠️ **USE AT YOUR OWN RISK** ⚠️</strong></p>
-                    <ul>
-                        <li>Will permanently delete your media files!</li>
-                        <li>Dormant timer resets shows to clean slate</li>
-                        <li>Always test with dry run mode first</li>
-                    </ul>
-                </small>
-            </div>
-        </div>
+        
     </div>
 </div>
 {% endblock %}

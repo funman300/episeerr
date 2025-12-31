@@ -128,10 +128,17 @@ function updateActiveTheme(activeTheme) {
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="{{ url_for('scheduler_admin') }}">
                     <i class="fas fa-sliders-h me-1"></i>
-
                     <span class="d-none d-md-inline">Admin</span>
                     <span class="d-md-none">Admin</span>
                 </a>
+                
+                <!-- NEW: Documentation Link -->
+                <a class="nav-link" href="{{ url_for('documentation') }}">
+                    <i class="fas fa-book me-1"></i>
+                    <span class="d-none d-md-inline">Docs</span>
+                    <span class="d-md-none">Help</span>
+                </a>
+                
                 <a class="nav-link position-relative" href="{{ url_for('episeerr_index') }}" id="episeerr-link">
                     <i class="fas fa-bell me-1"></i>
                     <span class="d-none d-md-inline">Pending Requests</span>

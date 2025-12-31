@@ -1,4 +1,4 @@
-__version__ = "2.6.6"
+__version__ = "2.6.7"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -609,6 +609,11 @@ def get_sonarr_series():
 # ============================================================================
 
 # Update your index() route to also pass SONARR_URL:
+@app.route('/docs')
+@app.route('/documentation')
+def documentation():
+    """Display comprehensive documentation page."""
+    return render_template('documentation.html')
 
 @app.route('/')
 def index():

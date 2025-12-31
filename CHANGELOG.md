@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Comprehensive documentation page accessible from UI
+- CHANGELOG.md for version tracking
+- Automated CHANGELOG updates in release script
+- Navigation links to docs in navbar and admin panel
+
+### Changed
+- Cleaned up redundant help text from create/edit rule pages
+- Removed large "How It Works" section from admin panel
+- Streamlined UI with contextual help links to full docs
+
+### Fixed
+- HTML layout issues in create_rule template
+
+### Added
 - Per-season grace period tracking for multi-viewer households
 - Grace period scope setting (per-series vs per-season) in rule editor
 - Web-based log viewer with filtering, search, and download capabilities
