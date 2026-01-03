@@ -103,3 +103,28 @@ def fetch_upcoming_premieres(preferences):
 
     upcoming_premieres.sort(key=lambda x: x['nextAiring'])
     return upcoming_premieres
+
+def get_episode(episode_id):
+    """
+    Get episode details from Sonarr by episode ID
+    Used by notification system to check episode status
+    
+    Args:
+        episode_id: Sonarr episode ID
+        
+    Returns:
+        Episode object with metadata or None
+    """
+    preferences = load_preferences()
+    headers = {'X-Api-Key': preferences['SONARR_API_KEY']}
+    
+    try:
+        response = requests.get(
+            f"{preferences['SONARR_URL']}/api/v3/episode/{episode_id}",
+            headers=headers
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to get episode {episode_id}: {e}")
+        return None

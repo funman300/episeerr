@@ -447,7 +447,7 @@ def get_episode_details(series_id, season_number):
     logger.error("Failed to fetch episode details.")
     return []
 
-def monitor_or_search_episodes(episode_ids, action_option):
+def monitor_or_search_episodes(episode_ids, action_option, series_id=None, series_title=None):
     """Either monitor or trigger a search for episodes in Sonarr based on the action_option."""
     if not episode_ids:
         logger.info("No episodes to monitor/search")
@@ -455,7 +455,7 @@ def monitor_or_search_episodes(episode_ids, action_option):
         
     monitor_episodes(episode_ids, True)
     if action_option == "search":
-        trigger_episode_search_in_sonarr(episode_ids)
+        trigger_episode_search_in_sonarr(episode_ids, series_id, series_title)
 
 def monitor_episodes(episode_ids, monitor=True):
     """Set episodes to monitored or unmonitored in Sonarr."""
@@ -472,8 +472,8 @@ def monitor_episodes(episode_ids, monitor=True):
     else:
         logger.error(f"Failed to set episodes {action}. Response: {response.text}")
 
-def trigger_episode_search_in_sonarr(episode_ids):
-    """Trigger a search for specified episodes in Sonarr."""
+def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=None):
+    """Trigger a search for specified episodes in Sonarr and notify."""
     if not episode_ids:
         return
         
@@ -481,10 +481,38 @@ def trigger_episode_search_in_sonarr(episode_ids):
     headers = {'X-Api-Key': SONARR_API_KEY, 'Content-Type': 'application/json'}
     data = {"name": "EpisodeSearch", "episodeIds": episode_ids}
     response = requests.post(url, json=data, headers=headers)
+    
     if response.ok:
         logger.info("Episode search command sent to Sonarr successfully.")
     else:
         logger.error(f"Failed to send episode search command. Response: {response.text}")
+        return
+    
+    # Send notification immediately after search
+    if series_id and series_title:
+        try:
+            from notifications import NOTIFICATIONS_ENABLED, send_notification
+            from sonarr_utils import get_episode
+            
+            if NOTIFICATIONS_ENABLED:
+                logger.info(f"🔔 Sending notification for {len(episode_ids)} episodes")
+                for ep_id in episode_ids:
+                    episode = get_episode(ep_id)
+                    if episode:
+                        logger.info(f"🔔 Notifying: {series_title} S{episode.get('seasonNumber')}E{episode.get('episodeNumber')}")
+                        send_notification(
+                            "missing_episode",
+                            series=series_title,
+                            season=episode.get('seasonNumber'),
+                            episode=episode.get('episodeNumber'),
+                            air_date=episode.get('airDateUtc'),
+                            series_id=series_id
+                        )
+                logger.info(f"🔔 Notifications sent!")
+        except Exception as e:
+            logger.error(f"🔔 Failed to send notification: {e}")
+            import traceback
+            logger.error(f"🔔 Traceback: {traceback.format_exc()}")
 
 def unmonitor_episodes(episode_ids):
     """Unmonitor specified episodes in Sonarr."""
@@ -1083,7 +1111,7 @@ def find_episodes_leaving_keep_block(all_episodes, keep_type, keep_count, last_w
         logger.error(f"Error finding episodes leaving keep block: {str(e)}")
         return []
 
-def process_episodes_for_webhook(series_id, season_number, episode_number, rule):
+def process_episodes_for_webhook(series_id, season_number, episode_number, rule, series_title=None):
     """
     Clean webhook processing - ONLY handles real-time episode management.
     Grace cleanup happens separately during scheduled cleanup (every 6 hours).
@@ -1127,7 +1155,7 @@ def process_episodes_for_webhook(series_id, season_number, episode_number, rule)
         )
         
         if next_episode_ids:
-            monitor_or_search_episodes(next_episode_ids, rule.get('action_option', 'monitor'))
+            monitor_or_search_episodes(next_episode_ids, rule.get('action_option', 'monitor'), series_id, series_title)
             logger.info(f"Processed {len(next_episode_ids)} next episodes")
         
         # IMMEDIATE DELETION: Episodes leaving keep block (real-time cleanup)
@@ -2426,7 +2454,7 @@ def main():
                     break
             
             if rule:
-                process_episodes_for_webhook(series_id, season_number, episode_number, rule)
+                process_episodes_for_webhook(series_id, season_number, episode_number, rule, series_name)
             else:
                 update_activity_date(series_id, season_number, episode_number)
     else:

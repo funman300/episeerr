@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.0] - 01/02/2026
+
+### Added
+- Discord notifications
+
 ### Added
 - Comprehensive documentation page accessible from UI
 - CHANGELOG.md for version tracking
@@ -46,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.6.5] - 2024-12-29
+## [2.6.5] 
 
 ### Added
 - Sonarr webhook bug fix for Jellyseerr integration
@@ -60,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.6.0] - 2024-12-XX
+## [2.6.0] 
 
 ### Added
 - Initial stable release

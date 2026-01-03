@@ -1,4 +1,4 @@
-__version__ = "2.6.7"
+__version__ = "2.7.0"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -36,6 +36,7 @@ JELLYSEERR_API_KEY = os.getenv('JELLYSEERR_API_KEY')
 OVERSEERR_URL = normalize_url(os.getenv('OVERSEERR_URL'))
 OVERSEERR_API_KEY = os.getenv('OVERSEERR_API_KEY')
 SEERR_ENABLED = bool((JELLYSEERR_URL and JELLYSEERR_API_KEY) or (OVERSEERR_URL and OVERSEERR_API_KEY))
+
 
 # TMDB API Key
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
@@ -559,6 +560,24 @@ def save_config(config):
     except Exception as e:
         app.logger.error(f"Save failed: {str(e)}")
         raise
+
+def get_notification_config():
+    """Load notification settings from global config"""
+    import media_processor
+    try:
+        settings = media_processor.load_global_settings()
+        return {
+            'NOTIFICATIONS_ENABLED': settings.get('notifications_enabled', False),
+            'DISCORD_WEBHOOK_URL': settings.get('discord_webhook_url', ''),
+            'EPISEERR_URL': settings.get('episeerr_url', 'http://localhost:5002'),
+        }
+    except Exception as e:
+        app.logger.warning(f"Could not load notification config: {e}")
+        return {
+            'NOTIFICATIONS_ENABLED': False,
+            'DISCORD_WEBHOOK_URL': '',
+            'EPISEERR_URL': 'http://localhost:5002',
+        }
 
 def get_sonarr_series():
     """Get series list from Sonarr, excluding series with 'watched' tag."""
@@ -1178,7 +1197,12 @@ def update_global_settings():
         storage_min_gb = data.get('global_storage_min_gb')
         cleanup_interval_hours = data.get('cleanup_interval_hours', 6)
         dry_run_mode = data.get('dry_run_mode', False)
-        auto_assign_new_series = data.get('auto_assign_new_series', False)  # ADD THIS LINE
+        auto_assign_new_series = data.get('auto_assign_new_series', False)
+        
+        # NEW: Notification settings
+        notifications_enabled = data.get('notifications_enabled', False)
+        discord_webhook_url = data.get('discord_webhook_url', '')
+        episeerr_url = data.get('episeerr_url', 'http://localhost:5002')
         
         # Validate inputs
         if storage_min_gb is not None:
@@ -1188,7 +1212,12 @@ def update_global_settings():
             'global_storage_min_gb': storage_min_gb,
             'cleanup_interval_hours': int(cleanup_interval_hours),
             'dry_run_mode': bool(dry_run_mode),
-            'auto_assign_new_series': bool(auto_assign_new_series)  # ADD THIS LINE
+            'auto_assign_new_series': bool(auto_assign_new_series),
+            
+            # NEW: Save notification settings
+            'notifications_enabled': bool(notifications_enabled),
+            'discord_webhook_url': str(discord_webhook_url),
+            'episeerr_url': str(episeerr_url),
         }
         
         media_processor.save_global_settings(settings)
@@ -1751,37 +1780,23 @@ def get_pending_requests():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/api/delete-request/<tmdb_id>', methods=['POST'])
-def delete_request(tmdb_id):
-    """Delete a pending request."""
+@app.route('/api/delete-request/<request_id>', methods=['POST'])
+def delete_request(request_id):
+    """Delete a pending request by its unique request_id (filename base)."""
     try:
-        # Look for request files that contain this tmdb_id
-        deleted = False
-        for filename in os.listdir(REQUESTS_DIR):
-            if filename.endswith('.json'):
-                filepath = os.path.join(REQUESTS_DIR, filename)
-                try:
-                    with open(filepath, 'r') as f:
-                        request_data = json.load(f)
-                    
-                    # Check if this request matches the tmdb_id
-                    if str(request_data.get('tmdb_id')) == str(tmdb_id):
-                        os.remove(filepath)
-                        app.logger.info(f"Deleted pending request file {filename} for TMDB ID {tmdb_id}")
-                        deleted = True
-                        break
-                except Exception as e:
-                    app.logger.error(f"Error reading request file {filename}: {str(e)}")
-                    continue
-        
-        if deleted:
+        filename = f"{request_id}.json"
+        filepath = os.path.join(REQUESTS_DIR, filename)
+
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            app.logger.info(f"Deleted pending request file {filename}")
             return jsonify({"status": "success", "message": "Request deleted successfully"}), 200
         else:
-            app.logger.warning(f"Pending request for TMDB ID {tmdb_id} not found")
+            app.logger.warning(f"Pending request file {filename} not found")
             return jsonify({"status": "error", "message": "Request not found"}), 404
-            
+
     except Exception as e:
-        app.logger.error(f"Error deleting request for TMDB ID {tmdb_id}: {str(e)}")
+        app.logger.error(f"Error deleting request {request_id}: {str(e)}")
         return jsonify({"status": "error", "message": "Failed to delete request"}), 500
 
 # ============================================================================
@@ -2166,6 +2181,17 @@ def process_sonarr_webhook():
                 json.dump(pending_request, f, indent=2)
             
             app.logger.info(f"✓ Created episode selection request for {series_title}")
+
+            # NEW: Send notification
+            try:
+                from notifications import send_notification
+                send_notification(
+                    "selection_pending",
+                    series=series_title,
+                    series_id=series_id
+                )
+            except Exception as e:
+                app.logger.error(f"Failed to send selection pending notification: {e}")
             
             return jsonify({
                 "status": "success",
@@ -2593,6 +2619,15 @@ def jellyfin_active_polling_status():
 cleanup_scheduler = OCDarrScheduler()
 app.logger.info("✓ OCDarrScheduler instantiated successfully")
 cleanup_scheduler.start_scheduler()
+# Initialize notification config 
+notification_config = get_notification_config()
+NOTIFICATIONS_ENABLED = notification_config['NOTIFICATIONS_ENABLED']
+DISCORD_WEBHOOK_URL = notification_config['DISCORD_WEBHOOK_URL']
+EPISEERR_URL = notification_config['EPISEERR_URL']
+
+# NEW: Initialize notifications module
+import notifications
+notifications.init_notifications(NOTIFICATIONS_ENABLED, DISCORD_WEBHOOK_URL, EPISEERR_URL, SONARR_URL)
 
 if __name__ == '__main__':
     cleanup_config_rules()
