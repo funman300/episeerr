@@ -7,10 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.7.0] - 01/02/2026
+## [2.7.1] - 2026-01-03
 
 ### Added
-- Discord notifications
+- Discord webhook notifications for episode search status
+  - "Search Pending" notifications when episodes are requested
+  - Auto-delete notifications when Sonarr successfully grabs episodes
+  - "Selection Pending" notifications for episeerr_select tagged shows
+- Notification storage system for tracking pending Discord messages
+- Sonarr "Grab" webhook support for notification cleanup
+
+### Changed
+- Sonarr webhook handler now processes both SeriesAdd and Grab events
+- Streamlined notification approach - only shows failed/pending searches
+
+### Fixed
+- Jellyfin webhook crash: `stop_jellyfin_polling()` function signature mismatch
+  - Function now accepts optional `episode_info` parameter
+  - Fixes "takes 1 positional argument but 2 were given" error
+  - Resolves automation breaking for Jellyfin users on PlaybackStop events
+
+---
+
+## [2.7.0] - 2026-01-02
 
 ### Added
 - Comprehensive documentation page accessible from UI
@@ -33,8 +52,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-submit dropdowns in log viewer (instant filtering)
 - Log rotation optimized for mobile viewing (2-5 MB files)
 - "Clear Old Logs" feature to remove rotated logs older than 7 days
-- CHANGELOG.md for tracking version changes
-- Automated CHANGELOG updates in release script
 
 ### Changed
 - Log rotation limits increased for better history retention

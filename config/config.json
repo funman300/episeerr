@@ -68,7 +68,7 @@
                     "activity_date": null
                 },
                 "85": {
-                    "activity_date": 1767401315,
+                    "activity_date": 1767476981,
                     "last_season": 2,
                     "last_episode": 7
                 },
@@ -207,6 +207,11 @@
                 },
                 "385": {
                     "activity_date": null
+                },
+                "498": {
+                    "activity_date": 1767477517,
+                    "last_season": 1,
+                    "last_episode": 5
                 }
             },
             "grace_scope": "series"

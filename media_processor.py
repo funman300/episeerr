@@ -473,13 +473,21 @@ def monitor_episodes(episode_ids, monitor=True):
         logger.error(f"Failed to set episodes {action}. Response: {response.text}")
 
 def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=None):
-    """Trigger a search for specified episodes in Sonarr and notify."""
+    """
+    Trigger a search for specified episodes in Sonarr and send pending notification
+    
+    Args:
+        episode_ids: List of Sonarr episode IDs to search
+        series_id: Sonarr series ID
+        series_title: Series name for notifications
+    """
     if not episode_ids:
         return
         
     url = f"{SONARR_URL}/api/v3/command"
     headers = {'X-Api-Key': SONARR_API_KEY, 'Content-Type': 'application/json'}
     data = {"name": "EpisodeSearch", "episodeIds": episode_ids}
+    
     response = requests.post(url, json=data, headers=headers)
     
     if response.ok:
@@ -488,31 +496,36 @@ def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=N
         logger.error(f"Failed to send episode search command. Response: {response.text}")
         return
     
-    # Send notification immediately after search
+    # Send pending notification and store message ID
     if series_id and series_title:
         try:
             from notifications import NOTIFICATIONS_ENABLED, send_notification
             from sonarr_utils import get_episode
+            from notification_storage import store_notification
             
             if NOTIFICATIONS_ENABLED:
-                logger.info(f"🔔 Sending notification for {len(episode_ids)} episodes")
                 for ep_id in episode_ids:
                     episode = get_episode(ep_id)
                     if episode:
-                        logger.info(f"🔔 Notifying: {series_title} S{episode.get('seasonNumber')}E{episode.get('episodeNumber')}")
-                        send_notification(
-                            "missing_episode",
+                        # Send notification
+                        message_id = send_notification(
+                            "episode_search_pending",
                             series=series_title,
                             season=episode.get('seasonNumber'),
                             episode=episode.get('episodeNumber'),
                             air_date=episode.get('airDateUtc'),
                             series_id=series_id
                         )
-                logger.info(f"🔔 Notifications sent!")
+                        
+                        # Store message ID for later deletion
+                        if message_id:
+                            store_notification(ep_id, message_id)
+                            logger.info(f"🔔 Sent pending notification for {series_title} S{episode.get('seasonNumber')}E{episode.get('episodeNumber')}")
+                        
         except Exception as e:
-            logger.error(f"🔔 Failed to send notification: {e}")
+            logger.error(f"Failed to send notification: {e}")
             import traceback
-            logger.error(f"🔔 Traceback: {traceback.format_exc()}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
 def unmonitor_episodes(episode_ids):
     """Unmonitor specified episodes in Sonarr."""
@@ -2087,7 +2100,7 @@ def start_jellyfin_polling(session_id, episode_info):
         
         return True
 
-def stop_jellyfin_polling(session_id):
+def stop_jellyfin_polling(session_id, episode_info=None):
     """Stop polling for a specific session."""
     with polling_lock:
         if session_id in active_polling_sessions:
