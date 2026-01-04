@@ -61,9 +61,12 @@ services:
       - TAUTULLI_URL=http://your-tautulli:8181
       - TAUTULLI_API_KEY=your_tautulli_key
       # Or
-      - JELLYFIN_URL=http://your-JF_URL  # ADD WEBHOOK IN JELLYFIN
-      - JELLYFIN_API_KEY=your_jf_key
-      - JELLYFIN_USER_ID=
+      # For Jellyfin users (add webhook in Jellyfin)
+      - JELLYFIN_URL=http://your-jellyfin:8096
+      - JELLYFIN_API_KEY=your_api_key  
+      - JELLYFIN_USER_ID=your_username  # REQUIRED - your Jellyfin username
+      - JELLYFIN_TRIGGER_MIN=50.0  # Real-time mode (recommended)
+      - JELLYFIN_TRIGGER_MAX=55.0
      
       # Optional quicklinks
       - CUSTOMAPP_URL=http://192.168.254.205:8080 # example SABNZBD_URL=http...

@@ -1,4 +1,4 @@
-__version__ = "2.7.1"
+__version__ = "2.7.2"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -2327,7 +2327,7 @@ def handle_server_webhook():
 
 @app.route('/jellyfin-webhook', methods=['POST'])
 def handle_jellyfin_webhook():
-    """Handle Jellyfin webhook - Using SessionStart + PlaybackStop."""
+    """Handle Jellyfin webhooks - Supports polling (SessionStart) OR real-time (PlaybackProgress)."""
     app.logger.info("Received webhook from Jellyfin")
     data = request.json
     if not data:
@@ -2337,7 +2337,66 @@ def handle_jellyfin_webhook():
         notification_type = data.get('NotificationType')
         app.logger.info(f"Jellyfin webhook type: {notification_type}")
 
-        if notification_type == 'SessionStart':  # CHANGED: Use SessionStart instead of PlaybackStart
+        # ============================================================================
+        # REAL-TIME MODE: PlaybackProgress (NEW)
+        # ============================================================================
+        if notification_type == 'PlaybackProgress':
+            item_type = data.get('ItemType')
+            if item_type == 'Episode':
+                series_name = data.get('SeriesName')
+                season = data.get('SeasonNumber')
+                episode = data.get('EpisodeNumber')
+                
+                # Calculate progress percentage
+                progress_ticks = data.get('PlaybackPositionTicks', 0)
+                runtime_ticks = data.get('RunTimeTicks', 1)
+                progress_percent = (progress_ticks / runtime_ticks * 100) if runtime_ticks > 0 else 0
+                
+                session_id = data.get('SessionId') or data.get('PlaySessionId') or data.get('Id')
+                user_name = data.get('NotificationUsername', 'Unknown')
+                
+                if all([series_name, season is not None, episode is not None]):
+                    # Import processing functions
+                    from media_processor import (
+                        process_jellyfin_progress_webhook,
+                        check_jellyfin_user,
+                        JELLYFIN_TRIGGER_MIN
+                    )
+                    
+                    # Check if configured user (silently skip if not)
+                    if not check_jellyfin_user(user_name):
+                        return jsonify({'status': 'success', 'message': 'User not configured'}), 200
+                    
+                    # Only process if in/above trigger window
+                    if progress_percent >= JELLYFIN_TRIGGER_MIN:
+                        # Try to process (function handles deduplication internally)
+                        success = process_jellyfin_progress_webhook(
+                            session_id=session_id,
+                            series_name=series_name,
+                            season_number=season,
+                            episode_number=episode,
+                            progress_percent=progress_percent,
+                            user_name=user_name
+                        )
+                        
+                        if success:
+                            app.logger.info(f"✅ Processed {series_name} S{season}E{episode}")
+                        # Whether success or already processed, we're done
+                    
+                    # All paths lead here - single return
+                    return jsonify({'status': 'success'}), 200
+                    
+                else:
+                    app.logger.warning("Missing episode data in PlaybackProgress")
+                    return jsonify({'status': 'error', 'message': 'Missing episode data'}), 400
+            else:
+                # Not an episode, ignore
+                return jsonify({'status': 'success', 'message': 'Not an episode'}), 200
+
+        # ============================================================================
+        # POLLING MODE: SessionStart or PlaybackStart (OLD - backward compatible)
+        # ============================================================================
+        elif notification_type in ['SessionStart', 'PlaybackStart']:
             # Start polling for this session
             item_type = data.get('ItemType')
             if item_type == 'Episode':
@@ -2349,9 +2408,7 @@ def handle_jellyfin_webhook():
 
                 if all([series_name, season is not None, episode is not None]):
                     app.logger.info(f"📺 Jellyfin session started: {series_name} S{season}E{episode} (User: {user_name})")
-                    app.logger.info(f"🔄 This handles both NEW episodes and RESUMED episodes")
                     
-                    # Import and start polling
                     try:
                         from media_processor import start_jellyfin_polling
                         
@@ -2368,10 +2425,7 @@ def handle_jellyfin_webhook():
                         
                         if polling_started:
                             app.logger.info(f"✅ Started polling for {series_name} S{season}E{episode}")
-                            return jsonify({
-                                'status': 'success', 
-                                'message': f'Started polling for {series_name} S{season}E{episode}'
-                            }), 200
+                            return jsonify({'status': 'success', 'message': f'Started polling'}), 200
                         else:
                             app.logger.warning(f"⚠️ Failed to start polling (may already be active)")
                             return jsonify({'status': 'warning', 'message': 'Polling may already be active'}), 200
@@ -2380,19 +2434,16 @@ def handle_jellyfin_webhook():
                         app.logger.error(f"Error starting Jellyfin polling: {str(e)}")
                         return jsonify({'status': 'error', 'message': f'Failed to start polling: {str(e)}'}), 500
                 else:
-                    missing_fields = []
-                    if not series_name: missing_fields.append('SeriesName')
-                    if season is None: missing_fields.append('SeasonNumber')  
-                    if episode is None: missing_fields.append('EpisodeNumber')
-                    
-                    app.logger.warning(f"Missing required fields: {missing_fields}")
-                    return jsonify({'status': 'error', 'message': f'Missing fields: {missing_fields}'}), 400
+                    app.logger.warning("Missing required fields for SessionStart")
+                    return jsonify({'status': 'error', 'message': 'Missing fields'}), 400
             else:
-                app.logger.info(f"Item type '{item_type}' is not an episode, ignoring session start")
+                app.logger.info(f"Item type '{item_type}' is not an episode")
                 return jsonify({'status': 'success', 'message': 'Not an episode'}), 200
 
+        # ============================================================================
+        # CLEANUP: PlaybackStop
+        # ============================================================================
         elif notification_type == 'PlaybackStop':
-            # Stop polling for this episode
             webhook_id = data.get('Id')
             series_name = data.get('SeriesName', 'Unknown')
             season = data.get('SeasonNumber')
@@ -2401,39 +2452,82 @@ def handle_jellyfin_webhook():
             
             app.logger.info(f"📺 Jellyfin playback stopped: {series_name} S{season}E{episode} (User: {user_name})")
             
+            # Stop polling if active (for polling mode)
+            try:
+                from media_processor import stop_jellyfin_polling
+                stopped = stop_jellyfin_polling(webhook_id)
+                if stopped:
+                    app.logger.info(f"🛑 Stopped polling for {series_name}")
+            except Exception as e:
+                app.logger.debug(f"No polling to stop: {e}")
+            
+            # Clean up progress tracking (for PlaybackProgress mode)
+            try:
+                from media_processor import cleanup_jellyfin_tracking
+                cleanup_jellyfin_tracking()
+                app.logger.debug("Cleaned up PlaybackProgress tracking")
+            except Exception as e:
+                app.logger.debug(f"No tracking to clean: {e}")
+            
+            # ALSO: Check if they watched enough (fallback for PlaybackStop-only mode)
             if all([series_name, season is not None, episode is not None]):
                 try:
-                    from media_processor import stop_jellyfin_polling
+                    from media_processor import (
+                        get_episode_tracking_key,
+                        processed_jellyfin_episodes,
+                        process_jellyfin_episode,
+                        check_jellyfin_user,
+                        JELLYFIN_TRIGGER_PERCENTAGE
+                    )
                     
-                    episode_info = {
-                        'user_name': user_name,
-                        'series_name': series_name,
-                        'season_number': int(season),
-                        'episode_number': int(episode)
-                    }
+                    # Check if configured user
+                    if not check_jellyfin_user(user_name):
+                        return jsonify({'status': 'success'}), 200
                     
-                    stopped = stop_jellyfin_polling(webhook_id, episode_info)
+                    # Calculate final progress
+                    progress_ticks = data.get('PlaybackPositionTicks', 0)
+                    runtime_ticks = data.get('RunTimeTicks', 1)
+                    progress_percent = (progress_ticks / runtime_ticks * 100) if runtime_ticks > 0 else 0
                     
-                    if stopped:
-                        app.logger.info(f"🛑 Stopped polling for {series_name} S{season}E{episode}")
-                        return jsonify({'status': 'success', 'message': f'Stopped polling for {series_name}'}), 200
+                    app.logger.info(f"Final progress: {progress_percent:.1f}%")
+                    
+                    # Check if already processed via PlaybackProgress
+                    tracking_key = get_episode_tracking_key(series_name, season, episode, user_name)
+                    if tracking_key in processed_jellyfin_episodes:
+                        app.logger.info(f"Already processed via PlaybackProgress")
+                        processed_jellyfin_episodes.clear()
+                        return jsonify({'status': 'success', 'message': 'Already processed'}), 200
+                    
+                    # Process if watched enough
+                    if progress_percent >= JELLYFIN_TRIGGER_PERCENTAGE:
+                        app.logger.info(f"🎯 Processing on stop at {progress_percent:.1f}%")
+                        
+                        episode_info = {
+                            'user_name': user_name,
+                            'series_name': series_name,
+                            'season_number': int(season),
+                            'episode_number': int(episode),
+                            'progress_percent': progress_percent
+                        }
+                        
+                        process_jellyfin_episode(episode_info)
+                        return jsonify({'status': 'success', 'message': 'Processed on stop'}), 200
                     else:
-                        app.logger.info(f"ℹ️ No active polling found for {series_name} S{season}E{episode}")
-                        return jsonify({'status': 'success', 'message': 'No active polling found'}), 200
+                        app.logger.info(f"Skipped - only watched {progress_percent:.1f}%")
                         
                 except Exception as e:
-                    app.logger.error(f"Error stopping Jellyfin polling: {str(e)}")
-                    return jsonify({'status': 'error', 'message': f'Failed to stop polling: {str(e)}'}), 500
-            else:
-                app.logger.warning("📺 Jellyfin playback stopped but missing episode info")
-                return jsonify({'status': 'success', 'message': 'Playback stopped (missing episode info)'}), 200
+                    app.logger.error(f"Error processing on stop: {e}")
+            
+            return jsonify({'status': 'success', 'message': 'Playback stopped'}), 200
 
         else:
             app.logger.info(f"Jellyfin notification type '{notification_type}' not handled")
-            return jsonify({'status': 'success', 'message': f'Notification type {notification_type} not handled'}), 200
+            return jsonify({'status': 'success', 'message': 'Event not handled'}), 200
 
     except Exception as e:
-        app.logger.error(f"Failed to process Jellyfin webhook: {str(e)}", exc_info=True)
+        app.logger.error(f"Error handling Jellyfin webhook: {str(e)}")
+        import traceback
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # Add a debug endpoint to check polling status

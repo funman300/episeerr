@@ -66,33 +66,117 @@ Webhooks enable viewing-based automation - Episeerr responds when you watch epis
 
 ### Jellyfin Setup
 
-**To configure Jellyfin to send playback information to Episeerr:**
+**Episeerr supports two modes for Jellyfin integration - choose what works best for you:**
 
-1. **Navigate to Dashboard → Plugins → Webhooks**
-   - If the Webhooks plugin is not installed, install it first from the Plugin Catalog
+#### **Option 1: Real-Time Processing (Recommended)**
 
-2. **Click + Add New Webhook and configure with these settings:**
-   - **Webhook Name:** Episeerr Episode Tracking (or any name you prefer)
-   - **Server URL:** Your Jellyfin base URL (for linking to content)
+Processes episodes immediately when you hit 50-55% progress.
+
+**Setup:**
+1. **Navigate to:** Dashboard → Plugins → Webhooks
+2. **Add New Webhook:**
+   - **Webhook Name:** Episeerr Episode Tracking
+   - **Server URL:** Your Jellyfin base URL
    - **Webhook URL:** `http://your-episeerr-ip:5002/jellyfin-webhook`
    - **Status:** Enabled
-   - **Notification Type:** Select only "Playback Progress"
-   - **User Filter (Optional):** Specific username(s) to track
+   - **Notification Type:** Select **"Playback Progress"** only
+   - **User Filter:** Your username (optional but recommended)
    - **Item Type:** Episodes
    - **Send All Properties:** Enabled
    - **Content Type:** application/json
 
-3. **Under Request Headers, add:**
-   - **Key:** `Content-Type`
-   - **Value:** `application/json`
+**Environment Variables:**
+```env
+JELLYFIN_URL=http://your-jellyfin:8096
+JELLYFIN_API_KEY=your_api_key
+JELLYFIN_USER_ID=your_username
+JELLYFIN_TRIGGER_MIN=50.0
+JELLYFIN_TRIGGER_MAX=55.0
+```
 
-4. **Click Save**
+**How it works:**
+- Triggers between 50-55% progress
+- Processes once, then ignores subsequent webhooks
+- Real-time response
+
+---
+
+#### **Option 2: Polling Mode (Legacy)**
+
+Checks progress every 15 minutes until threshold is reached.
+
+**Setup:**
+1. **Navigate to:** Dashboard → Plugins → Webhooks
+2. **Add New Webhook:**
+   - **Webhook Name:** Episeerr Session Tracking
+   - **Webhook URL:** `http://your-episeerr-ip:5002/jellyfin-webhook`
+   - **Notification Type:** Select **"Session Start"** and **"Playback Stop"**
+   - **User Filter:** Your username
+   - **Item Type:** Episodes
+
+**Environment Variables:**
+```env
+JELLYFIN_URL=http://your-jellyfin:8096
+JELLYFIN_API_KEY=your_api_key
+JELLYFIN_USER_ID=your_username
+JELLYFIN_TRIGGER_PERCENTAGE=50.0
+JELLYFIN_POLL_INTERVAL=900  # 15 minutes
+```
+
+**How it works:**
+- Starts polling when you begin watching
+- Checks progress every 15 minutes
+- Processes when >= 50%
+- Stops polling when you stop watching
+
+---
+
+#### **Option 3: On-Stop Processing (Minimal)**
+
+Processes when you finish/stop watching (if >= 50%).
+
+**Setup:**
+1. **Navigate to:** Dashboard → Plugins → Webhooks
+2. **Add New Webhook:**
+   - **Webhook Name:** Episeerr Playback Stop
+   - **Webhook URL:** `http://your-episeerr-ip:5002/jellyfin-webhook`
+   - **Notification Type:** Select **"Playback Stop"** only
+   - **User Filter:** Your username
+   - **Item Type:** Episodes
+
+**Environment Variables:**
+```env
+JELLYFIN_URL=http://your-jellyfin:8096
+JELLYFIN_API_KEY=your_api_key
+JELLYFIN_USER_ID=your_username
+JELLYFIN_TRIGGER_PERCENTAGE=50.0
+```
+
+**How it works:**
+- Single webhook when playback stops
+- Checks if you watched >= 50%
+- Processes if threshold met
+- Fewest webhooks, delayed processing
+
+---
+
+**Which should you use?**
+
+| Mode | Best For | Pros | Cons |
+|------|----------|------|------|
+| **Real-Time** | Most users | Immediate, no polling | More webhooks |
+| **Polling** | Unreliable webhooks | Works with any setup | Background threads, 15-min delay |
+| **On-Stop** | Minimal webhook traffic | Simplest, fewest webhooks | Only processes when you stop |
+
+**Recommendation:** Use **Real-Time (PlaybackProgress)** for best experience.
+
+---
 
 **Important Notes:**
-
-- Episeerr processes playback events when progress is between 45-55% of the episode (mid-point)
-- Make sure your server can reach your Episeerr instance on port 5002
-- Episeerr will automatically manage episodes according to your configured rules when playback events are received
+- **JELLYFIN_USER_ID is required** - Set to your Jellyfin username
+- All modes require the same Jellyfin API setup
+- Modes are auto-detected based on which webhooks you enable
+- You can enable multiple modes (Episeerr handles deduplication)
 
 **Troubleshooting:**
 

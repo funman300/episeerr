@@ -21,7 +21,12 @@ LAST_PROCESSED_LOCK = threading.Lock()
 JELLYFIN_TRIGGER_PERCENTAGE = float(os.getenv('JELLYFIN_TRIGGER_PERCENTAGE', '50.0'))
 JELLYFIN_POLL_INTERVAL = int(os.getenv('JELLYFIN_POLL_INTERVAL', '900'))  # Default 15 minutes (900 seconds)
 
+# Jellyfin configuration
+JELLYFIN_TRIGGER_MIN = float(os.getenv('JELLYFIN_TRIGGER_MIN', '50.0'))
+JELLYFIN_TRIGGER_MAX = float(os.getenv('JELLYFIN_TRIGGER_MAX', '55.0'))
 
+# Track processed episodes to prevent duplicates
+processed_jellyfin_episodes = set()
 # Load environment variables
 load_dotenv()
 
@@ -322,7 +327,21 @@ def get_activity_date_with_hierarchy(series_id, series_title=None, return_comple
     if return_complete:
         return None, None, None
     return None
+def is_in_trigger_window(progress):
+    """Check if progress is within trigger window"""
+    return JELLYFIN_TRIGGER_MIN <= progress <= JELLYFIN_TRIGGER_MAX
 
+def get_episode_tracking_key(series_name, season, episode, user_name):
+    """Generate unique key for tracking processed episodes"""
+    return f"{series_name}:S{season}E{episode}:{user_name}"
+
+def check_jellyfin_user(username):
+    """Check if this is the configured Jellyfin user"""
+    configured_user = os.getenv('JELLYFIN_USER_ID')
+    if not configured_user:
+        logger.warning("JELLYFIN_USER_ID not set - processing all users")
+        return True
+    return username.lower() == configured_user.lower()
 def get_server_activity():
     """Read current viewing details from server webhook stored data."""
     try:
@@ -752,6 +771,56 @@ def get_jellyfin_user_id(jellyfin_url, jellyfin_api_key, username):
     except Exception as e:
         logger.error(f"Error getting Jellyfin User ID: {str(e)}")
         return None
+    
+def process_jellyfin_progress_webhook(session_id, series_name, season_number, episode_number, progress_percent, user_name):
+    """Process Jellyfin progress webhook with window-based deduplication."""
+    
+    # Check if in trigger window
+    if not is_in_trigger_window(progress_percent):
+        return False
+    
+    # Create tracking key
+    tracking_key = get_episode_tracking_key(series_name, season_number, episode_number, user_name)
+    
+    # Check if already processed (silently skip)
+    if tracking_key in processed_jellyfin_episodes:
+        return False  # Don't log - already processed
+    
+    # Mark as processed FIRST
+    processed_jellyfin_episodes.add(tracking_key)
+    
+    # NOW log (only happens once)
+    logger.info(f"🎯 Processing Jellyfin episode at {progress_percent:.1f}% (window: {JELLYFIN_TRIGGER_MIN}-{JELLYFIN_TRIGGER_MAX}%)")
+    logger.info(f"   📺 {series_name} S{season_number}E{episode_number} (User: {user_name})")
+    
+    try:
+        # Call your existing processing logic
+        episode_info = {
+            'user_name': user_name,
+            'series_name': series_name,
+            'season_number': season_number,
+            'episode_number': episode_number,
+            'progress_percent': progress_percent
+        }
+        
+        success = process_jellyfin_episode(episode_info)
+        
+        if not success:
+            logger.warning(f"Processing failed for {tracking_key}")
+        
+        return success
+        
+    except Exception as e:
+        logger.error(f"Error processing Jellyfin episode: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return False
+
+def cleanup_jellyfin_tracking():
+    """Clear all tracking when playback stops"""
+    count = len(processed_jellyfin_episodes)
+    processed_jellyfin_episodes.clear()
+    logger.debug(f"Cleared {count} Jellyfin tracking entries")
 
 def get_jellyfin_last_watched(series_title, return_complete=False):
     """

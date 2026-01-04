@@ -36,7 +36,20 @@ services:
       - TAUTULLI_API_KEY=your_tautulli_key
       - JELLYSEERR_URL=http://your-jellyseerr:5055
       - JELLYSEERR_API_KEY=your_jellyseerr_key
-      
+      # Optional - For Jellyfin users (choose your mode)
+      - JELLYFIN_URL=http://your-jellyfin:8096
+      - JELLYFIN_API_KEY=your_api_key
+      - JELLYFIN_USER_ID=your_username  # REQUIRED
+
+      # Real-time mode (recommended)
+      - JELLYFIN_TRIGGER_MIN=50.0
+      - JELLYFIN_TRIGGER_MAX=55.0
+
+      # Polling mode (legacy)
+      - JELLYFIN_TRIGGER_PERCENTAGE=50.0
+      - JELLYFIN_POLL_INTERVAL=900
+
+      # On-stop mode uses JELLYFIN_TRIGGER_PERCENTAGE
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs

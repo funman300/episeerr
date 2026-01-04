@@ -23,7 +23,9 @@
                     "activity_date": null
                 },
                 "478": {
-                    "activity_date": null
+                    "activity_date": 1767561282,
+                    "last_season": 3,
+                    "last_episode": 1
                 },
                 "66": {
                     "activity_date": null
@@ -88,7 +90,9 @@
                     "activity_date": null
                 },
                 "440": {
-                    "activity_date": null
+                    "activity_date": 1767562329,
+                    "last_season": 2,
+                    "last_episode": 3
                 },
                 "71": {
                     "activity_date": null
@@ -129,9 +133,9 @@
                     "activity_date": null
                 },
                 "477": {
-                    "activity_date": 1755007658,
-                    "last_season": 2,
-                    "last_episode": 8
+                    "activity_date": 1767499741,
+                    "last_season": 6,
+                    "last_episode": 2
                 },
                 "7": {
                     "activity_date": null
