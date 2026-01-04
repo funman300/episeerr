@@ -1811,6 +1811,13 @@ def process_sonarr_webhook():
     try:
         json_data = request.json
         
+        # NEW: Check event type and route accordingly
+        event_type = json_data.get('eventType')
+        app.logger.info(f"Sonarr webhook event type: {event_type}")
+        
+        if event_type == 'Grab':
+            return handle_episode_grab(json_data)
+        
         # Get important data from the webhook
         series = json_data.get('series', {})
         series_id = series.get('id')
@@ -2614,7 +2621,41 @@ def jellyfin_active_polling_status():
             'status': 'error',
             'message': str(e)
         }), 500
-
+def handle_episode_grab(data):
+    """Handle Sonarr grab event - delete pending search notification if exists"""
+    try:
+        episodes = data.get('episodes', [])
+        series_title = data.get('series', {}).get('title', 'Unknown')
+        
+        for episode in episodes:
+            episode_id = episode.get('id')
+            season = episode.get('seasonNumber')
+            episode_num = episode.get('episodeNumber')
+            
+            app.logger.info(f"✅ Episode grabbed: {series_title} S{season}E{episode_num}")
+            
+            # Import notification helpers
+            from notification_storage import get_and_remove_notification
+            from notifications import delete_discord_message
+            
+            # Check if we have a pending notification for this episode
+            message_id = get_and_remove_notification(episode_id)
+            
+            if message_id:
+                app.logger.info(f"🗑️ Deleting pending search notification for episode {episode_id}")
+                if delete_discord_message(message_id):
+                    app.logger.info(f"✅ Successfully deleted notification message {message_id}")
+                else:
+                    app.logger.warning(f"⚠️ Failed to delete notification message {message_id}")
+        
+        return jsonify({'status': 'success', 'message': 'Grab event processed'}), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error handling grab webhook: {e}")
+        import traceback
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+        
 # Create scheduler instance
 cleanup_scheduler = OCDarrScheduler()
 app.logger.info("✓ OCDarrScheduler instantiated successfully")
