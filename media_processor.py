@@ -524,6 +524,10 @@ def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=N
             
             if NOTIFICATIONS_ENABLED:
                 for ep_id in episode_ids:
+                    # NEW: Skip if notification already exists (prevents Jellyfin spam)
+                    if notification_exists(ep_id):
+                        logger.debug(f"Notification already exists for episode {ep_id}, skipping")
+                        continue
                     episode = get_episode(ep_id)
                     if episode:
                         # Send notification

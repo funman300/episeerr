@@ -74,3 +74,17 @@ def get_and_remove_notification(episode_id):
     except Exception as e:
         logger.error(f"Failed to get notification: {e}")
         return None
+def notification_exists(episode_id):
+    """Check if a notification already exists for an episode"""
+    try:
+        if not os.path.exists(NOTIFICATION_STORAGE):
+            return False
+            
+        with open(NOTIFICATION_STORAGE, 'r') as f:
+            notifications = json.load(f)
+        
+        return str(episode_id) in notifications
+        
+    except Exception as e:
+        logger.error(f"Failed to check notification existence: {e}")
+        return False

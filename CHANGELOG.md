@@ -7,83 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.7.1] - 2026-01-04
+[2.7.23] - 2026-01-05
 
-- Added 3 types of progress tracking using jellyfin, see documentation
-- updated documentation
+    fixed duplicate discord notifications 
 
-## [2.7.1] - 2026-01-03
+[2.7.2] - 2026-01-04
 
-### Added
-- Discord webhook notifications for episode search status
-  - "Search Pending" notifications when episodes are requested
-  - Auto-delete notifications when Sonarr successfully grabs episodes
-  - "Selection Pending" notifications for episeerr_select tagged shows
-- Notification storage system for tracking pending Discord messages
-- Sonarr "Grab" webhook support for notification cleanup
+    Added 3 types of progress tracking using jellyfin, see documentation
+    updated documentation
 
-### Changed
-- Sonarr webhook handler now processes both SeriesAdd and Grab events
-- Streamlined notification approach - only shows failed/pending searches
+[2.7.1] - 2026-01-03
+Added
 
-### Fixed
-- Jellyfin webhook crash: `stop_jellyfin_polling()` function signature mismatch
-  - Function now accepts optional `episode_info` parameter
-  - Fixes "takes 1 positional argument but 2 were given" error
-  - Resolves automation breaking for Jellyfin users on PlaybackStop events
+    Discord webhook notifications for episode search status
+        "Search Pending" notifications when episodes are requested
+        Auto-delete notifications when Sonarr successfully grabs episodes
+        "Selection Pending" notifications for episeerr_select tagged shows
+    Notification storage system for tracking pending Discord messages
+    Sonarr "Grab" webhook support for notification cleanup
 
----
+Changed
 
-## [2.7.0] - 2026-01-02
+    Sonarr webhook handler now processes both SeriesAdd and Grab events
+    Streamlined notification approach - only shows failed/pending searches
 
-### Added
-- Comprehensive documentation page accessible from UI
-- CHANGELOG.md for version tracking
-- Automated CHANGELOG updates in release script
-- Navigation links to docs in navbar and admin panel
+Fixed
 
-### Changed
-- Cleaned up redundant help text from create/edit rule pages
-- Removed large "How It Works" section from admin panel
-- Streamlined UI with contextual help links to full docs
+    Jellyfin webhook crash: stop_jellyfin_polling() function signature mismatch
+        Function now accepts optional episode_info parameter
+        Fixes "takes 1 positional argument but 2 were given" error
+        Resolves automation breaking for Jellyfin users on PlaybackStop events
 
-### Fixed
-- HTML layout issues in create_rule template
+[2.7.0] - 2026-01-02
+Added
 
-### Added
-- Per-season grace period tracking for multi-viewer households
-- Grace period scope setting (per-series vs per-season) in rule editor
-- Web-based log viewer with filtering, search, and download capabilities
-- Auto-submit dropdowns in log viewer (instant filtering)
-- Log rotation optimized for mobile viewing (2-5 MB files)
-- "Clear Old Logs" feature to remove rotated logs older than 7 days
+    Comprehensive documentation page accessible from UI
+    CHANGELOG.md for version tracking
+    Automated CHANGELOG updates in release script
+    Navigation links to docs in navbar and admin panel
 
-### Changed
-- Log rotation limits increased for better history retention
-  - app.log: 1MB → 2MB
-  - cleanup.log: 5MB → 2MB  
-  - episeerr.log: 10MB → 5MB
-- "View Cleanup Logs" button now opens advanced log viewer
-- Migration system auto-adds grace_scope='series' to existing rules
+Changed
 
-### Fixed
-- Jellyseerr request files now properly deleted when no episeerr tags are used
-- Per-season activity tracking correctly updates season-specific timestamps
-- Grace period cleanup functions support both per-series and per-season modes
+    Cleaned up redundant help text from create/edit rule pages
+    Removed large "How It Works" section from admin panel
+    Streamlined UI with contextual help links to full docs
 
----
+Fixed
 
-## [2.6.5] 
+    HTML layout issues in create_rule template
 
-### Added
-- Sonarr webhook bug fix for Jellyseerr integration
-- Improved Jellyseerr request file cleanup
-- Better handling of series without episeerr tags
+Added
 
-### Fixed
-- Jellyseerr cleanup moved to top of webhook processing
-- Request files no longer orphaned when tags aren't used
-- episeerr_default tag processing more reliable
+    Per-season grace period tracking for multi-viewer households
+    Grace period scope setting (per-series vs per-season) in rule editor
+    Web-based log viewer with filtering, search, and download capabilities
+    Auto-submit dropdowns in log viewer (instant filtering)
+    Log rotation optimized for mobile viewing (2-5 MB files)
+    "Clear Old Logs" feature to remove rotated logs older than 7 days
+
+Changed
+
+    Log rotation limits increased for better history retention
+        app.log: 1MB → 2MB
+        cleanup.log: 5MB → 2MB
+        episeerr.log: 10MB → 5MB
+    "View Cleanup Logs" button now opens advanced log viewer
+    Migration system auto-adds grace_scope='series' to existing rules
+
+Fixed
+
+    Jellyseerr request files now properly deleted when no episeerr tags are used
+    Per-season activity tracking correctly updates season-specific timestamps
+    Grace period cleanup functions support both per-series and per-season modes
+
+[2.6.5]
+Added
+
+    Sonarr webhook bug fix for Jellyseerr integration
+    Improved Jellyseerr request file cleanup
+    Better handling of series without episeerr tags
+
+Fixed
+
+    Jellyseerr cleanup moved to top of webhook processing
+    Request files no longer orphaned when tags aren't used
+    episeerr_default tag processing more reliable
+
 
 ---
 
