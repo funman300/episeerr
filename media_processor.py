@@ -4,6 +4,7 @@ import requests
 import logging
 from logging.handlers import RotatingFileHandler
 import json
+import shutil
 import time
 from dotenv import load_dotenv
 from datetime import datetime, timezone
@@ -1778,28 +1779,44 @@ def run_dormant_cleanup():
 # ============================================================================
 
 def load_global_settings():
-    """Load global settings including storage gate."""
+    """Load global settings including storage gate with automatic backup."""
     try:
         settings_path = os.path.join(os.getcwd(), 'config', 'global_settings.json')
         
+        # Backup existing file before loading
         if os.path.exists(settings_path):
+            backup_path = settings_path + '.bak'
+            try:
+                shutil.copy2(settings_path, backup_path)
+                logger.debug(f"Backed up global_settings.json to {backup_path}")
+            except Exception as e:
+                logger.warning(f"Could not backup global_settings.json: {e}")
+            
             with open(settings_path, 'r') as f:
                 return json.load(f)
         else:
-            # Default settings - ADD auto_assign_new_series
+            # Default settings
             default_settings = {
                 'global_storage_min_gb': None,  # No storage gate by default
                 'cleanup_interval_hours': 6,
                 'dry_run_mode': False,
-                'auto_assign_new_series': False  # ADD THIS LINE
+                'auto_assign_new_series': False,
+                'notifications_enabled': False,
+                'discord_webhook_url': '',
+                'episeerr_url': 'http://localhost:5002'
             }
             save_global_settings(default_settings)
             return default_settings
     except Exception as e:
         logger.error(f"Error loading global settings: {str(e)}")
         return {
-            'global_storage_min_gb': None, 
-            'auto_assign_new_series': False  # ADD THIS LINE
+            'global_storage_min_gb': None,
+            'cleanup_interval_hours': 6,
+            'dry_run_mode': False,
+            'auto_assign_new_series': False,
+            'notifications_enabled': False,
+            'discord_webhook_url': '',
+            'episeerr_url': 'http://localhost:5002'
         }
 
 def save_global_settings(settings):

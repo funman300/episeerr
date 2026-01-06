@@ -1,4 +1,4 @@
-__version__ = "2.7.3"
+__version__ = "test2"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -7,6 +7,7 @@ import re
 import time
 import logging
 import json
+import shutil
 import sonarr_utils
 from flask import current_app
 from datetime import datetime, timezone, timedelta
@@ -507,8 +508,17 @@ def clear_old_logs():
 # ============================================================================
 
 def load_config():
-    """Load configuration with simplified migration."""
+    """Load configuration with simplified migration and automatic backup."""
     try:
+        # Backup existing config before loading
+        if os.path.exists(config_path):
+            backup_path = config_path + '.bak'
+            try:
+                shutil.copy2(config_path, backup_path)
+                app.logger.debug(f"Backed up config.json to {backup_path}")
+            except Exception as e:
+                app.logger.warning(f"Could not backup config.json: {e}")
+        
         with open(config_path, 'r') as file:
             config = json.load(file)
         if 'rules' not in config:
@@ -549,6 +559,20 @@ def load_config():
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         save_config(default_config)
         return default_config
+
+
+# Add this new function after load_config():
+
+def backup_global_settings():
+    """Backup global_settings.json if it exists."""
+    try:
+        settings_path = os.path.join(os.getcwd(), 'config', 'global_settings.json')
+        if os.path.exists(settings_path):
+            backup_path = settings_path + '.bak'
+            shutil.copy2(settings_path, backup_path)
+            app.logger.debug(f"Backed up global_settings.json to {backup_path}")
+    except Exception as e:
+        app.logger.warning(f"Could not backup global_settings.json: {e}")
 
 def save_config(config):
     """Save configuration to JSON file."""

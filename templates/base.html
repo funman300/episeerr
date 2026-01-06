@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const themeButton = document.createElement('a');
         themeButton.className = 'nav-link';
         themeButton.href = '#';
-        themeButton.setAttribute('data-theme-toggle', 'true'); // Add identifier
+        themeButton.setAttribute('data-theme-toggle', 'true');
         themeButton.innerHTML = '<i class="fas fa-palette me-1"></i><span class="d-none d-md-inline">Theme</span><span class="d-md-none">Theme</span>';
         themeButton.addEventListener('click', function(e) {
             e.preventDefault();
@@ -64,7 +64,6 @@ document.addEventListener('DOMContentLoaded', function() {
             setTheme(theme);
             localStorage.setItem('episeerr-theme', theme);
             updateActiveTheme(theme);
-            // Hide selector after selection
             document.getElementById('themeSelector').style.display = 'none';
         });
     });
@@ -80,7 +79,37 @@ document.addEventListener('DOMContentLoaded', function() {
             selector.style.display = 'none';
         }
     });
+    
+    // Populate Quick Links dropdown from page data
+    populateQuickLinks();
 });
+
+function populateQuickLinks() {
+    // Check if we're on the rules index page (which has services data)
+    const quickLinksDropdown = document.getElementById('quickLinksDropdown');
+    if (!quickLinksDropdown) return;
+    
+    // Check if services data is available in the page
+    if (typeof window.servicesData !== 'undefined' && window.servicesData) {
+        const services = window.servicesData;
+        
+        if (Object.keys(services).length > 0) {
+            const dropdownMenu = quickLinksDropdown.querySelector('.dropdown-menu');
+            dropdownMenu.innerHTML = '';
+            
+            Object.entries(services).forEach(([key, service]) => {
+                const li = document.createElement('li');
+                li.innerHTML = `<a class="dropdown-item" href="${service.url}" target="_blank">
+                    <i class="${service.icon} me-2"></i>${service.name}
+                </a>`;
+                dropdownMenu.appendChild(li);
+            });
+            
+            // Show the dropdown
+            quickLinksDropdown.style.display = 'block';
+        }
+    }
+}
 
 function setTheme(theme) {
     if (theme === 'default') {
@@ -89,7 +118,6 @@ function setTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
     }
     
-    // Debug log
     console.log('Theme set to:', theme);
 }
 
@@ -98,7 +126,6 @@ function toggleThemeSelector() {
     const isVisible = selector.style.display !== 'none';
     selector.style.display = isVisible ? 'none' : 'block';
     
-    // Debug log
     console.log('Theme selector toggled:', !isVisible);
 }
 
@@ -132,7 +159,7 @@ function updateActiveTheme(activeTheme) {
                     <span class="d-md-none">Admin</span>
                 </a>
                 
-                <!-- NEW: Documentation Link -->
+                <!-- Documentation Link -->
                 <a class="nav-link" href="{{ url_for('documentation') }}">
                     <i class="fas fa-book me-1"></i>
                     <span class="d-none d-md-inline">Docs</span>
@@ -149,6 +176,17 @@ function updateActiveTheme(activeTheme) {
                         0
                     </span>
                 </a>
+                
+                <!-- Quick Links Dropdown -->
+                <div class="nav-item dropdown" id="quickLinksDropdown" style="display: none;">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-bookmark me-1"></i><span class="d-none d-md-inline">Links</span><span class="d-md-none">Links</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <!-- Links will be populated by JavaScript -->
+                    </ul>
+                </div>
+                
                 <!-- Theme selector button will be added by JavaScript -->
             </div>
         </div>
