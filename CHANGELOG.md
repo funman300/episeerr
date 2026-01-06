@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+[2.7.4] - 2026-01-06
+### Added
+- Automatic backup system for configuration files - creates `config.json.bak` and `global_settings.json.bak` on every load
+- Quick Links dropdown in navbar for quick access to Sonarr, Plex, and Jellyfin (moved from sidebar)
+
+### Changed
+- Moved Quick Links from sidebar card to navbar dropdown to save vertical space on rules index page
+- Quick Links now populate from environment variables (SONARR_URL, PLEX_URL, JELLYFIN_URL)
+
 [2.7.3] - 2026-01-05
 
     fixed duplicate discord notifications 
