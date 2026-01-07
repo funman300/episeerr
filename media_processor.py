@@ -221,6 +221,26 @@ def update_activity_date(series_id, season_number=None, episode_number=None, tim
         if updated:
             save_config(config)
             logger.info(f"✅ Config saved - series {series_id} activity data updated")
+            
+            # NEW: Log watch event
+            try:
+                from activity_storage import save_watch_event
+                
+                # Get series title from Sonarr
+                headers = {'X-Api-Key': SONARR_API_KEY}
+                response = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers, timeout=5)
+                
+                if response.ok:
+                    series_info = response.json()
+                    save_watch_event(
+                        series_id=series_id,
+                        series_title=series_info['title'],
+                        season=season_number,
+                        episode=episode_number,
+                        user="System"
+                    )
+            except Exception as e:
+                logger.debug(f"Could not log watch event: {e}")
         else:
             logger.warning(f"Series {series_id} not found in any rule for activity update")
         
@@ -512,6 +532,20 @@ def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=N
     
     if response.ok:
         logger.info("Episode search command sent to Sonarr successfully.")
+
+        # NEW: Log search event
+        if series_id and series_title and episode_ids:
+            from activity_storage import save_search_event
+            # Get season/episode from first episode ID
+            episode = get_episode_details_by_id(episode_ids[0])
+            if episode:
+                save_search_event(
+                    series_id=series_id,
+                    series_title=series_title,
+                    season=episode['seasonNumber'],
+                    episode=episode['episodeNumber'],
+                    episode_ids=episode_ids
+                )
     else:
         logger.error(f"Failed to send episode search command. Response: {response.text}")
         return

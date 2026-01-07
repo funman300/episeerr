@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- Stats Cards with CSS Grid -->
+<!-- Activity Cards with CSS Grid -->
 <div class="stats-row">
-    <!-- Disk Usage -> System Status -->
+    <!-- Keep Disk Usage -->
     <a href="{{ SONARR_URL }}/system/status" target="_blank" class="text-decoration-none">
         <div class="card stats-card text-white clickable-card">
             <div class="card-body">
@@ -26,62 +26,53 @@
         </div>
     </a>
     
-    <!-- Downloads -> Activity/Queue -->
-    <a href="{{ SONARR_URL }}/activity/queue" target="_blank" class="text-decoration-none">
-        <div class="card stats-card text-white clickable-card">
-            <div class="card-body">
-                <h5><i class="fas fa-download me-2"></i>Downloads <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
-                <h2 id="download-queue">
-                    {% if sonarr_stats.queue_stats %}
-                        {{ sonarr_stats.queue_stats.downloading }}
-                    {% else %}
-                        --
-                    {% endif %}
-                </h2>
-                <small class="text-muted">
-                    {% if sonarr_stats.queue_stats %}
-                        {{ sonarr_stats.queue_stats.queued }} queued, {{ sonarr_stats.queue_stats.total }} total
-                    {% else %}
-                        Unable to get queue info
-                    {% endif %}
-                </small>
+    <!-- NEW: Last Requested (Overseerr) -->
+    <div class="card stats-card activity-card text-white" id="lastRequestCard">
+        <div class="card-body">
+            <h5><i class="fas fa-plus-circle me-2"></i>Last Requested</h5>
+            <div class="activity-content">
+                <div class="activity-poster-container">
+                    <img class="activity-poster" src="/static/placeholder.png" alt="">
+                </div>
+                <div class="activity-info">
+                    <div class="activity-title">No recent requests</div>
+                    <small class="activity-time text-muted"></small>
+                </div>
             </div>
         </div>
-    </a>
+    </div>
     
-    <!-- Missing -> Wanted/Missing -->
-    <a href="{{ SONARR_URL }}/wanted/missing" target="_blank" class="text-decoration-none">
-        <div class="card stats-card text-white clickable-card">
-            <div class="card-body">
-                <h5><i class="fas fa-exclamation-triangle me-2"></i>Missing <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
-                <h2 id="missing-episodes">
-                    {% if sonarr_stats.missing_stats %}
-                        {{ sonarr_stats.missing_stats.count }}
-                    {% else %}
-                        --
-                    {% endif %}
-                </h2>
-                <small class="text-muted">monitored episodes</small>
+    <!-- NEW: Last Searched (Sonarr) -->
+    <div class="card stats-card activity-card text-white" id="lastSearchCard">
+        <div class="card-body">
+            <h5><i class="fas fa-search me-2"></i>Last Searched</h5>
+            <div class="activity-content">
+                <div class="activity-poster-container">
+                    <img class="activity-poster" src="/static/placeholder.png" alt="">
+                </div>
+                <div class="activity-info">
+                    <div class="activity-title">No recent searches</div>
+                    <small class="activity-time text-muted"></small>
+                </div>
             </div>
         </div>
-    </a>
+    </div>
     
-    <!-- Recent -> Activity/History -->
-    <a href="{{ SONARR_URL }}/activity/history" target="_blank" class="text-decoration-none">
-        <div class="card stats-card text-white clickable-card">
-            <div class="card-body">
-                <h5><i class="fas fa-clock me-2"></i>Recent <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
-                <h2 id="recent-activity">
-                    {% if sonarr_stats.recent_stats %}
-                        {{ sonarr_stats.recent_stats.imported_today }}
-                    {% else %}
-                        --
-                    {% endif %}
-                </h2>
-                <small class="text-muted">imported today</small>
+    <!-- NEW: Last Watched (Jellyfin/Tautulli) -->
+    <div class="card stats-card activity-card text-white" id="lastWatchCard">
+        <div class="card-body">
+            <h5><i class="fas fa-eye me-2"></i>Last Watched</h5>
+            <div class="activity-content">
+                <div class="activity-poster-container">
+                    <img class="activity-poster" src="/static/placeholder.png" alt="">
+                </div>
+                <div class="activity-info">
+                    <div class="activity-title">No recent activity</div>
+                    <small class="activity-time text-muted"></small>
+                </div>
             </div>
         </div>
-    </a>
+    </div>
 </div>
 
 <!-- Rules Management -->
@@ -267,7 +258,62 @@
     </div>
 </div>
 </div>
+<style>
+.activity-card {
+    min-height: 140px;
+}
 
+.activity-content {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.activity-poster-container {
+    flex-shrink: 0;
+    width: 60px;
+    height: 90px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.activity-poster {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.activity-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.activity-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.activity-time {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.activity-card .activity-poster-container:empty::before {
+    content: '📺';
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-size: 2rem;
+    opacity: 0.3;
+}
+</style>
 <!-- Add services data for Quick Links dropdown -->
 <script>
 // Make services available for the Quick Links dropdown
@@ -277,6 +323,70 @@ window.servicesData = {{ services|tojson|safe }};
 
 {% block scripts %}
 <script>
+
+// Activity card functions
+async function updateActivityCards() {
+    try {
+        const response = await fetch('/api/recent-activity-cards');
+        if (!response.ok) throw new Error('Failed to fetch activity');
+        
+        const data = await response.json();
+        
+        updateCard('lastRequestCard', data.last_request, 'overseerr');
+        updateCard('lastSearchCard', data.last_search, 'sonarr');
+        updateCard('lastWatchCard', data.last_watch, 'jellyfin');
+    } catch (error) {
+        console.error('Error updating activity cards:', error);
+    }
+}
+
+function updateCard(cardId, data, type) {
+    const card = document.getElementById(cardId);
+    if (!card) return;
+    
+    const posterImg = card.querySelector('.activity-poster');
+    const titleDiv = card.querySelector('.activity-title');
+    const timeDiv = card.querySelector('.activity-time');
+    
+    if (!data) {
+        posterImg.src = '/static/placeholder.png';
+        posterImg.style.display = 'none';
+        titleDiv.textContent = getNoDataMessage(type);
+        timeDiv.textContent = '';
+        return;
+    }
+    
+    const posterUrl = getPosterUrl(data, type);
+    posterImg.src = posterUrl;
+    posterImg.style.display = 'block';
+    posterImg.onerror = function() {
+        this.style.display = 'none';
+    };
+    
+    const episodeText = data.episode ? ` ${data.episode}` : '';
+    titleDiv.textContent = data.title + episodeText;
+    timeDiv.textContent = data.display || '';
+}
+
+function getPosterUrl(data, type) {
+    if (type === 'overseerr' && data.tmdb_id) {
+        return `https://image.tmdb.org/t/p/w200${data.tmdb_id}`;
+    } else if (type === 'sonarr' && data.series_id) {
+        return `{{ SONARR_URL }}/api/v3/mediacover/${data.series_id}/poster.jpg?apikey={{ SONARR_API_KEY }}`;
+    } else if (type === 'jellyfin' && data.series_id) {
+        return `{{ SONARR_URL }}/api/v3/mediacover/${data.series_id}/poster.jpg?apikey={{ SONARR_API_KEY }}`;
+    }
+    return '/static/placeholder.png';
+}
+
+function getNoDataMessage(type) {
+    const messages = {
+        'overseerr': 'No recent requests',
+        'sonarr': 'No recent searches',
+        'jellyfin': 'No recent activity'
+    };
+    return messages[type] || 'No data';
+}
 function updateSonarrStats() {
     fetch('/api/sonarr-stats')
         .then(response => response.json())
@@ -737,7 +847,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Auto-refresh Sonarr stats every 30 seconds
     setInterval(updateSonarrStats, 30000);
-    
+    // Update activity cards
+    updateActivityCards();
+    setInterval(updateActivityCards, 60000);
     // Load auto-assign setting
     fetch('/api/global-settings')
         .then(response => response.json())

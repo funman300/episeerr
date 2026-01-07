@@ -1,4 +1,4 @@
-__version__ = "2.7.4"
+__version__ = "test2.7.5"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -2739,6 +2739,90 @@ def jellyfin_active_polling_status():
             'status': 'error',
             'message': str(e)
         }), 500
+    
+# Add this API route to episeerr.py (near other @app.route definitions)
+
+@app.route('/api/recent-activity-cards')
+def get_recent_activity_cards():
+    """Get data for the three activity cards"""
+    try:
+        from activity_storage import get_last_request, get_last_search, get_last_watch
+        
+        return jsonify({
+            'last_request': format_request_card(get_last_request()),
+            'last_search': format_search_card(get_last_search()),
+            'last_watch': format_watch_card(get_last_watch())
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error getting activity cards: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# Add these helper functions (put them near other helper functions in episeerr.py)
+
+def format_request_card(data):
+    """Format Overseerr request for card display"""
+    if not data:
+        return None
+    
+    return {
+        'title': data.get('title', 'Unknown'),
+        'timestamp': data.get('timestamp'),
+        'tmdb_id': data.get('tmdb_id'),
+        'display': f"Requested {time_ago(data.get('timestamp'))}"
+    }
+
+def format_search_card(data):
+    """Format Sonarr search for card display"""
+    if not data:
+        return None
+    
+    return {
+        'title': data.get('series_title', 'Unknown'),
+        'episode': f"S{data.get('season', 0):02d}E{data.get('episode', 0):02d}",
+        'timestamp': data.get('timestamp'),
+        'series_id': data.get('series_id'),
+        'display': f"Searched {time_ago(data.get('timestamp'))}"
+    }
+
+def format_watch_card(data):
+    """Format watch event for card display"""
+    if not data:
+        return None
+    
+    user = data.get('user', 'System')
+    user_display = f" by {user}" if user != "System" else ""
+    
+    return {
+        'title': data.get('series_title', 'Unknown'),
+        'episode': f"S{data.get('season', 0):02d}E{data.get('episode', 0):02d}",
+        'timestamp': data.get('timestamp'),
+        'series_id': data.get('series_id'),
+        'display': f"Watched{user_display} {time_ago(data.get('timestamp'))}"
+    }
+
+def time_ago(timestamp):
+    """Convert timestamp to human-readable time ago"""
+    if not timestamp:
+        return "recently"
+    
+    try:
+        delta = int(time.time()) - timestamp
+        
+        if delta < 60:
+            return "just now"
+        elif delta < 3600:
+            minutes = delta // 60
+            return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+        elif delta < 86400:
+            hours = delta // 3600
+            return f"{hours} hour{'s' if hours != 1 else ''} ago"
+        else:
+            days = delta // 86400
+            return f"{days} day{'s' if days != 1 else ''} ago"
+    except:
+        return "recently"
+    
 def handle_episode_grab(data):
     """Handle Sonarr grab event - delete pending search notification if exists"""
     try:
