@@ -1,84 +1,66 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- Activity Cards with CSS Grid -->
-<div class="stats-row">
-    <!-- Keep Disk Usage -->
-    <a href="{{ SONARR_URL }}/system/status" target="_blank" class="text-decoration-none">
-        <div class="card stats-card text-white clickable-card">
-            <div class="card-body">
-                <h5><i class="fas fa-hdd me-2"></i>Disk Usage <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
-                <h2 id="disk-usage">
-                    {% if sonarr_stats.disk_stats %}
-                        {{ sonarr_stats.disk_stats.used_gb }}GB
-                    {% else %}
-                        --
-                    {% endif %}
-                </h2>
-                <small class="text-muted">
-                    {% if sonarr_stats.disk_stats %}
-                        {{ sonarr_stats.disk_stats.free_gb }}GB free ({{ sonarr_stats.disk_stats.usage_percent }}%)
-                    {% else %}
-                        Unable to get disk info
-                    {% endif %}
-                </small>
-            </div>
-        </div>
-    </a>
-    
-    <!-- NEW: Last Requested (Overseerr) -->
-    <a href="{{ JELLYSEERR_URL or OVERSEERR_URL }}" target="_blank" class="text-decoration-none">
-        <div class="card stats-card activity-card text-white clickable-card" id="lastRequestCard">
-            <div class="card-body">
-                <h5><i class="fas fa-plus-circle me-2"></i>Last Requested <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
-                <div class="activity-content">
-                    <div class="activity-poster-container">
-                        <img class="activity-poster" src="/static/placeholder.png" alt="">
-                    </div>
-                    <div class="activity-info">
-                        <div class="activity-title">No recent requests</div>
-                        <small class="activity-time text-muted"></small>
+<div class="row g-3 mb-4">
+    <!-- Last Requested -->
+    <div class="col-lg-4 col-md-4 col-12">
+        <a href="{{ JELLYSEERR_URL }}" target="_blank" class="text-decoration-none">
+            <div class="card stats-card activity-card text-white clickable-card" id="lastRequestCard">
+                <div class="card-body">
+                    <h5><i class="fas fa-plus-circle me-2"></i>Last Requested <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
+                    <div class="activity-content">
+                        <div class="activity-poster-container">
+                            <img class="activity-poster" src="/static/placeholder.png" alt="">
+                        </div>
+                        <div class="activity-info">
+                            <div class="activity-title">No recent requests</div>
+                            <small class="activity-time text-muted"></small>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </a>
+        </a>
+    </div>
     
-    <!-- NEW: Last Searched (Sonarr) -->
-    <a href="{{ SONARR_URL }}/activity/queue" target="_blank" class="text-decoration-none">
-        <div class="card stats-card activity-card text-white clickable-card" id="lastSearchCard">
-            <div class="card-body">
-                <h5><i class="fas fa-search me-2"></i>Last Searched <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
-                <div class="activity-content">
-                    <div class="activity-poster-container">
-                        <img class="activity-poster" src="/static/placeholder.png" alt="">
-                    </div>
-                    <div class="activity-info">
-                        <div class="activity-title">No recent searches</div>
-                        <small class="activity-time text-muted"></small>
+    <!-- Last Searched -->
+    <div class="col-lg-4 col-md-4 col-12">
+        <a href="{{ SONARR_URL }}/activity/queue" target="_blank" class="text-decoration-none">
+            <div class="card stats-card activity-card text-white clickable-card" id="lastSearchCard">
+                <div class="card-body">
+                    <h5><i class="fas fa-search me-2"></i>Last Searched <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
+                    <div class="activity-content">
+                        <div class="activity-poster-container">
+                            <img class="activity-poster" src="/static/placeholder.png" alt="">
+                        </div>
+                        <div class="activity-info">
+                            <div class="activity-title">No recent searches</div>
+                            <small class="activity-time text-muted"></small>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </a>
+        </a>
+    </div>
     
-    <!-- NEW: Last Watched (Jellyfin/Tautulli) -->
-    <a href="{{ JELLYFIN_URL or TAUTULLI_URL or PLEX_URL }}" target="_blank" class="text-decoration-none">
-        <div class="card stats-card activity-card text-white clickable-card" id="lastWatchCard">
-            <div class="card-body">
-                <h5><i class="fas fa-eye me-2"></i>Last Watched <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
-                <div class="activity-content">
-                    <div class="activity-poster-container">
-                        <img class="activity-poster" src="/static/placeholder.png" alt="">
-                    </div>
-                    <div class="activity-info">
-                        <div class="activity-title">No recent activity</div>
-                        <small class="activity-time text-muted"></small>
+    <!-- Last Watched -->
+    <div class="col-lg-4 col-md-4 col-12">
+        <a href="{{ JELLYFIN_URL or TAUTULLI_URL or PLEX_URL }}" target="_blank" class="text-decoration-none">
+            <div class="card stats-card activity-card text-white clickable-card" id="lastWatchCard">
+                <div class="card-body">
+                    <h5><i class="fas fa-eye me-2"></i>Last Watched <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
+                    <div class="activity-content">
+                        <div class="activity-poster-container">
+                            <img class="activity-poster" src="/static/placeholder.png" alt="">
+                        </div>
+                        <div class="activity-info">
+                            <div class="activity-title">No recent activity</div>
+                            <small class="activity-time text-muted"></small>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </a>
+        </a>
+    </div>
 </div>
 
 <!-- Rules Management -->
@@ -265,68 +247,79 @@
 </div>
 </div>
 <style>
+/* 3 Activity Cards - Clean & Simple */
 .activity-card {
-    min-height: 140px;
+    min-height: 160px;
 }
 
 .activity-content {
     display: flex;
-    gap: 12px;
+    flex-direction: column;
     align-items: center;
-    margin-top: 10px;
+    gap: 0.5rem;
 }
 
 .activity-poster-container {
-    flex-shrink: 0;
-    width: 60px;
-    height: 90px;
-    border-radius: 4px;
+    width: 100%;
+    height: 140px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .activity-poster {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    object-position: center top;
+    transition: transform 0.3s ease;
 }
 
 .activity-info {
-    flex: 1;
-    min-width: 0;
+    width: 100%;
+    text-align: center;
 }
 
 .activity-title {
     font-weight: 600;
-    font-size: 0.95rem;
-    margin-bottom: 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: 0.9rem;
+    margin-bottom: 0.15rem;
 }
 
 .activity-time {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     opacity: 0.8;
 }
 
-.activity-card .activity-poster-container:empty::before {
-    content: '📺';
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    font-size: 2rem;
-    opacity: 0.3;
-}
-.clickable-card {
-    cursor: pointer;
-    transition: transform 0.1s ease, box-shadow 0.2s ease;
+.clickable-card:hover .activity-poster {
+    transform: scale(1.05);
 }
 
-.clickable-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+/* Mobile: Horizontal banner layout */
+@media (max-width: 991px) {
+    .activity-card {
+        min-height: 120px;
+    }
+    
+    .activity-content {
+        flex-direction: row;
+        gap: 0.75rem;
+    }
+    
+    .activity-poster-container {
+        width: 80px;
+        height: 100px;
+        flex-shrink: 0;
+    }
+    
+    .activity-info {
+        flex: 1;
+        text-align: left;
+    }
+    
+    .activity-title {
+        font-size: 0.95rem;
+    }
 }
 </style>
 <!-- Add services data for Quick Links dropdown -->
@@ -347,6 +340,7 @@ async function updateActivityCards() {
         
         const data = await response.json();
         
+        // Update only the 3 activity cards
         updateCard('lastRequestCard', data.last_request, 'overseerr');
         updateCard('lastSearchCard', data.last_search, 'sonarr');
         updateCard('lastWatchCard', data.last_watch, 'jellyfin');
@@ -385,13 +379,10 @@ function updateCard(cardId, data, type) {
 
 function getPosterUrl(data, type) {
     if (type === 'overseerr' && data.tmdb_id) {
-        // Handle both formats: full path "/abc.jpg" or just ID "12345"
         let tmdbPath = data.tmdb_id;
         
-        // If it's just a number (no leading slash), we need to fetch from TMDB API
+        // If it's just a number (no leading slash), return placeholder
         if (!tmdbPath.startsWith('/')) {
-            // Option 1: Use TMDB API directly (requires API key in frontend)
-            // For now, return placeholder and fetch poster separately
             console.warn(`TMDB ID is just a number: ${tmdbPath}, need to fetch poster path`);
             return '/static/placeholder.png';
         }

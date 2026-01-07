@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [Released]
+v2.7.7
+Removed disk stats because its in ADMIN
+Cleaner interface with 3 cards
+🎬 Last Requested - Displays most recent series request from Jellyseerr/Overseerr with poster
+🔍 Last Searched - Shows last episode search triggered by Episeerr with series poster
+📺 Last Watched - Displays most recently watched episode with poster and user info
+
 v2.7.6 is a pure performance/bug fix release:
 🎯 One Issue Fixed:
 
