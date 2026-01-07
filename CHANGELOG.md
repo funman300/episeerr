@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [Released]
+v2.7.6 is a pure performance/bug fix release:
+🎯 One Issue Fixed:
+
+Stopped backing up config files on every read (was happening 100+ times/minute)
+Now only backs up when actually saving changes
+
+📉 Impact:
+
+Cleaner logs
+Less disk I/O
+Same backup protection
+
+This is a "quality of life" release - no new features, just makes the existing system run cleaner! 🚀
+Cards will show "No recent activity" until first events occur - this is normal!
 
 Version 2.7.5 - Activity Dashboard Cards
 🎨 New Features

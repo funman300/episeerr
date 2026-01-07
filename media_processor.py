@@ -150,20 +150,38 @@ SONARR_API_KEY = os.getenv('SONARR_API_KEY')
 
 # Load settings from a JSON configuration file
 def load_config():
+    """Load configuration from JSON file."""
     config_path = os.getenv('CONFIG_PATH', '/app/config/config.json')
+    
+    # REMOVED: Backup on every load (was causing spam)
     with open(config_path, 'r') as file:
         config = json.load(file)
+    
     # Ensure required keys are present with default values
     if 'rules' not in config:
         config['rules'] = {}
+    
     return config
 
+
 def save_config(config):
-    """Save configuration to JSON file."""
+    """Save configuration to JSON file with automatic backup."""
     config_path = os.getenv('CONFIG_PATH', '/app/config/config.json')
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
+    
+    # Backup BEFORE saving (only when actually writing)
+    if os.path.exists(config_path):
+        backup_path = config_path + '.bak'
+        try:
+            shutil.copy2(config_path, backup_path)
+            logger.debug(f"Backed up config.json to {backup_path}")
+        except Exception as e:
+            logger.warning(f"Could not backup config.json: {e}")
+    
+    # Save the config
     with open(config_path, 'w') as file:
         json.dump(config, file, indent=4)
+
 def get_episode_details_by_id(episode_id):
     """Get episode details by episode ID from Sonarr."""
     try:
@@ -180,6 +198,7 @@ def get_episode_details_by_id(episode_id):
     except Exception as e:
         logger.error(f"Error getting episode {episode_id}: {str(e)}")
         return None
+    
 def update_activity_date(series_id, season_number=None, episode_number=None, timestamp=None):
     """
     Update activity date in config.json (PRIMARY SOURCE).
@@ -1828,25 +1847,18 @@ def run_dormant_cleanup():
 # ============================================================================
 
 def load_global_settings():
-    """Load global settings including storage gate with automatic backup."""
+    """Load global settings including storage gate."""
     try:
         settings_path = os.path.join(os.getcwd(), 'config', 'global_settings.json')
         
-        # Backup existing file before loading
+        # REMOVED: Backup on every load (was causing spam)
         if os.path.exists(settings_path):
-            backup_path = settings_path + '.bak'
-            try:
-                shutil.copy2(settings_path, backup_path)
-                logger.debug(f"Backed up global_settings.json to {backup_path}")
-            except Exception as e:
-                logger.warning(f"Could not backup global_settings.json: {e}")
-            
             with open(settings_path, 'r') as f:
                 return json.load(f)
         else:
             # Default settings
             default_settings = {
-                'global_storage_min_gb': None,  # No storage gate by default
+                'global_storage_min_gb': None,
                 'cleanup_interval_hours': 6,
                 'dry_run_mode': False,
                 'auto_assign_new_series': False,
@@ -1868,12 +1880,23 @@ def load_global_settings():
             'episeerr_url': 'http://localhost:5002'
         }
 
+
 def save_global_settings(settings):
-    """Save global settings to file."""
+    """Save global settings to file with automatic backup."""
     try:
         settings_path = os.path.join(os.getcwd(), 'config', 'global_settings.json')
         os.makedirs(os.path.dirname(settings_path), exist_ok=True)
         
+        # Backup BEFORE saving (only when actually writing)
+        if os.path.exists(settings_path):
+            backup_path = settings_path + '.bak'
+            try:
+                shutil.copy2(settings_path, backup_path)
+                logger.debug(f"Backed up global_settings.json to {backup_path}")
+            except Exception as e:
+                logger.warning(f"Could not backup global_settings.json: {e}")
+        
+        # Save the settings
         with open(settings_path, 'w') as f:
             json.dump(settings, f, indent=4)
         logger.info("Global settings saved successfully")
