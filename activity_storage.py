@@ -1,12 +1,21 @@
+"""
+Activity Storage Module
+Logs watch events, search events, and requests for display on dashboard
+"""
+
 import json
 import os
-from datetime import datetime
+import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 ACTIVITY_DIR = '/app/data/activity'
 os.makedirs(ACTIVITY_DIR, exist_ok=True)
 
 SEARCHES_FILE = os.path.join(ACTIVITY_DIR, 'searches.json')
 WATCHES_FILE = os.path.join(ACTIVITY_DIR, 'watched.json')
+REQUESTS_DIR = '/app/data/requests'
 
 def save_search_event(series_id, series_title, season, episode, episode_ids):
     """Save when Sonarr searches for episodes"""
@@ -19,6 +28,7 @@ def save_search_event(series_id, series_title, season, episode, episode_ids):
         'timestamp': int(time.time())
     }
     _append_to_activity_log(SEARCHES_FILE, event, max_entries=10)
+    logger.info(f"📝 Logged search event: {series_title} S{season}E{episode}")
 
 def save_watch_event(series_id, series_title, season, episode, user):
     """Save when user watches an episode"""
@@ -31,6 +41,7 @@ def save_watch_event(series_id, series_title, season, episode, user):
         'timestamp': int(time.time())
     }
     _append_to_activity_log(WATCHES_FILE, event, max_entries=10)
+    logger.info(f"📝 Logged watch event: {series_title} S{season}E{episode} by {user}")
 
 def _append_to_activity_log(filepath, event, max_entries=10):
     """Helper to append event and keep only last N entries"""
@@ -60,21 +71,13 @@ def get_last_watch():
 
 def get_last_request():
     """Get most recent Overseerr request"""
-    requests_dir = '/app/data/requests'
     try:
-        request_files = [
-            os.path.join(requests_dir, f) 
-            for f in os.listdir(requests_dir) 
-            if f.startswith('jellyseerr-')
-        ]
+        requests_file = os.path.join(ACTIVITY_DIR, 'last_request.json')
         
-        if not request_files:
+        if not os.path.exists(requests_file):
             return None
         
-        # Get most recent by file mtime
-        latest_file = max(request_files, key=os.path.getmtime)
-        
-        with open(latest_file, 'r') as f:
+        with open(requests_file, 'r') as f:
             return json.load(f)
             
     except Exception as e:
@@ -95,3 +98,21 @@ def _get_last_event(filepath):
     except Exception as e:
         logger.error(f"Failed to read activity log: {e}")
         return None
+    
+def save_request_event(title, tmdb_id, tvdb_id, timestamp=None):
+    """Save when someone requests a series via Overseerr/Jellyseerr"""
+    event = {
+        'title': title,
+        'tmdb_id': tmdb_id,
+        'tvdb_id': tvdb_id,
+        'timestamp': timestamp or int(time.time())
+    }
+    
+    requests_file = os.path.join(ACTIVITY_DIR, 'last_request.json')
+    
+    try:
+        with open(requests_file, 'w') as f:
+            json.dump(event, f, indent=2)
+        logger.info(f"📝 Logged request event: {title}")
+    except Exception as e:
+        logger.error(f"Failed to save request: {e}")

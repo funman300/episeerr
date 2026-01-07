@@ -1,4 +1,4 @@
-__version__ = "test2.7.5"
+__version__ = "2.7.5"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -128,6 +128,25 @@ def get_external_ids(tmdb_id, media_type='tv'):
     """Get external IDs for a TV show or movie."""
     endpoint = f"{media_type}/{tmdb_id}/external_ids"
     return get_tmdb_endpoint(endpoint)
+
+def get_tmdb_poster_path(tmdb_id):
+    """Get poster path from TMDB API given a TMDB ID."""
+    try:
+        if not TMDB_API_KEY:
+            return None
+        
+        # Use existing get_tmdb_endpoint function
+        tv_data = get_tmdb_endpoint(f"tv/{tmdb_id}")
+        
+        if tv_data and tv_data.get('poster_path'):
+            return tv_data['poster_path']  # Returns "/abc123.jpg"
+        
+        return None
+        
+    except Exception as e:
+        app.logger.error(f"Error fetching TMDB poster for ID {tmdb_id}: {e}")
+        return None
+    
 def get_sonarr_stats():
     """Get comprehensive Sonarr statistics using existing sonarr_utils patterns."""
     try:
@@ -682,7 +701,13 @@ def index():
                          config=config,
                          all_series=all_series,
                          sonarr_stats=sonarr_stats,
-                         SONARR_URL=sonarr_url,  # ADD THIS
+                         SONARR_URL=sonarr_url,
+                         SONARR_API_KEY=sonarr_preferences['SONARR_API_KEY'],
+                         JELLYSEERR_URL=JELLYSEERR_URL,  # ← ADD
+                         OVERSEERR_URL=OVERSEERR_URL,    # ← ADD
+                         JELLYFIN_URL=os.getenv('JELLYFIN_URL'),  # ← ADD
+                         TAUTULLI_URL=os.getenv('TAUTULLI_URL'),  # ← ADD
+                         PLEX_URL=os.getenv('PLEX_URL'),          # ← ADD
                          current_rule=request.args.get('rule', list(config['rules'].keys())[0] if config['rules'] else 'default'))
 
 # Add new API route for real-time stats updates
@@ -1882,8 +1907,19 @@ def process_sonarr_webhook():
                     # Cancel the Jellyseerr request
                     app.logger.info(f"Cancelling Jellyseerr request {jellyseerr_request_id}")
                     cancel_result = episeerr_utils.delete_overseerr_request(jellyseerr_request_id)
-                    app.logger.info(f"Jellyseerr cancellation result: {cancel_result}")
-                    
+
+                    # NEW: Save to activity storage BEFORE deleting
+                    try:
+                        from activity_storage import save_request_event
+                        save_request_event(
+                            title=request_data.get('title', 'Unknown'),
+                            tmdb_id=request_data.get('tmdb_id'),
+                            tvdb_id=request_data.get('tvdb_id'),
+                            timestamp=request_data.get('timestamp')
+                        )
+                    except Exception as e:
+                        app.logger.error(f"Failed to log request to activity: {e}")
+
                     # Delete the file after processing
                     os.remove(request_file)
                     app.logger.info(f"✓ Removed Jellyseerr request file for TVDB ID {tvdb_id_str}")
@@ -2287,14 +2323,17 @@ def process_seerr_webhook():
             tvdb_id_str = str(tvdb_id)
             request_file = os.path.join(REQUESTS_DIR, f"jellyseerr-{tvdb_id_str}.json")
             
+            # Get poster path from TMDB
+            poster_path = get_tmdb_poster_path(tmdb_id) if tmdb_id else None
+
             request_data = {
                 'request_id': request_id,
                 'title': title,
-                'tmdb_id': tmdb_id,
+                'tmdb_id': poster_path or str(tmdb_id),  # Use poster path if available, fallback to ID
                 'tvdb_id': tvdb_id,
-                'requested_seasons': requested_seasons_str,  # ADDED: Store season info
+                'requested_seasons': requested_seasons_str,
                 'timestamp': int(time.time())
-            }
+}
             
             os.makedirs(REQUESTS_DIR, exist_ok=True)
             with open(request_file, 'w') as f:

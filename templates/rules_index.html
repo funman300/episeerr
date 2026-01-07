@@ -27,52 +27,58 @@
     </a>
     
     <!-- NEW: Last Requested (Overseerr) -->
-    <div class="card stats-card activity-card text-white" id="lastRequestCard">
-        <div class="card-body">
-            <h5><i class="fas fa-plus-circle me-2"></i>Last Requested</h5>
-            <div class="activity-content">
-                <div class="activity-poster-container">
-                    <img class="activity-poster" src="/static/placeholder.png" alt="">
-                </div>
-                <div class="activity-info">
-                    <div class="activity-title">No recent requests</div>
-                    <small class="activity-time text-muted"></small>
+    <a href="{{ JELLYSEERR_URL or OVERSEERR_URL }}" target="_blank" class="text-decoration-none">
+        <div class="card stats-card activity-card text-white clickable-card" id="lastRequestCard">
+            <div class="card-body">
+                <h5><i class="fas fa-plus-circle me-2"></i>Last Requested <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
+                <div class="activity-content">
+                    <div class="activity-poster-container">
+                        <img class="activity-poster" src="/static/placeholder.png" alt="">
+                    </div>
+                    <div class="activity-info">
+                        <div class="activity-title">No recent requests</div>
+                        <small class="activity-time text-muted"></small>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </a>
     
     <!-- NEW: Last Searched (Sonarr) -->
-    <div class="card stats-card activity-card text-white" id="lastSearchCard">
-        <div class="card-body">
-            <h5><i class="fas fa-search me-2"></i>Last Searched</h5>
-            <div class="activity-content">
-                <div class="activity-poster-container">
-                    <img class="activity-poster" src="/static/placeholder.png" alt="">
-                </div>
-                <div class="activity-info">
-                    <div class="activity-title">No recent searches</div>
-                    <small class="activity-time text-muted"></small>
+    <a href="{{ SONARR_URL }}/activity/queue" target="_blank" class="text-decoration-none">
+        <div class="card stats-card activity-card text-white clickable-card" id="lastSearchCard">
+            <div class="card-body">
+                <h5><i class="fas fa-search me-2"></i>Last Searched <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
+                <div class="activity-content">
+                    <div class="activity-poster-container">
+                        <img class="activity-poster" src="/static/placeholder.png" alt="">
+                    </div>
+                    <div class="activity-info">
+                        <div class="activity-title">No recent searches</div>
+                        <small class="activity-time text-muted"></small>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </a>
     
     <!-- NEW: Last Watched (Jellyfin/Tautulli) -->
-    <div class="card stats-card activity-card text-white" id="lastWatchCard">
-        <div class="card-body">
-            <h5><i class="fas fa-eye me-2"></i>Last Watched</h5>
-            <div class="activity-content">
-                <div class="activity-poster-container">
-                    <img class="activity-poster" src="/static/placeholder.png" alt="">
-                </div>
-                <div class="activity-info">
-                    <div class="activity-title">No recent activity</div>
-                    <small class="activity-time text-muted"></small>
+    <a href="{{ JELLYFIN_URL or TAUTULLI_URL or PLEX_URL }}" target="_blank" class="text-decoration-none">
+        <div class="card stats-card activity-card text-white clickable-card" id="lastWatchCard">
+            <div class="card-body">
+                <h5><i class="fas fa-eye me-2"></i>Last Watched <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
+                <div class="activity-content">
+                    <div class="activity-poster-container">
+                        <img class="activity-poster" src="/static/placeholder.png" alt="">
+                    </div>
+                    <div class="activity-info">
+                        <div class="activity-title">No recent activity</div>
+                        <small class="activity-time text-muted"></small>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </a>
 </div>
 
 <!-- Rules Management -->
@@ -313,6 +319,15 @@
     font-size: 2rem;
     opacity: 0.3;
 }
+.clickable-card {
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.2s ease;
+}
+
+.clickable-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
 </style>
 <!-- Add services data for Quick Links dropdown -->
 <script>
@@ -370,7 +385,18 @@ function updateCard(cardId, data, type) {
 
 function getPosterUrl(data, type) {
     if (type === 'overseerr' && data.tmdb_id) {
-        return `https://image.tmdb.org/t/p/w200${data.tmdb_id}`;
+        // Handle both formats: full path "/abc.jpg" or just ID "12345"
+        let tmdbPath = data.tmdb_id;
+        
+        // If it's just a number (no leading slash), we need to fetch from TMDB API
+        if (!tmdbPath.startsWith('/')) {
+            // Option 1: Use TMDB API directly (requires API key in frontend)
+            // For now, return placeholder and fetch poster separately
+            console.warn(`TMDB ID is just a number: ${tmdbPath}, need to fetch poster path`);
+            return '/static/placeholder.png';
+        }
+        
+        return `https://image.tmdb.org/t/p/w200${tmdbPath}`;
     } else if (type === 'sonarr' && data.series_id) {
         return `{{ SONARR_URL }}/api/v3/mediacover/${data.series_id}/poster.jpg?apikey={{ SONARR_API_KEY }}`;
     } else if (type === 'jellyfin' && data.series_id) {

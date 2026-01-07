@@ -164,7 +164,22 @@ def save_config(config):
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
     with open(config_path, 'w') as file:
         json.dump(config, file, indent=4)
-
+def get_episode_details_by_id(episode_id):
+    """Get episode details by episode ID from Sonarr."""
+    try:
+        url = f"{SONARR_URL}/api/v3/episode/{episode_id}"
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        response = requests.get(url, headers=headers, timeout=5)
+        
+        if response.ok:
+            return response.json()
+        else:
+            logger.error(f"Failed to get episode {episode_id}: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error getting episode {episode_id}: {str(e)}")
+        return None
 def update_activity_date(series_id, season_number=None, episode_number=None, timestamp=None):
     """
     Update activity date in config.json (PRIMARY SOURCE).

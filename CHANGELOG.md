@@ -7,6 +7,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [Released]
+
+Version 2.7.5 - Activity Dashboard Cards
+🎨 New Features
+Visual Activity Cards
+
+Replaced static statistics cards with dynamic visual activity cards showing recent user activity
+Four cards on dashboard:
+
+💾 Disk Usage - Shows current storage usage with link to Sonarr system status
+🎬 Last Requested - Displays most recent series request from Jellyseerr/Overseerr with poster
+🔍 Last Searched - Shows last episode search triggered by Episeerr with series poster
+📺 Last Watched - Displays most recently watched episode with poster and user info
+
+
+Interactive Cards
+
+All cards are clickable and link to their respective services:
+
+Disk Usage → Sonarr System Status
+Last Requested → Jellyseerr/Overseerr
+Last Searched → Sonarr Activity Queue
+Last Watched → Jellyfin/Tautulli/Plex
+
+
+Hover effects provide visual feedback
+Cards auto-refresh every 60 seconds
+
+Activity Tracking System
+
+New activity storage module (activity_storage.py) logs:
+
+Watch events (series, season, episode, user, timestamp)
+Search events (series, season, episode, timestamp)
+Request events (title, TMDB ID, timestamp)
+
+
+Activity data stored in /data/activity/:
+
+watched.json - Last 10 watch events
+searches.json - Last 10 search events
+last_request.json - Most recent request
+
+
+Persistent across restarts - activity history preserved
+
+🔧 Technical Improvements
+Poster Display
+
+Cards display series posters fetched from:
+
+Sonarr media cover API (watched/searched)
+TMDB API (requested)
+
+
+Automatic fallback to placeholder for missing posters
+Optimized poster resolution (w200) for fast loading
+
+Backend Enhancements
+
+Added get_episode_details_by_id() function to fetch episode metadata
+Request webhook now fetches TMDB poster path at request time
+Activity logging integrated into existing webhook workflows
+Watch events logged when episodes are marked as watched
+Search events logged when Episeerr triggers Sonarr searches
+
+Time Display
+
+Human-readable timestamps: "5 minutes ago", "2 hours ago", "3 days ago"
+Real-time updates as cards refresh
+
+🐛 Bug Fixes
+
+Fixed search event logging crash due to missing function
+Fixed poster URL construction for TMDB requests
+Improved error handling for missing activity data
+Added graceful fallbacks when services are unconfigured
+
+📝 Configuration
+
+No new environment variables required
+Uses existing service URLs (SONARR, JELLYSEERR, JELLYFIN, etc.)
+Activity tracking works automatically with existing webhooks
+
+💾 Data Storage
+
+Activity data stored in persistent /data volume
+Automatic directory creation on first use
+No database required - simple JSON file storage
+Configurable retention (default: last 10 events for watches/searches)
+
+🎯 User Experience
+
+At-a-glance visibility of recent activity
+Quick access to services via clickable cards
+Visual context with series posters
+No configuration needed - works out of the box
+
+🔄 Backwards Compatibility
+
+Fully compatible with existing Episeerr installations
+Old stat cards replaced seamlessly
+No breaking changes to existing functionality
+Works with all supported media servers (Jellyfin, Plex, Tautulli)
+
+📊 Performance
+
+Lightweight JSON storage
+Minimal API calls (only when events occur)
+Efficient poster caching via browser
+Auto-cleanup of old events (keeps last 10)
+
+
+Migration Notes
+
+Activity tracking begins immediately after update
+Previous activity (before update) will not be shown
+Cards will show "No recent activity" until first events occur
+No action required from users
+
+Known Limitations
+
+Activity history limited to last 10 events per type
+Poster quality optimized for dashboard display (not full resolution)
+Request poster requires TMDB API key (already required for Episeerr)
+
 [2.7.4] - 2026-01-06
 ### Added
 - Automatic backup system for configuration files - creates `config.json.bak` and `global_settings.json.bak` on every load
