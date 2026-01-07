@@ -97,6 +97,16 @@ missing_logger.addHandler(missing_handler)
 # Add console handler for missing logger
 missing_logger.addHandler(console_handler)
 
+# Initialize activity_storage with Sonarr config
+try:
+    from activity_storage import init_sonarr_config
+    init_sonarr_config(SONARR_URL, SONARR_API_KEY)
+    logger.info("✅ Activity storage initialized with Sonarr config")
+except Exception as e:
+    logger.warning(f"Could not initialize activity storage: {e}")
+
+
+
 # Enhanced logging setup for cleanup operations
 def setup_cleanup_logging():
     """Setup cleanup logging to write to BOTH console AND files."""

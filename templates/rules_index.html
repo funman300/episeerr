@@ -351,8 +351,6 @@ async function updateActivityCards() {
 
 function updateCard(cardId, data, type) {
     const card = document.getElementById(cardId);
-    if (!card) return;
-    
     const posterImg = card.querySelector('.activity-poster');
     const titleDiv = card.querySelector('.activity-title');
     const timeDiv = card.querySelector('.activity-time');
@@ -365,8 +363,9 @@ function updateCard(cardId, data, type) {
         return;
     }
     
-    const posterUrl = getPosterUrl(data, type);
-    posterImg.src = posterUrl;
+    // NEW: Use backdrop URL from backend
+    const backdropUrl = getBackdropUrl(data, type);
+    posterImg.src = backdropUrl;
     posterImg.style.display = 'block';
     posterImg.onerror = function() {
         this.style.display = 'none';
@@ -375,6 +374,28 @@ function updateCard(cardId, data, type) {
     const episodeText = data.episode ? ` ${data.episode}` : '';
     titleDiv.textContent = data.title + episodeText;
     timeDiv.textContent = data.display || '';
+}
+
+function getBackdropUrl(data, type) {
+    // NEW: Backend now provides backdrop_url directly
+    if (data.backdrop_url) {
+        console.log(`Using backdrop URL: ${data.backdrop_url}`);
+        return data.backdrop_url;
+    }
+    
+    // Fallback to poster if no backdrop available
+    if (type === 'overseerr' && data.tmdb_id) {
+        console.warn(`No backdrop for ${data.title}, falling back to poster`);
+        return `https://image.tmdb.org/t/p/w780${data.tmdb_id}`;
+    } else if (type === 'sonarr' && data.series_id) {
+        console.warn(`No backdrop for ${data.title}, falling back to Sonarr poster`);
+        return `{{ SONARR_URL }}/api/v3/mediacover/${data.series_id}/poster.jpg?apikey={{ SONARR_API_KEY }}`;
+    } else if (type === 'jellyfin' && data.series_id) {
+        console.warn(`No backdrop for ${data.title}, falling back to Sonarr poster`);
+        return `{{ SONARR_URL }}/api/v3/mediacover/${data.series_id}/poster.jpg?apikey={{ SONARR_API_KEY }}`;
+    }
+    
+    return '/static/placeholder.png';
 }
 
 function getPosterUrl(data, type) {
