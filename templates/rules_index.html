@@ -271,10 +271,14 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center top;
+    object-position: center center; /* Center it instead of top */
+    transform: scale(0.8); /* Zoom out a bit */
     transition: transform 0.3s ease;
 }
 
+.clickable-card:hover .activity-poster {
+    transform: scale(0.85); /* Zoom out slightly more on hover */
+}
 .activity-info {
     width: 100%;
     text-align: center;
@@ -291,9 +295,6 @@
     opacity: 0.8;
 }
 
-.clickable-card:hover .activity-poster {
-    transform: scale(1.05);
-}
 
 /* Mobile: Horizontal banner layout */
 @media (max-width: 991px) {

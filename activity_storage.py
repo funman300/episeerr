@@ -1,5 +1,5 @@
 """
-Activity Storage Module - WITH BACKDROP SUPPORT
+Activity Storage Module - WITH BACKDROP SUPPORT + REQUEST SAVING
 Logs watch events, search events, and requests with backdrop images
 """
 
@@ -16,7 +16,7 @@ os.makedirs(ACTIVITY_DIR, exist_ok=True)
 
 SEARCHES_FILE = os.path.join(ACTIVITY_DIR, 'searches.json')
 WATCHES_FILE = os.path.join(ACTIVITY_DIR, 'watched.json')
-REQUESTS_DIR = '/app/data/requests'
+REQUESTS_FILE = os.path.join(ACTIVITY_DIR, 'last_request.json')
 
 # Sonarr API settings (will be loaded from config)
 SONARR_URL = None
@@ -27,11 +27,13 @@ def init_sonarr_config(url, api_key):
     global SONARR_URL, SONARR_API_KEY
     SONARR_URL = url
     SONARR_API_KEY = api_key
+    logger.info("✅ Activity storage initialized with Sonarr config")
 
 def get_series_backdrop(series_id):
     """Fetch backdrop path from Sonarr series data"""
     try:
         if not SONARR_URL or not SONARR_API_KEY:
+            logger.debug("Sonarr config not initialized, skipping backdrop fetch")
             return None
             
         url = f"{SONARR_URL}/api/v3/series/{series_id}"
@@ -43,7 +45,12 @@ def get_series_backdrop(series_id):
             # Get fanart/backdrop image
             for image in series_data.get('images', []):
                 if image.get('coverType') in ['fanart', 'banner']:
-                    return image.get('remoteUrl')  # Returns TMDB backdrop URL
+                    backdrop_url = image.get('remoteUrl')
+                    logger.debug(f"Found backdrop for series {series_id}: {backdrop_url}")
+                    return backdrop_url
+            logger.debug(f"No fanart/banner found for series {series_id}")
+        else:
+            logger.debug(f"Failed to get series {series_id}: {response.status_code}")
         return None
     except Exception as e:
         logger.debug(f"Could not get backdrop for series {series_id}: {e}")
@@ -60,7 +67,7 @@ def save_search_event(series_id, series_title, season, episode, episode_ids):
         'season': season,
         'episode': episode,
         'episode_ids': episode_ids,
-        'backdrop_url': backdrop_url,  # NEW: Backdrop instead of poster
+        'backdrop_url': backdrop_url,
         'timestamp': int(time.time())
     }
     _append_to_activity_log(SEARCHES_FILE, event, max_entries=10)
@@ -77,11 +84,33 @@ def save_watch_event(series_id, series_title, season, episode, user):
         'season': season,
         'episode': episode,
         'user': user,
-        'backdrop_url': backdrop_url,  # NEW: Backdrop instead of poster
+        'backdrop_url': backdrop_url,
         'timestamp': int(time.time())
     }
     _append_to_activity_log(WATCHES_FILE, event, max_entries=10)
     logger.info(f"📝 Logged watch event: {series_title} S{season}E{episode} by {user}")
+
+def save_request_event(request_data):
+    """Save Jellyseerr request before file is deleted"""
+    try:
+        # Extract series ID to get backdrop
+        series_id = request_data.get('series_id') or request_data.get('tvdb_id')
+        backdrop_url = None
+        
+        if series_id:
+            backdrop_url = get_series_backdrop(series_id)
+        
+        # Add backdrop to request data
+        request_data['backdrop_url'] = backdrop_url
+        
+        # Save as last_request.json
+        with open(REQUESTS_FILE, 'w') as f:
+            json.dump(request_data, f, indent=2)
+            
+        logger.info(f"📝 Logged request: {request_data.get('title', 'Unknown')}")
+        
+    except Exception as e:
+        logger.error(f"Failed to save request event: {e}")
 
 def _append_to_activity_log(filepath, event, max_entries=10):
     """Helper to append event and keep only last N entries"""
@@ -110,27 +139,13 @@ def get_last_watch():
     return _get_last_event(WATCHES_FILE)
 
 def get_last_request():
-    """Get most recent Overseerr request - also gets backdrop"""
+    """Get most recent Overseerr request"""
     try:
-        activity_file = '/app/data/activity/last_request.json'
-        
-        if not os.path.exists(activity_file):
+        if not os.path.exists(REQUESTS_FILE):
             return None
         
-        with open(activity_file, 'r') as f:
-            request_data = json.load(f)
-            
-        # If we have tmdb_id but no backdrop, try to get it
-        if request_data.get('tmdb_id') and not request_data.get('backdrop_url'):
-            # The tmdb_id in requests is often the poster path like "/abc.jpg"
-            # We need to fetch the backdrop from TMDB or use the poster path
-            # For now, construct the backdrop URL from TMDB ID
-            tmdb_id = request_data.get('tvdb_id') or request_data.get('series_id')
-            if tmdb_id:
-                # Try to get backdrop from Sonarr
-                request_data['backdrop_url'] = get_series_backdrop(tmdb_id)
-            
-        return request_data
+        with open(REQUESTS_FILE, 'r') as f:
+            return json.load(f)
             
     except Exception as e:
         logger.error(f"Failed to get last request: {e}")

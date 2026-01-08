@@ -1,4 +1,4 @@
-__version__ = "2.7.7"
+__version__ = "test2.7.8"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -1913,19 +1913,14 @@ def process_sonarr_webhook():
                     # Cancel the Jellyseerr request
                     app.logger.info(f"Cancelling Jellyseerr request {jellyseerr_request_id}")
                     cancel_result = episeerr_utils.delete_overseerr_request(jellyseerr_request_id)
-
+                    
                     # NEW: Save to activity storage BEFORE deleting
                     try:
                         from activity_storage import save_request_event
-                        save_request_event(
-                            title=request_data.get('title', 'Unknown'),
-                            tmdb_id=request_data.get('tmdb_id'),
-                            tvdb_id=request_data.get('tvdb_id'),
-                            timestamp=request_data.get('timestamp')
-                        )
+                        save_request_event(request_data)  # ← Just pass the whole dict!
                     except Exception as e:
                         app.logger.error(f"Failed to log request to activity: {e}")
-
+                    
                     # Delete the file after processing
                     os.remove(request_file)
                     app.logger.info(f"✓ Removed Jellyseerr request file for TVDB ID {tvdb_id_str}")
@@ -1934,7 +1929,6 @@ def process_sonarr_webhook():
                     app.logger.error(f"Error processing Jellyseerr request file: {str(e)}")
             else:
                 app.logger.info(f"No Jellyseerr request file found for TVDB ID: {tvdb_id_str}")
-        
         # ============================================================================
         # NOW check tags (Jellyseerr cleanup already done above)
         # ============================================================================
