@@ -97,13 +97,7 @@ missing_logger.addHandler(missing_handler)
 # Add console handler for missing logger
 missing_logger.addHandler(console_handler)
 
-# Initialize activity_storage with Sonarr config
-try:
-    from activity_storage import init_sonarr_config
-    init_sonarr_config(SONARR_URL, SONARR_API_KEY)
-    logger.info("✅ Activity storage initialized with Sonarr config")
-except Exception as e:
-    logger.warning(f"Could not initialize activity storage: {e}")
+
 
 
 
@@ -157,6 +151,14 @@ cleanup_logger = setup_cleanup_logging()
 # Define global variables based on environment settings
 SONARR_URL = normalize_url(os.getenv('SONARR_URL'))
 SONARR_API_KEY = os.getenv('SONARR_API_KEY')
+
+# Initialize activity_storage with Sonarr config
+try:
+    from activity_storage import init_sonarr_config
+    init_sonarr_config(SONARR_URL, SONARR_API_KEY)
+    logger.info("✅ Activity storage initialized with Sonarr config")
+except Exception as e:
+    logger.warning(f"Could not initialize activity storage: {e}")
 
 # Load settings from a JSON configuration file
 def load_config():
