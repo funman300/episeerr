@@ -341,10 +341,13 @@ async function updateActivityCards() {
         
         const data = await response.json();
         
-        // Update only the 3 activity cards
+        // Update all 3 cards (they'll hide themselves if empty)
         updateCard('lastRequestCard', data.last_request, 'overseerr');
         updateCard('lastSearchCard', data.last_search, 'sonarr');
         updateCard('lastWatchCard', data.last_watch, 'jellyfin');
+        
+        // Adjust column widths based on visible cards
+        adjustCardLayout();
     } catch (error) {
         console.error('Error updating activity cards:', error);
     }
@@ -352,19 +355,21 @@ async function updateActivityCards() {
 
 function updateCard(cardId, data, type) {
     const card = document.getElementById(cardId);
+    const cardWrapper = card.closest('.col-lg-4');
     const posterImg = card.querySelector('.activity-poster');
     const titleDiv = card.querySelector('.activity-title');
     const timeDiv = card.querySelector('.activity-time');
     
     if (!data) {
-        posterImg.src = '/static/placeholder.png';
-        posterImg.style.display = 'none';
-        titleDiv.textContent = getNoDataMessage(type);
-        timeDiv.textContent = '';
+        // Hide the entire column if no data
+        cardWrapper.style.display = 'none';
         return;
     }
     
-    // NEW: Use backdrop URL from backend
+    // Show the column
+    cardWrapper.style.display = 'block';
+    
+    // Use backdrop URL from backend
     const backdropUrl = getBackdropUrl(data, type);
     posterImg.src = backdropUrl;
     posterImg.style.display = 'block';
@@ -377,8 +382,30 @@ function updateCard(cardId, data, type) {
     timeDiv.textContent = data.display || '';
 }
 
+function adjustCardLayout() {
+    // Count visible cards
+    const visibleCards = document.querySelectorAll('.activity-card:not([style*="display: none"])').length;
+    const cardWrappers = document.querySelectorAll('.activity-card').map(card => card.closest('.col-lg-4'));
+    
+    // Adjust column classes based on number of visible cards
+    cardWrappers.forEach(wrapper => {
+        if (wrapper.style.display !== 'none') {
+            // Remove existing responsive classes
+            wrapper.classList.remove('col-lg-4', 'col-lg-6');
+            
+            if (visibleCards === 3) {
+                wrapper.classList.add('col-lg-4'); // 33% width
+            } else if (visibleCards === 2) {
+                wrapper.classList.add('col-lg-6'); // 50% width
+            } else if (visibleCards === 1) {
+                wrapper.classList.add('col-lg-12'); // 100% width
+            }
+        }
+    });
+}
+
 function getBackdropUrl(data, type) {
-    // NEW: Backend now provides backdrop_url directly
+    // Backend now provides backdrop_url directly
     if (data.backdrop_url) {
         console.log(`Using backdrop URL: ${data.backdrop_url}`);
         return data.backdrop_url;
@@ -396,25 +423,6 @@ function getBackdropUrl(data, type) {
         return `{{ SONARR_URL }}/api/v3/mediacover/${data.series_id}/poster.jpg?apikey={{ SONARR_API_KEY }}`;
     }
     
-    return '/static/placeholder.png';
-}
-
-function getPosterUrl(data, type) {
-    if (type === 'overseerr' && data.tmdb_id) {
-        let tmdbPath = data.tmdb_id;
-        
-        // If it's just a number (no leading slash), return placeholder
-        if (!tmdbPath.startsWith('/')) {
-            console.warn(`TMDB ID is just a number: ${tmdbPath}, need to fetch poster path`);
-            return '/static/placeholder.png';
-        }
-        
-        return `https://image.tmdb.org/t/p/w200${tmdbPath}`;
-    } else if (type === 'sonarr' && data.series_id) {
-        return `{{ SONARR_URL }}/api/v3/mediacover/${data.series_id}/poster.jpg?apikey={{ SONARR_API_KEY }}`;
-    } else if (type === 'jellyfin' && data.series_id) {
-        return `{{ SONARR_URL }}/api/v3/mediacover/${data.series_id}/poster.jpg?apikey={{ SONARR_API_KEY }}`;
-    }
     return '/static/placeholder.png';
 }
 
