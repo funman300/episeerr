@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [Released]
+v2.7.8 
+Cosmetic fixes
 v2.7.7
 Removed disk stats because its in ADMIN
 Cleaner interface with 3 cards
