@@ -559,6 +559,7 @@ def monitor_episodes(episode_ids, monitor=True):
     else:
         logger.error(f"Failed to set episodes {action}. Response: {response.text}")
 
+
 def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=None, get_type='episodes'):
     """
     Trigger a search for specified episodes in Sonarr and send pending notification
@@ -580,14 +581,31 @@ def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=N
         # Get the season number from the first episode
         episode = get_episode_details_by_id(episode_ids[0])
         if episode and series_id:
-            season_number = episode['seasonNumber']
-            logger.info(f"Rule type is 'seasons' - searching for season pack for Season {season_number}")
+            first_season = episode['seasonNumber']
             
-            # Use SeasonSearch instead of EpisodeSearch to prefer season packs
+            # BUGFIX: If there are multiple episodes, check if we should search the NEXT season
+            # This happens when the first episode is the remainder of the current season
+            if len(episode_ids) > 1:
+                # Check the second episode's season
+                second_episode = get_episode_details_by_id(episode_ids[1])
+                if second_episode and second_episode['seasonNumber'] > first_season:
+                    # The bulk of episodes are in the next season, search for that
+                    season_to_search = second_episode['seasonNumber']
+                    logger.info(f"Rule type is 'seasons' - searching for season pack for Season {season_to_search} (next full season)")
+                else:
+                    # All episodes in same season
+                    season_to_search = first_season
+                    logger.info(f"Rule type is 'seasons' - searching for season pack for Season {season_to_search}")
+            else:
+                # Only one episode, use its season
+                season_to_search = first_season
+                logger.info(f"Rule type is 'seasons' - searching for season pack for Season {season_to_search}")
+            
+            # Use SeasonSearch to prefer season packs
             data = {
                 "name": "SeasonSearch",
                 "seriesId": series_id,
-                "seasonNumber": season_number
+                "seasonNumber": season_to_search
             }
         else:
             # Fallback to episode search if we can't determine season
