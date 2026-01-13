@@ -1,4 +1,4 @@
-__version__ = "2.7.8"
+__version__ = "2.7.9"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -2189,14 +2189,40 @@ def process_sonarr_webhook():
                                 
                                 # Search for episodes if action_option is 'search'
                                 if action_option == 'search':
+                                    # NEW: Use SeasonSearch when get_type is 'seasons'
+                                    if get_type == 'seasons':
+                                        # Get the season number from the first episode
+                                        first_ep_response = requests.get(
+                                            f"{SONARR_URL}/api/v3/episode/{episodes_to_monitor[0]}",
+                                            headers=headers
+                                        )
+                                        if first_ep_response.ok:
+                                            first_ep = first_ep_response.json()
+                                            season_number = first_ep.get('seasonNumber')
+                                            
+                                            app.logger.info(f"Rule type is 'seasons' - searching for season pack for Season {season_number}")
+                                            search_json = {
+                                                "name": "SeasonSearch",
+                                                "seriesId": series_id,
+                                                "seasonNumber": season_number
+                                            }
+                                        else:
+                                            # Fallback to episode search
+                                            app.logger.warning("Could not get season number, falling back to episode search")
+                                            search_json = {"name": "EpisodeSearch", "episodeIds": episodes_to_monitor}
+                                    else:
+                                        # Default: Individual episode search
+                                        search_json = {"name": "EpisodeSearch", "episodeIds": episodes_to_monitor}
+                                    
                                     search_response = requests.post(
                                         f"{SONARR_URL}/api/v3/command",
                                         headers=headers,
-                                        json={"name": "EpisodeSearch", "episodeIds": episodes_to_monitor}
+                                        json=search_json
                                     )
                                     
                                     if search_response.ok:
-                                        app.logger.info(f"✓ Started search for {len(episodes_to_monitor)} episodes of {series_title}")
+                                        search_type = "season pack search" if get_type == 'seasons' else "episode search"
+                                        app.logger.info(f"✓ Started {search_type} for {series_title}")
                                     else:
                                         app.logger.error(f"Failed to search for episodes: {search_response.text}")
                             else:

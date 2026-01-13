@@ -533,7 +533,7 @@ def get_episode_details(series_id, season_number):
     logger.error("Failed to fetch episode details.")
     return []
 
-def monitor_or_search_episodes(episode_ids, action_option, series_id=None, series_title=None):
+def monitor_or_search_episodes(episode_ids, action_option, series_id=None, series_title=None, get_type='episodes'):
     """Either monitor or trigger a search for episodes in Sonarr based on the action_option."""
     if not episode_ids:
         logger.info("No episodes to monitor/search")
@@ -541,7 +541,8 @@ def monitor_or_search_episodes(episode_ids, action_option, series_id=None, serie
         
     monitor_episodes(episode_ids, True)
     if action_option == "search":
-        trigger_episode_search_in_sonarr(episode_ids, series_id, series_title)
+        trigger_episode_search_in_sonarr(episode_ids, series_id, series_title, get_type)
+
 
 def monitor_episodes(episode_ids, monitor=True):
     """Set episodes to monitored or unmonitored in Sonarr."""
@@ -558,7 +559,7 @@ def monitor_episodes(episode_ids, monitor=True):
     else:
         logger.error(f"Failed to set episodes {action}. Response: {response.text}")
 
-def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=None):
+def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=None, get_type='episodes'):
     """
     Trigger a search for specified episodes in Sonarr and send pending notification
     
@@ -566,20 +567,43 @@ def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=N
         episode_ids: List of Sonarr episode IDs to search
         series_id: Sonarr series ID
         series_title: Series name for notifications
+        get_type: Rule type ('seasons' or 'episodes') - determines season pack preference
     """
     if not episode_ids:
         return
         
     url = f"{SONARR_URL}/api/v3/command"
     headers = {'X-Api-Key': SONARR_API_KEY, 'Content-Type': 'application/json'}
-    data = {"name": "EpisodeSearch", "episodeIds": episode_ids}
+    
+    # NEW: If rule type is 'seasons', prefer season packs
+    if get_type == 'seasons':
+        # Get the season number from the first episode
+        episode = get_episode_details_by_id(episode_ids[0])
+        if episode and series_id:
+            season_number = episode['seasonNumber']
+            logger.info(f"Rule type is 'seasons' - searching for season pack for Season {season_number}")
+            
+            # Use SeasonSearch instead of EpisodeSearch to prefer season packs
+            data = {
+                "name": "SeasonSearch",
+                "seriesId": series_id,
+                "seasonNumber": season_number
+            }
+        else:
+            # Fallback to episode search if we can't determine season
+            logger.warning("Could not determine season, falling back to episode search")
+            data = {"name": "EpisodeSearch", "episodeIds": episode_ids}
+    else:
+        # Default: Individual episode search
+        data = {"name": "EpisodeSearch", "episodeIds": episode_ids}
     
     response = requests.post(url, json=data, headers=headers)
     
     if response.ok:
-        logger.info("Episode search command sent to Sonarr successfully.")
+        search_type = "Season pack search" if get_type == 'seasons' else "Episode search"
+        logger.info(f"{search_type} command sent to Sonarr successfully.")
 
-        # NEW: Log search event
+        # Log search event
         if series_id and series_title and episode_ids:
             from activity_storage import save_search_event
             # Get season/episode from first episode ID
@@ -593,41 +617,32 @@ def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=N
                     episode_ids=episode_ids
                 )
     else:
-        logger.error(f"Failed to send episode search command. Response: {response.text}")
+        logger.error(f"Failed to send search command. Response: {response.text}")
         return
     
     # Send pending notification and store message ID
     if series_id and series_title:
         try:
-            from notifications import NOTIFICATIONS_ENABLED, send_notification
-            from sonarr_utils import get_episode
-            from notification_storage import store_notification
+            from notification_utils import send_pending_notification
             
-            if NOTIFICATIONS_ENABLED:
-                for ep_id in episode_ids:
-                    # NEW: Skip if notification already exists (prevents Jellyfin spam)
-                    if notification_exists(ep_id):
-                        logger.debug(f"Notification already exists for episode {ep_id}, skipping")
-                        continue
-                    episode = get_episode(ep_id)
-                    if episode:
-                        # Send notification
-                        message_id = send_notification(
-                            "episode_search_pending",
-                            series=series_title,
-                            season=episode.get('seasonNumber'),
-                            episode=episode.get('episodeNumber'),
-                            air_date=episode.get('airDateUtc'),
-                            series_id=series_id
-                        )
-                        
-                        # Store message ID for later deletion
-                        if message_id:
-                            store_notification(ep_id, message_id)
-                            logger.info(f"🔔 Sent pending notification for {series_title} S{episode.get('seasonNumber')}E{episode.get('episodeNumber')}")
-                        
+            episode_details = get_episode_details_by_id(episode_ids[0])
+            if episode_details:
+                season_number = episode_details['seasonNumber']
+                episode_number = episode_details['episodeNumber']
+                
+                episode_count = len(episode_ids)
+                if episode_count == 1:
+                    message = f"Searching for {series_title} S{season_number}E{episode_number}"
+                else:
+                    message = f"Searching for {episode_count} episodes of {series_title}"
+                
+                message_id = send_pending_notification(message)
+                
+                if message_id:
+                    store_pending_search(series_id, episode_ids, message_id)
+                    logger.info(f"Stored pending search notification: {message_id}")
         except Exception as e:
-            logger.error(f"Failed to send notification: {e}")
+            logger.debug(f"Could not send pending notification: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
 
@@ -1322,7 +1337,7 @@ def process_episodes_for_webhook(series_id, season_number, episode_number, rule,
         )
         
         if next_episode_ids:
-            monitor_or_search_episodes(next_episode_ids, rule.get('action_option', 'monitor'), series_id, series_title)
+            monitor_or_search_episodes(next_episode_ids, rule.get('action_option', 'monitor'), series_id, series_title, get_type)
             logger.info(f"Processed {len(next_episode_ids)} next episodes")
         
         # IMMEDIATE DELETION: Episodes leaving keep block (real-time cleanup)

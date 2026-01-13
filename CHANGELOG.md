@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [Released]
+Version 2.7.9 - Season Pack Preference
+
+### Features
+- **Season Pack Preference**: Rules using "Get X seasons" now automatically prefer season packs over individual episodes when searching
+  - Sonarr searches for season packs first, falls back to individual episodes if no pack available
+  - Applies to both watched episodes (webhooks) and newly added series (Jellyseerr)
+  - Episode-based rules continue to work exactly as before
+
+### Fixes
+- Fixed documentation: Tautulli webhook URL is `/webhook` (not `/tautulli-webhook`)
+
+### Technical Details
+- When `get_type: 'seasons'`, uses Sonarr's `SeasonSearch` command instead of `EpisodeSearch`
+- Backward compatible - all existing rules continue to work unchanged
+
 v2.7.8 
 Cosmetic fixes
 v2.7.7
