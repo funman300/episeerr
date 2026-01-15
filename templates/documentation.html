@@ -23,17 +23,19 @@
                 </div>
                 <div class="col-md-3">
                     <a href="#grace-periods" class="btn btn-outline-primary btn-sm w-100 mb-2">Grace Periods</a>
+                    <a href="#pending-deletions" class="btn btn-outline-warning btn-sm w-100 mb-2">Pending Deletions</a>
                     <a href="#workflows" class="btn btn-outline-primary btn-sm w-100 mb-2">Workflows</a>
-                    <a href="#delay-profiles" class="btn btn-outline-warning btn-sm w-100 mb-2">Delay Profiles</a>
+                    
                 </div>
                 <div class="col-md-3">
                     <a href="#integration" class="btn btn-outline-primary btn-sm w-100 mb-2">Webhooks</a>
                     <a href="#auto-assign" class="btn btn-outline-info btn-sm w-100 mb-2">Auto-Assign</a>
-                    <a href="#troubleshooting" class="btn btn-outline-primary btn-sm w-100 mb-2">Troubleshooting</a>
+                    <a href="#delay-profiles" class="btn btn-outline-warning btn-sm w-100 mb-2">Delay Profiles</a>
                 </div>
                 <div class="col-md-3">
                     <a href="#examples" class="btn btn-outline-primary btn-sm w-100 mb-2">Examples</a>
                     <a href="#faq" class="btn btn-outline-primary btn-sm w-100 mb-2">FAQ</a>
+                    <a href="#troubleshooting" class="btn btn-outline-primary btn-sm w-100 mb-2">Troubleshooting</a>
                 </div>
             </div>
         </div>
@@ -47,7 +49,7 @@
         <div class="card-body">
             <p class="lead">Episeerr is an intelligent episode management system that automates content delivery and cleanup for Sonarr-managed TV shows.</p>
             
-            <h5 class="mt-4">Three Ways to Manage Episodes:</h5>
+            <h5 class="mt-4">Four Ways to Manage Episodes:</h5>
             <div class="row mt-3">
                 <div class="col-md-4">
                     <div class="card h-100 border-primary">
@@ -94,6 +96,28 @@
                         </div>
                     </div>
                 </div>
+            </div>
+            
+            <!-- Second row with the new card -->
+            <div class="row mt-3">
+                <div class="col-md-4">
+                    <div class="card h-100 border-info">
+                        <div class="card-header bg-info text-white">
+                            <h6><i class="fas fa-shield-check me-2"></i>Approval-Based</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>Review deletions before they happen</p>
+                            <ul>
+                                <li>Dry run mode enabled by default</li>
+                                <li>Approve or reject each deletion</li>
+                                <li>Full transparency on cleanup decisions</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <!-- Empty columns to maintain layout -->
+                <div class="col-md-4"></div>
+                <div class="col-md-4"></div>
             </div>
         </div>
     </div>
@@ -377,7 +401,155 @@
             </div>
         </div>
     </div>
+    <!-- Pending Deletions -->
+    <div class="card mb-3" id="pending-deletions">
+        <div class="card-header bg-warning">
+            <h4 class="mb-0"><i class="fas fa-trash-alt me-2"></i>Pending Deletions - Approval System</h4>
+        </div>
+        <div class="card-body">
+            <p class="lead">All deletions go through an approval queue first - giving you full control before anything is removed.</p>
+            
+            <div class="alert alert-success">
+                <h6><i class="fas fa-shield-alt me-2"></i>Safety First</h6>
+                <p class="mb-0">Dry run mode is now <strong>enabled by default</strong>. This means all cleanup operations queue deletions for your review instead of executing immediately.</p>
+            </div>
 
+            <h5 class="mt-4"><i class="fas fa-flow-chart text-primary me-2"></i>How It Works</h5>
+            <ol>
+                <li><strong>Cleanup Runs:</strong> Scheduled cleanup identifies episodes for deletion based on your rules</li>
+                <li><strong>Queued for Review:</strong> Episodes are added to pending deletions (not deleted)</li>
+                <li><strong>You Review:</strong> Visit the Pending page to see what would be deleted and why</li>
+                <li><strong>You Decide:</strong> Approve (deletes immediately) or Reject (caches for 30 days)</li>
+            </ol>
+
+            <h5 class="mt-4"><i class="fas fa-list-check text-success me-2"></i>Review Options</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card border-success mb-3">
+                        <div class="card-header bg-success text-white">
+                            <h6><i class="fas fa-check me-2"></i>Approval Levels</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>Approve deletions at multiple levels:</p>
+                            <ul class="mb-0">
+                                <li><strong>Individual Episodes:</strong> One at a time</li>
+                                <li><strong>Entire Season:</strong> All episodes in a season</li>
+                                <li><strong>Entire Series:</strong> All queued episodes</li>
+                                <li><strong>Selected Episodes:</strong> Check boxes and bulk approve</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card border-secondary mb-3">
+                        <div class="card-header bg-secondary text-white">
+                            <h6><i class="fas fa-times me-2"></i>Rejection Behavior</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>When you reject an episode:</p>
+                            <ul class="mb-0">
+                                <li>Removed from pending queue</li>
+                                <li>Cached for 30 days</li>
+                                <li>Won't reappear during that time</li>
+                                <li>After 30 days, can be flagged again</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-4"><i class="fas fa-info-circle text-info me-2"></i>What You See</h5>
+            <p>Each pending deletion shows:</p>
+            <div class="card border-info">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul>
+                                <li><strong>Series/Season/Episode:</strong> Organized hierarchically</li>
+                                <li><strong>Reason:</strong> Why it's marked (Grace Period, Keep Rule, Dormant, etc.)</li>
+                                <li><strong>Rule Name:</strong> Which rule triggered it</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul>
+                                <li><strong>Date Source:</strong> Tautulli or Sonarr air date</li>
+                                <li><strong>Date Used:</strong> The actual date in the decision</li>
+                                <li><strong>File Size:</strong> How much space you'll reclaim</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-4"><i class="fas fa-cog text-warning me-2"></i>Configuring Dry Run Mode</h5>
+            <p>Dry run can be enabled at two levels:</p>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card border-primary mb-3">
+                        <div class="card-header bg-primary text-white">
+                            <strong>Global Dry Run</strong>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Location:</strong> Admin → Scheduler → Global Dry Run Mode</p>
+                            <p><strong>Effect:</strong> Applies to ALL rules</p>
+                            <p class="mb-0"><strong>Default:</strong> ✅ Enabled (for safety)</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card border-success mb-3">
+                        <div class="card-header bg-success text-white">
+                            <strong>Per-Rule Dry Run</strong>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Location:</strong> Admin → Dry Run Settings → By Rule</p>
+                            <p><strong>Effect:</strong> Applies to specific rule only</p>
+                            <p class="mb-0"><strong>Use case:</strong> Test one rule while others run normally</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert alert-info">
+                <h6><i class="fas fa-lightbulb me-2"></i>How They Work Together</h6>
+                <p class="mb-0">If <strong>either</strong> global OR per-rule dry run is enabled, deletions are queued for approval. This gives you maximum flexibility - protect everything globally or test individual rules.</p>
+            </div>
+
+            <h5 class="mt-4"><i class="fas fa-bell text-primary me-2"></i>Notifications</h5>
+            <p>The navigation badge shows combined pending items:</p>
+            <ul>
+                <li><strong>Pending Requests:</strong> Episode selection requests</li>
+                <li><strong>Pending Deletions:</strong> Episodes awaiting approval</li>
+                <li><strong>Badge:</strong> Shows total count of both</li>
+            </ul>
+
+            <h5 class="mt-4"><i class="fas fa-thumbs-up text-success me-2"></i>Best Practices</h5>
+            <div class="card border-success">
+                <div class="card-body">
+                    <ol class="mb-0">
+                        <li><strong>Start with dry run enabled</strong> (default) - Review deletions for a few weeks</li>
+                        <li><strong>Check pending deletions regularly</strong> - Weekly or after each cleanup run</li>
+                        <li><strong>Create proper rules</strong> instead of repeatedly rejecting the same content</li>
+                        <li><strong>Monitor the logs</strong> to understand why episodes are targeted</li>
+                        <li><strong>Use rule-specific dry run</strong> to test changes to individual rules</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="alert alert-warning mt-3">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Important Notes</h6>
+                <ul class="mb-0">
+                    <li><strong>Rejection is temporary:</strong> Use proper rules for permanent protection</li>
+                    <li><strong>Dry run doesn't affect "Get":</strong> New episodes are still monitored/searched</li>
+                    <li><strong>Badge updates every 30 seconds:</strong> Reflects real-time pending count</li>
+                    <li><strong>Approved deletions execute immediately:</strong> No undo after approval</li>
+                </ul>
+            </div>
+        </div>
+    </div>
     <!-- Workflows -->
     <div class="card mb-3" id="workflows">
         <div class="card-header bg-info text-white">
@@ -814,58 +986,93 @@ Order: 1 (higher priority)</code></pre>
     </div>
 
     <!-- Troubleshooting -->
-    <div class="card mb-3" id="troubleshooting">
-        <div class="card-header bg-danger text-white">
-            <h4 class="mb-0"><i class="fas fa-wrench me-2"></i>Troubleshooting</h4>
+<div class="card mb-3" id="troubleshooting">
+    <div class="card-header bg-danger text-white">
+        <h4 class="mb-0"><i class="fas fa-wrench me-2"></i>Troubleshooting</h4>
+    </div>
+    <div class="card-body">
+        <h5>Common Issues:</h5>
+        
+        <!-- EXISTING CARD 1 -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <strong>Episodes aren't being processed</strong>
+            </div>
+            <div class="card-body">
+                <p><strong>Check:</strong></p>
+                <ul>
+                    <li>Is the series assigned to a rule?</li>
+                    <li>Are webhooks configured and firing?</li>
+                    <li>Check logs: Admin → View Logs → episeerr.log</li>
+                    <li>Verify Sonarr tags are correct (episeerr_default or episeerr_select)</li>
+                </ul>
+            </div>
         </div>
-        <div class="card-body">
-            <h5>Common Issues:</h5>
-            
-            <div class="card mb-3">
-                <div class="card-header">
-                    <strong>Episodes aren't being processed</strong>
-                </div>
-                <div class="card-body">
-                    <p><strong>Check:</strong></p>
-                    <ul>
-                        <li>Is the series assigned to a rule?</li>
-                        <li>Are webhooks configured and firing?</li>
-                        <li>Check logs: Admin → View Logs → episeerr.log</li>
-                        <li>Verify Sonarr tags are correct (episeerr_default or episeerr_select)</li>
-                    </ul>
-                </div>
-            </div>
 
-            <div class="card mb-3">
-                <div class="card-header">
-                    <strong>Episodes deleted too quickly</strong>
-                </div>
-                <div class="card-body">
-                    <p><strong>Solution:</strong></p>
-                    <ul>
-                        <li>Increase Grace Watched/Unwatched periods</li>
-                        <li>Check if Dormant timer is too short</li>
-                        <li>Consider changing Keep settings to retain more episodes</li>
-                    </ul>
-                </div>
+        <!-- EXISTING CARD 2 -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <strong>Episodes deleted too quickly</strong>
             </div>
+            <div class="card-body">
+                <p><strong>Solution:</strong></p>
+                <ul>
+                    <li>Increase Grace Watched/Unwatched periods</li>
+                    <li>Check if Dormant timer is too short</li>
+                    <li>Consider changing Keep settings to retain more episodes</li>
+                </ul>
+            </div>
+        </div>
 
-            <div class="card mb-3">
-                <div class="card-header">
-                    <strong>Nothing is being deleted</strong>
-                </div>
-                <div class="card-body">
-                    <p><strong>Check:</strong></p>
-                    <ul>
-                        <li>Is cleanup scheduler running? (Admin → Scheduler Status)</li>
-                        <li>Check Storage Gate - cleanup only runs when below threshold</li>
-                        <li>Verify grace periods aren't too long</li>
-                        <li>Check if Dry Run Mode is enabled globally</li>
-                    </ul>
-                </div>
+        <!-- EXISTING CARD 3 -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <strong>Nothing is being deleted</strong>
+            </div>
+            <div class="card-body">
+                <p><strong>Check:</strong></p>
+                <ul>
+                    <li>Is cleanup scheduler running? (Admin → Scheduler Status)</li>
+                    <li>Check Storage Gate - cleanup only runs when below threshold</li>
+                    <li>Verify grace periods aren't too long</li>
+                    <li>Check if Dry Run Mode is enabled globally</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- NEW CARD 4 - ADD THIS -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <strong>Episodes showing in pending deletions but I want to keep them</strong>
+            </div>
+            <div class="card-body">
+                <p><strong>Solution:</strong></p>
+                <ul>
+                    <li><strong>Reject the deletion:</strong> Removes it for 30 days</li>
+                    <li><strong>Better solution:</strong> Create a rule with no cleanup parameters (leave grace periods empty)</li>
+                    <li><strong>Adjust existing rule:</strong> Increase grace periods or change dormant timer</li>
+                    <li><strong>Check why it's targeted:</strong> Review the "Reason" field in pending deletions</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- NEW CARD 5 - ADD THIS -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <strong>Badge shows pending count but page shows nothing</strong>
+            </div>
+            <div class="card-body">
+                <p><strong>Check:</strong></p>
+                <ul>
+                    <li>Refresh the page (F5)</li>
+                    <li>Check browser console for JavaScript errors</li>
+                    <li>Verify /api/pending-deletions/count endpoint is working</li>
+                    <li>Clear browser cache and reload</li>
+                </ul>
             </div>
         </div>
     </div>
+</div>
 
     <!-- FAQ -->
     <div class="card mb-3" id="faq">
@@ -897,6 +1104,49 @@ Order: 1 (higher priority)</code></pre>
                 <dt>Q: How do I know what's being deleted?</dt>
                 <dd>A: Check Admin → View Logs → cleanup.log for detailed deletion logs.</dd>
                 
+                <dt>Q: What is "Pending Deletions"?</dt>
+                <dd>
+                    <strong>A:</strong> A safety system that queues all deletions for your review before executing them. 
+                    When dry run mode is enabled (default), cleanup operations add episodes to a pending queue instead of 
+                    deleting immediately. You review the queue and approve or reject each deletion.
+                </dd>
+
+                <dt>Q: Why aren't episodes being deleted?</dt>
+                <dd>
+                    <strong>A:</strong> Check if dry run mode is enabled (Admin → Scheduler → Global Dry Run Mode). 
+                    When enabled, all deletions go to the Pending page for review. This is the default behavior for safety. 
+                    Review and approve deletions from the Pending page, or disable dry run if you want automatic deletion.
+                </dd>
+
+                <dt>Q: What happens if I reject an episode deletion?</dt>
+                <dd>
+                    <strong>A:</strong> The episode is removed from the pending queue and cached for 30 days. It won't 
+                    appear in pending deletions again during that time. After 30 days, if cleanup rules still target it, 
+                    it will reappear. For permanent protection, create a rule with no cleanup parameters.
+                </dd>
+
+                <dt>Q: Can I approve/reject multiple episodes at once?</dt>
+                <dd>
+                    <strong>A:</strong> Yes! You can approve or reject at multiple levels:
+                    <ul>
+                        <li>Individual episodes (one at a time)</li>
+                        <li>Entire seasons (all episodes in that season)</li>
+                        <li>Entire series (all pending episodes for that show)</li>
+                        <li>Selected episodes (check boxes and bulk approve/reject)</li>
+                    </ul>
+                </dd>
+
+                <dt>Q: What's the difference between global and per-rule dry run?</dt>
+                <dd>
+                    <strong>A:</strong> 
+                    <ul>
+                        <li><strong>Global dry run:</strong> Affects ALL rules - all deletions are queued</li>
+                        <li><strong>Per-rule dry run:</strong> Affects only that specific rule - lets you test individual rules</li>
+                        <li><strong>Either one enabled:</strong> Deletions are queued for approval</li>
+                    </ul>
+                    Use global dry run when learning Episeerr, per-rule dry run when testing changes to specific rules.
+                </dd>
+
                 <dt>Q: Can different family members watch different seasons?</dt>
                 <dd>A: Yes! Use "Grace Scope: Per Season" in your rule settings.</dd>
             </dl>

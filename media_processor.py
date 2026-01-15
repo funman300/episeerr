@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from datetime import datetime, timezone
 import threading
 import subprocess
-
+import pending_deletions
 from episeerr import normalize_url
 
 
@@ -1369,7 +1369,11 @@ def process_episodes_for_webhook(series_id, season_number, episode_number, rule,
                 delete_episodes_in_sonarr_with_logging(
                     episode_file_ids, 
                     rule.get('dry_run', False), 
-                    f"Series {series_id}"
+                    series_title or f"Series {series_id}",
+                    reason=f"Keep Rule (keeping {keep_count} {keep_type})",
+                    date_source="Episode Number",
+                    date_value=f"Triggered by S{season_number:02d}E{episode_number:02d}",
+                    rule_name="real-time-keep"
                 )
                 logger.info(f"Immediately deleted {len(episode_file_ids)} episodes leaving keep block")
         
@@ -1377,7 +1381,100 @@ def process_episodes_for_webhook(series_id, season_number, episode_number, rule,
             
     except Exception as e:
         logger.error(f"Error in webhook processing: {str(e)}")
+# ============================================================================
+# GLOBAL SETTINGS & STORAGE GATE
+# ============================================================================
 
+def load_global_settings():
+    """Load global settings including storage gate."""
+    try:
+        settings_path = os.path.join(os.getcwd(), 'config', 'global_settings.json')
+        
+        if os.path.exists(settings_path):
+            with open(settings_path, 'r') as f:
+                settings = json.load(f)
+            
+            # ADD THIS MIGRATION BLOCK:
+            # MIGRATION: Add dry_run_mode if missing (default to True for safety)
+            if 'dry_run_mode' not in settings:
+                settings['dry_run_mode'] = True
+                save_global_settings(settings)
+                logger.info("✓ Migrated global_settings.json - added dry_run_mode: true")
+            
+            return settings
+        else:
+            # Default settings (already has dry_run_mode: True - good!)
+            default_settings = {
+                'global_storage_min_gb': None,
+                'cleanup_interval_hours': 6,
+                'dry_run_mode': True,
+                'auto_assign_new_series': False,
+                'notifications_enabled': False,
+                'discord_webhook_url': '',
+                'episeerr_url': 'http://localhost:5002'
+            }
+            save_global_settings(default_settings)
+            return default_settings
+    except Exception as e:
+        logger.error(f"Error loading global settings: {str(e)}")
+        return {
+            'global_storage_min_gb': None,
+            'cleanup_interval_hours': 6,
+            'dry_run_mode': True,
+            'auto_assign_new_series': False,
+            'notifications_enabled': False,
+            'discord_webhook_url': '',
+            'episeerr_url': 'http://localhost:5002'
+        }
+
+
+def save_global_settings(settings):
+    """Save global settings to file with automatic backup."""
+    try:
+        settings_path = os.path.join(os.getcwd(), 'config', 'global_settings.json')
+        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+        
+        # Backup BEFORE saving (only when actually writing)
+        if os.path.exists(settings_path):
+            backup_path = settings_path + '.bak'
+            try:
+                shutil.copy2(settings_path, backup_path)
+                logger.debug(f"Backed up global_settings.json to {backup_path}")
+            except Exception as e:
+                logger.warning(f"Could not backup global_settings.json: {e}")
+        
+        # Save the settings
+        with open(settings_path, 'w') as f:
+            json.dump(settings, f, indent=4)
+        logger.info("Global settings saved successfully")
+    except Exception as e:
+        logger.error(f"Error saving global settings: {str(e)}")
+
+def check_global_storage_gate():
+    """Check if global storage gate allows cleanup to proceed."""
+    try:
+        global_settings = load_global_settings()
+        storage_min_gb = global_settings.get('global_storage_min_gb')
+        
+        if not storage_min_gb:
+            # No storage gate configured - always allow cleanup
+            return True, None, "No global storage gate - cleanup always enabled"
+        
+        disk_info = get_sonarr_disk_space()
+        if not disk_info:
+            return False, storage_min_gb, "Could not get disk space information"
+        
+        current_free_gb = disk_info['free_space_gb']
+        
+        if current_free_gb < storage_min_gb:
+            return True, storage_min_gb, f"Storage gate OPEN: {current_free_gb:.1f}GB < {storage_min_gb}GB threshold"
+        else:
+            return False, storage_min_gb, f"Storage gate CLOSED: {current_free_gb:.1f}GB >= {storage_min_gb}GB threshold"
+        
+    except Exception as e:
+        logger.error(f"Error checking global storage gate: {str(e)}")
+        return False, None, f"Storage gate error: {str(e)}"
+    
 def check_time_based_cleanup(series_id, rule):
     """
     Debug function for episeerr.py test routes.
@@ -1549,7 +1646,18 @@ def run_grace_watched_cleanup():
                                     
                                     if episode_file_ids:
                                         cleanup_logger.info(f"   📊 Deleting {len(episode_file_ids)} watched episodes from S{season_num} up to E{last_episode}")
-                                        delete_episodes_in_sonarr_with_logging(episode_file_ids, is_dry_run, series_title)
+                                        from datetime import datetime
+                                        activity_date = datetime.fromtimestamp(season_activity).strftime('%Y-%m-%d')
+                                        
+                                        delete_episodes_in_sonarr_with_logging(
+                                            episode_file_ids, 
+                                            is_dry_run, 
+                                            series_title,
+                                            reason=f"Grace Period - Watched ({grace_watched_days} days) - Season {season_num}",
+                                            date_source="Tautulli",
+                                            date_value=activity_date,
+                                            rule_name=rule_name
+                                        )
                                         total_deleted += len(episode_file_ids)
                                     else:
                                         cleanup_logger.info(f"   ⏭️ No watched episodes to delete from S{season_num}")
@@ -1603,7 +1711,18 @@ def run_grace_watched_cleanup():
                             
                             if episode_file_ids:
                                 cleanup_logger.info(f"   📊 Deleting {len(episode_file_ids)} watched episodes up to S{last_season}E{last_episode}")
-                                delete_episodes_in_sonarr_with_logging(episode_file_ids, is_dry_run, series_title)
+                                from datetime import datetime
+                                activity_date = datetime.fromtimestamp(series_activity).strftime('%Y-%m-%d')
+                                
+                                delete_episodes_in_sonarr_with_logging(
+                                    episode_file_ids, 
+                                    is_dry_run, 
+                                    series_title,
+                                    reason=f"Grace Period - Watched ({grace_watched_days} days) - Whole Series",
+                                    date_source="Tautulli",
+                                    date_value=activity_date,
+                                    rule_name=rule_name
+                                )
                                 total_deleted += len(episode_file_ids)
                             else:
                                 cleanup_logger.info(f"   ⏭️ No watched episodes to delete (last watched: S{last_season}E{last_episode})")
@@ -1713,7 +1832,18 @@ def run_grace_unwatched_cleanup():
                                     
                                     if episode_file_ids:
                                         cleanup_logger.info(f"   📊 Deleting {len(episode_file_ids)} unwatched episodes from S{season_num} after E{last_episode}")
-                                        delete_episodes_in_sonarr_with_logging(episode_file_ids, is_dry_run, series_title)
+                                        from datetime import datetime
+                                        activity_date = datetime.fromtimestamp(season_activity).strftime('%Y-%m-%d')
+                                        
+                                        delete_episodes_in_sonarr_with_logging(
+                                            episode_file_ids, 
+                                            is_dry_run, 
+                                            series_title,
+                                            reason=f"Grace Period - Unwatched ({grace_unwatched_days} days) - Season {season_num}",
+                                            date_source="Tautulli",
+                                            date_value=activity_date,
+                                            rule_name=rule_name
+                                        )
                                         total_deleted += len(episode_file_ids)
                                     else:
                                         cleanup_logger.info(f"   ⏭️ No unwatched episodes to delete from S{season_num}")
@@ -1767,7 +1897,18 @@ def run_grace_unwatched_cleanup():
                             
                             if episode_file_ids:
                                 cleanup_logger.info(f"   📊 Deleting {len(episode_file_ids)} unwatched episodes after S{last_season}E{last_episode}")
-                                delete_episodes_in_sonarr_with_logging(episode_file_ids, is_dry_run, series_title)
+                                from datetime import datetime
+                                activity_date = datetime.fromtimestamp(series_activity).strftime('%Y-%m-%d')
+                                
+                                delete_episodes_in_sonarr_with_logging(
+                                    episode_file_ids, 
+                                    is_dry_run, 
+                                    series_title,
+                                    reason=f"Grace Period - Unwatched ({grace_unwatched_days} days) - Whole Series",
+                                    date_source="Tautulli",
+                                    date_value=activity_date,
+                                    rule_name=rule_name
+                                )
                                 total_deleted += len(episode_file_ids)
                             else:
                                 cleanup_logger.info(f"   ⏭️ No unwatched episodes to delete after S{last_season}E{last_episode}")
@@ -1877,7 +2018,25 @@ def run_dormant_cleanup():
                     break
             
             cleanup_logger.info(f"🔴 {candidate['title']}: Dormant for {candidate['days_since_activity']:.1f} days")
-            delete_episodes_in_sonarr_with_logging(candidate['episode_file_ids'], candidate['is_dry_run'], candidate['title'])
+            from datetime import datetime
+            
+            # Format the last activity date
+            if candidate.get('last_activity'):
+                activity_date = datetime.fromtimestamp(candidate['last_activity']).strftime('%Y-%m-%d')
+                date_source = "Tautulli"
+            else:
+                activity_date = "Unknown"
+                date_source = "No Activity Data"
+            
+            delete_episodes_in_sonarr_with_logging(
+                candidate['episode_file_ids'], 
+                candidate['is_dry_run'], 
+                candidate['title'],
+                reason=f"Dormant Series ({candidate['days_since_activity']:.1f} days inactive)",
+                date_source=date_source,
+                date_value=activity_date,
+                rule_name=candidate.get('rule_name', 'storage-gate')
+            )
             processed_count += 1
         
         cleanup_logger.info(f"🔴 Dormant cleanup: Processed {processed_count} series")
@@ -1887,91 +2046,7 @@ def run_dormant_cleanup():
         cleanup_logger.error(f"Error in dormant cleanup: {str(e)}")
         return 0
 
-# ============================================================================
-# GLOBAL SETTINGS & STORAGE GATE
-# ============================================================================
 
-def load_global_settings():
-    """Load global settings including storage gate."""
-    try:
-        settings_path = os.path.join(os.getcwd(), 'config', 'global_settings.json')
-        
-        # REMOVED: Backup on every load (was causing spam)
-        if os.path.exists(settings_path):
-            with open(settings_path, 'r') as f:
-                return json.load(f)
-        else:
-            # Default settings
-            default_settings = {
-                'global_storage_min_gb': None,
-                'cleanup_interval_hours': 6,
-                'dry_run_mode': False,
-                'auto_assign_new_series': False,
-                'notifications_enabled': False,
-                'discord_webhook_url': '',
-                'episeerr_url': 'http://localhost:5002'
-            }
-            save_global_settings(default_settings)
-            return default_settings
-    except Exception as e:
-        logger.error(f"Error loading global settings: {str(e)}")
-        return {
-            'global_storage_min_gb': None,
-            'cleanup_interval_hours': 6,
-            'dry_run_mode': False,
-            'auto_assign_new_series': False,
-            'notifications_enabled': False,
-            'discord_webhook_url': '',
-            'episeerr_url': 'http://localhost:5002'
-        }
-
-
-def save_global_settings(settings):
-    """Save global settings to file with automatic backup."""
-    try:
-        settings_path = os.path.join(os.getcwd(), 'config', 'global_settings.json')
-        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
-        
-        # Backup BEFORE saving (only when actually writing)
-        if os.path.exists(settings_path):
-            backup_path = settings_path + '.bak'
-            try:
-                shutil.copy2(settings_path, backup_path)
-                logger.debug(f"Backed up global_settings.json to {backup_path}")
-            except Exception as e:
-                logger.warning(f"Could not backup global_settings.json: {e}")
-        
-        # Save the settings
-        with open(settings_path, 'w') as f:
-            json.dump(settings, f, indent=4)
-        logger.info("Global settings saved successfully")
-    except Exception as e:
-        logger.error(f"Error saving global settings: {str(e)}")
-
-def check_global_storage_gate():
-    """Check if global storage gate allows cleanup to proceed."""
-    try:
-        global_settings = load_global_settings()
-        storage_min_gb = global_settings.get('global_storage_min_gb')
-        
-        if not storage_min_gb:
-            # No storage gate configured - always allow cleanup
-            return True, None, "No global storage gate - cleanup always enabled"
-        
-        disk_info = get_sonarr_disk_space()
-        if not disk_info:
-            return False, storage_min_gb, "Could not get disk space information"
-        
-        current_free_gb = disk_info['free_space_gb']
-        
-        if current_free_gb < storage_min_gb:
-            return True, storage_min_gb, f"Storage gate OPEN: {current_free_gb:.1f}GB < {storage_min_gb}GB threshold"
-        else:
-            return False, storage_min_gb, f"Storage gate CLOSED: {current_free_gb:.1f}GB >= {storage_min_gb}GB threshold"
-        
-    except Exception as e:
-        logger.error(f"Error checking global storage gate: {str(e)}")
-        return False, None, f"Storage gate error: {str(e)}"
 
 def get_sonarr_disk_space():
     """Get disk space information from Sonarr."""

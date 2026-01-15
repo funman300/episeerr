@@ -8,6 +8,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [Released]
+## [2.8.0] - 2026-01-15
+
+### Added
+- **Pending Deletions System**: Comprehensive approval queue for all cleanup operations
+  - All deletions now queue for review before execution when dry run is enabled
+  - Hierarchical organization: Series → Season → Episode
+  - Multiple approval levels: individual episodes, entire seasons, whole series, or bulk selection
+  - Rejection cache: Rejected episodes won't reappear for 30 days
+  - Enhanced logging with detailed deletion reports showing:
+    - Reason for deletion (Grace Period, Keep Rule, Dormant Series, etc.)
+    - Data source (Tautulli watch history vs Sonarr air date)
+    - Date value used in decision
+    - Rule name that triggered the deletion
+    - File size to be reclaimed
+  - Real-time notification badge showing combined pending requests + pending deletions
+  - New `/pending-deletions` page with collapsible series/season view
+  - API endpoints for programmatic access to pending deletions queue
+
+### Changed
+- **Dry Run Mode now enabled by default** for all new installations
+  - Provides safety net against accidental mass deletions
+  - Existing installations require manual migration (add `dry_run_mode: true` to `global_settings.json`)
+  - Can be configured globally (Admin → Scheduler) or per-rule (Admin → Dry Run Settings)
+- **Navigation updated**: "Pending Requests" renamed to "Pending" 
+  - Now serves as unified entry point for both episode selection requests and pending deletions
+  - Badge shows combined count of both pending items
+- **Unified Pending Page**: Enhanced to show both episode selection requests and deletion queue
+  - Tab-free design with separate cards for each type
+  - Summary cards show quick stats and link to detailed views
+
+### Fixed
+- Improved deletion logic to prevent edge cases in multi-viewer households
+- Enhanced error handling in cleanup operations
+- Better context tracking for why episodes are targeted for deletion
+
+### Technical Details
+- New `pending_deletions.py` module for queue management
+- New `pending_deletions.html` template with Bootstrap accordion interface
+- Storage-efficient rejection cache using episode ID + expiry date pairs
+- Migration system auto-adds `dry_run_mode` field to existing `global_settings.json`
+- Backward compatible - existing cleanup behavior unchanged if dry run disabled
+
+### Migration Notes
+- **Existing users**: Dry run mode is NOT enabled automatically
+  - To enable: Admin → Scheduler → Check "Global Dry Run Mode" → Save
+  - Or manually add `"dry_run_mode": true` to `config/global_settings.json`
+- **New users**: Dry run enabled by default, deletions require approval
+- All pending deletions data stored in `data/pending_deletions.json`
+- Rejection cache stored in `data/deletion_rejections.json`
+
+### Documentation
+- Added comprehensive "Pending Deletions" section to built-in documentation
+- Updated FAQ with 5 new entries about the approval system
+- Added troubleshooting guides for common pending deletion scenarios
+- Updated installation guides to mention dry run default behavior
 Version 2.7.9 - Season Pack Preference
 
 ### Features

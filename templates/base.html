@@ -168,7 +168,7 @@ function updateActiveTheme(activeTheme) {
                 
                 <a class="nav-link position-relative" href="{{ url_for('episeerr_index') }}" id="episeerr-link">
                     <i class="fas fa-bell me-1"></i>
-                    <span class="d-none d-md-inline">Pending Requests</span>
+                    <span class="d-none d-md-inline">Pending Items</span>
                     <span class="d-md-none">Pending</span>
                     <!-- Notification indicators -->
                     <i class="fas fa-exclamation-circle text-warning ms-1" id="notification-bell" style="display: none;" title="New episode selection requests"></i>
@@ -376,38 +376,55 @@ function updateActiveTheme(activeTheme) {
     });
     </script>
     <script>
-    // Simple notification check for your navbar
+    // Combined check for pending requests AND deletions
     function checkForNewRequests() {
+        let requestCount = 0;
+        let deletionCount = 0;
+        
+        // Check pending requests first
         fetch('/api/pending-requests')
             .then(response => response.json())
             .then(data => {
-                const bell = document.getElementById('notification-bell');
-                const badge = document.getElementById('request-count-badge');
-                
-                if (data.success && data.count > 0) {
-                    // Show notification indicators
-                    bell.style.display = 'inline';
-                    badge.textContent = data.count;
-                    badge.style.display = 'inline-block';
-                    
-                    // Add pulse animation for attention
-                    bell.classList.add('pulse-warning');
-                    
-                    // Update page title if not on episeerr page
-                    if (!window.location.pathname.includes('/episeerr')) {
-                        document.title = `(${data.count}) ${document.title.replace(/^\(\d+\)\s*/, '')}`;
-                    }
-                } else {
-                    // Hide notification indicators
-                    bell.style.display = 'none';
-                    badge.style.display = 'none';
-                    bell.classList.remove('pulse-warning');
-                    
-                    // Remove count from page title
-                    document.title = document.title.replace(/^\(\d+\)\s*/, '');
-                }
+                requestCount = data.success ? data.count : 0;
+                // Then check pending deletions
+                return fetch('/api/pending-deletions/count');
             })
-            .catch(error => console.error('Error checking requests:', error));
+            .then(response => response.json())
+            .then(data => {
+                deletionCount = data.count || 0;
+                // Update badge with combined count
+                updatePendingBadge(requestCount, deletionCount);
+            })
+            .catch(error => console.error('Error checking pending items:', error));
+    }
+    
+    function updatePendingBadge(requestCount, deletionCount) {
+        const bell = document.getElementById('notification-bell');
+        const badge = document.getElementById('request-count-badge');
+        const totalCount = requestCount + deletionCount;
+        
+        if (totalCount > 0) {
+            // Show notification indicators
+            bell.style.display = 'inline';
+            badge.textContent = totalCount;
+            badge.style.display = 'inline-block';
+            
+            // Add pulse animation for attention
+            bell.classList.add('pulse-warning');
+            
+            // Update page title if not on episeerr page
+            if (!window.location.pathname.includes('/episeerr')) {
+                document.title = `(${totalCount}) ${document.title.replace(/^\(\d+\)\s*/, '')}`;
+            }
+        } else {
+            // Hide notification indicators
+            bell.style.display = 'none';
+            badge.style.display = 'none';
+            bell.classList.remove('pulse-warning');
+            
+            // Remove count from page title
+            document.title = document.title.replace(/^\(\d+\)\s*/, '');
+        }
     }
 
     // Check every 30 seconds

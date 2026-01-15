@@ -1,4 +1,4 @@
-__version__ = "2.7.9"
+__version__ = "2.8.0"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -20,6 +20,7 @@ from logging.handlers import RotatingFileHandler
 import requests
 import episeerr_utils
 from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID, normalize_url
+import pending_deletions
 
 app = Flask(__name__)
 
@@ -372,7 +373,103 @@ def setup_cleanup_logging():
     return cleanup_logger
 
 cleanup_logger = setup_cleanup_logging()
+# import pending_deletions
 
+@app.route('/pending-deletions')
+def view_pending_deletions():
+    """View all pending deletions"""
+    import pending_deletions
+    summary = pending_deletions.get_pending_deletions_summary()
+    return render_template('pending_deletions.html', summary=summary)
+
+
+@app.route('/pending-deletions/approve', methods=['POST'])
+def approve_pending_deletions():
+    """Approve and execute deletions"""
+    import pending_deletions
+    from media_processor import delete_episodes_in_sonarr_with_logging
+    
+    try:
+        data = request.get_json()
+        episode_ids = data.get('episode_ids', [])
+        
+        if not episode_ids:
+            return jsonify({'success': False, 'error': 'No episodes specified'}), 400
+        
+        result = pending_deletions.approve_deletions(episode_ids, delete_episodes_in_sonarr_with_logging)
+        
+        return jsonify({
+            'success': True,
+            'deleted_count': result['deleted_count'],
+            'errors': result['errors']
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error approving deletions: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/pending-deletions/reject', methods=['POST'])
+def reject_pending_deletions():
+    """Reject deletions and add to rejection cache"""
+    import pending_deletions
+    
+    try:
+        data = request.get_json()
+        episode_ids = data.get('episode_ids', [])
+        
+        if not episode_ids:
+            return jsonify({'success': False, 'error': 'No episodes specified'}), 400
+        
+        rejected_count = pending_deletions.reject_deletions(episode_ids)
+        
+        return jsonify({
+            'success': True,
+            'rejected_count': rejected_count
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error rejecting deletions: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/pending-deletions/series/<int:series_id>/episodes')
+def get_series_episodes(series_id):
+    """Get all episode IDs for a series"""
+    import pending_deletions
+    episode_ids = pending_deletions.get_episode_ids_for_series(series_id)
+    return jsonify({'episode_ids': episode_ids})
+
+
+@app.route('/pending-deletions/series/<int:series_id>/season/<int:season_num>/episodes')
+def get_season_episodes(series_id, season_num):
+    """Get all episode IDs for a season"""
+    import pending_deletions
+    episode_ids = pending_deletions.get_episode_ids_for_season(series_id, season_num)
+    return jsonify({'episode_ids': episode_ids})
+
+
+@app.route('/pending-deletions/clear', methods=['POST'])
+def clear_pending_deletions():
+    """Clear all pending deletions"""
+    import pending_deletions
+    try:
+        pending_deletions.clear_all_pending_deletions()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/pending-deletions/count')
+def get_pending_deletions_count():
+    """API endpoint to get count of pending deletions for notifications"""
+    import pending_deletions
+    summary = pending_deletions.get_pending_deletions_summary()
+    return jsonify({
+        'count': summary['total_episodes'],
+        'series_count': summary['total_series'],
+        'size_gb': summary['total_size_gb']
+    })
 # Add these routes to episeerr.py
 
 @app.route('/logs')
@@ -1568,8 +1665,13 @@ def render_simple_logs_page(logs_or_message):
 
 @app.route('/episeerr')
 def episeerr_index():
-    """Episeerr main page."""
-    return render_template('episeerr_index.html')
+    """Pending items page - shows requests AND deletion summary"""
+    import pending_deletions
+    
+    # Get pending deletions summary
+    deletion_summary = pending_deletions.get_pending_deletions_summary()
+    
+    return render_template('episeerr_index.html', deletions=deletion_summary)
 
 @app.route('/select-seasons/<tmdb_id>')
 def select_seasons(tmdb_id):

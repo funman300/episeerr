@@ -70,11 +70,15 @@ Welcome to the Episeerr documentation. Episeerr provides three independent autom
 - [Rules System Guide](rules-guide.md) - Automate based on viewing activity
 - [Rule Examples](rule-examples.md) - Common configurations for different use cases
 
-### 💾 Storage Management (NEW!)
+### 💾 Storage Management 
 
 - [Global Storage Gate Guide](global_storage_gate_guide.md) - One threshold controls all cleanup
 - [Understanding Grace vs Dormant Timers](global_storage_gate_guide.md) - Automatic
   cleanup based on time and viewing activity on low storage space
+
+###  Pending Deletions (NEW!)
+
+- [Review and approve all deletions before they execute](pending_deletions.md) 
 
 ### 🔧 Integration
 

@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block title %}Pending Deletions{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>📋 Pending Deletions</h2>
+        <div>
+            <button class="btn btn-outline-secondary" onclick="location.reload()">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    {% if summary.total_episodes > 0 %}
+    <!-- Alert Summary -->
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <strong>⚠️ {{ summary.total_episodes }} episode{{ 's' if summary.total_episodes != 1 else '' }} pending deletion</strong>
+        <span class="ms-2">
+            ({{ summary.total_series }} series, {{ summary.total_size_gb }} GB)
+        </span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <!-- Bulk Action Buttons -->
+    <div class="mb-3">
+        <button class="btn btn-success" onclick="approveSelected()">
+            <i class="fas fa-check"></i> Approve Selected
+        </button>
+        <button class="btn btn-secondary" onclick="rejectSelected()">
+            <i class="fas fa-times"></i> Reject Selected
+        </button>
+        <span class="ms-3 text-muted" id="selectedCount">0 selected</span>
+    </div>
+
+    <!-- Pending Deletions Accordion -->
+    <div class="accordion" id="pendingDeletionsAccordion">
+        {% for series in summary.pending_list %}
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="heading-{{ series.series_id }}">
+                <button class="accordion-button collapsed" type="button" 
+                        data-bs-toggle="collapse" 
+                        data-bs-target="#collapse-{{ series.series_id }}" 
+                        aria-expanded="false">
+                    <div class="d-flex w-100 align-items-center">
+                        <div class="flex-grow-1">
+                            <i class="fas fa-tv text-primary me-2"></i>
+                            <strong>{{ series.series_title }}</strong>
+                            {% set episode_count = series.seasons.values() | map(attribute='episodes') | map('length') | sum %}
+                            <span class="badge bg-danger ms-2">{{ episode_count }} episode{{ 's' if episode_count != 1 else '' }}</span>
+                        </div>
+                        <div class="me-3" onclick="event.stopPropagation();">
+                            <button class="btn btn-sm btn-success me-1" 
+                                    onclick="approveSeries({{ series.series_id }})">
+                                <i class="fas fa-check"></i> Approve All
+                            </button>
+                            <button class="btn btn-sm btn-secondary" 
+                                    onclick="rejectSeries({{ series.series_id }})">
+                                <i class="fas fa-times"></i> Reject All
+                            </button>
+                        </div>
+                    </div>
+                </button>
+            </h2>
+            <div id="collapse-{{ series.series_id }}" 
+                 class="accordion-collapse collapse" 
+                 aria-labelledby="heading-{{ series.series_id }}"
+                 data-bs-parent="#pendingDeletionsAccordion">
+                <div class="accordion-body">
+                    {% for season_num, season_data in series.seasons.items() | sort %}
+                    <div class="season-group mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="mb-0">
+                                <i class="fas fa-folder-open text-info me-2"></i>
+                                Season {{ season_data.season_number }}
+                                <span class="badge bg-info ms-2">{{ season_data.episodes | length }} episode{{ 's' if season_data.episodes | length != 1 else '' }}</span>
+                            </h5>
+                            <div>
+                                <button class="btn btn-sm btn-success me-1" 
+                                        onclick="approveSeason({{ series.series_id }}, {{ season_data.season_number }})">
+                                    <i class="fas fa-check"></i> Approve Season
+                                </button>
+                                <button class="btn btn-sm btn-secondary" 
+                                        onclick="rejectSeason({{ series.series_id }}, {{ season_data.season_number }})">
+                                    <i class="fas fa-times"></i> Reject Season
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Episodes Table -->
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;">
+                                            <input type="checkbox" class="season-checkbox" 
+                                                   data-series="{{ series.series_id }}" 
+                                                   data-season="{{ season_data.season_number }}"
+                                                   onchange="toggleSeason(this)">
+                                        </th>
+                                        <th>Episode</th>
+                                        <th>Title</th>
+                                        <th>Reason</th>
+                                        <th>Rule</th>
+                                        <th>Date Source</th>
+                                        <th>Size</th>
+                                        <th style="width: 120px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for episode in season_data.episodes | sort(attribute='episode_number') %}
+                                    <tr>
+                                        <td>
+                                            <input type="checkbox" class="episode-checkbox" 
+                                                   data-episode-id="{{ episode.episode_id }}"
+                                                   data-series="{{ series.series_id }}"
+                                                   data-season="{{ season_data.season_number }}"
+                                                   onchange="updateSelectedCount()">
+                                        </td>
+                                        <td><strong>E{{ '%02d' | format(episode.episode_number) }}</strong></td>
+                                        <td>{{ episode.title }}</td>
+                                        <td>
+                                            <span class="badge 
+                                                {% if 'Grace Period' in episode.reason %}bg-warning
+                                                {% elif 'Keep Rule' in episode.reason %}bg-info
+                                                {% elif 'Dormant' in episode.reason %}bg-secondary
+                                                {% else %}bg-primary{% endif %}">
+                                                {{ episode.reason }}
+                                            </span>
+                                        </td>
+                                        <td><code>{{ episode.rule_name }}</code></td>
+                                        <td>
+                                            <small>
+                                                {% if episode.date_source == 'Tautulli' %}
+                                                <i class="fas fa-chart-line text-success" title="Tautulli Watch History"></i>
+                                                {% else %}
+                                                <i class="fas fa-calendar text-muted" title="Sonarr Air Date"></i>
+                                                {% endif %}
+                                                {{ episode.date_source }}: {{ episode.date_value }}
+                                            </small>
+                                        </td>
+                                        <td><small>{{ episode.file_size_mb }} MB</small></td>
+                                        <td>
+                                            <button class="btn btn-xs btn-success me-1" 
+                                                    onclick="approveEpisode({{ episode.episode_id }})"
+                                                    title="Approve deletion">
+                                                <i class="fas fa-check"></i>
+                                            </button>
+                                            <button class="btn btn-xs btn-secondary" 
+                                                    onclick="rejectEpisode({{ episode.episode_id }})"
+                                                    title="Reject deletion">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Bottom Bulk Actions -->
+    <div class="mt-3 mb-5">
+        <button class="btn btn-success" onclick="approveSelected()">
+            <i class="fas fa-check"></i> Approve Selected
+        </button>
+        <button class="btn btn-secondary" onclick="rejectSelected()">
+            <i class="fas fa-times"></i> Reject Selected
+        </button>
+    </div>
+
+    {% else %}
+    <!-- No Pending Deletions -->
+    <div class="alert alert-success text-center py-5">
+        <i class="fas fa-check-circle fa-3x mb-3"></i>
+        <h4>No Pending Deletions</h4>
+        <p class="mb-0">All cleanup operations are up to date. New pending deletions will appear here after the next cleanup run.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function updateSelectedCount() {
+    const checked = document.querySelectorAll('.episode-checkbox:checked').length;
+    document.getElementById('selectedCount').textContent = `${checked} selected`;
+}
+
+function toggleSeason(checkbox) {
+    const series = checkbox.dataset.series;
+    const season = checkbox.dataset.season;
+    const episodeCheckboxes = document.querySelectorAll(
+        `.episode-checkbox[data-series="${series}"][data-season="${season}"]`
+    );
+    episodeCheckboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    updateSelectedCount();
+}
+
+function getSelectedEpisodes() {
+    const checkboxes = document.querySelectorAll('.episode-checkbox:checked');
+    return Array.from(checkboxes).map(cb => parseInt(cb.dataset.episodeId));
+}
+
+function approveSelected() {
+    const episodes = getSelectedEpisodes();
+    if (episodes.length === 0) {
+        alert('Please select episodes to approve');
+        return;
+    }
+    if (confirm(`Approve deletion of ${episodes.length} episode(s)? This will permanently delete them.`)) {
+        approveEpisodes(episodes);
+    }
+}
+
+function rejectSelected() {
+    const episodes = getSelectedEpisodes();
+    if (episodes.length === 0) {
+        alert('Please select episodes to reject');
+        return;
+    }
+    if (confirm(`Reject deletion of ${episodes.length} episode(s)? They won't be shown again for 30 days.`)) {
+        rejectEpisodes(episodes);
+    }
+}
+
+function approveEpisode(episodeId) {
+    if (confirm('Approve deletion of this episode? This will permanently delete it.')) {
+        approveEpisodes([episodeId]);
+    }
+}
+
+function rejectEpisode(episodeId) {
+    if (confirm('Reject deletion of this episode? It won\'t be shown again for 30 days.')) {
+        rejectEpisodes([episodeId]);
+    }
+}
+
+function approveSeries(seriesId) {
+    fetch(`/pending-deletions/series/${seriesId}/episodes`)
+        .then(r => r.json())
+        .then(data => {
+            if (confirm(`Approve deletion of all ${data.episode_ids.length} episodes in this series? This will permanently delete them.`)) {
+                approveEpisodes(data.episode_ids);
+            }
+        });
+}
+
+function rejectSeries(seriesId) {
+    fetch(`/pending-deletions/series/${seriesId}/episodes`)
+        .then(r => r.json())
+        .then(data => {
+            if (confirm(`Reject deletion of all ${data.episode_ids.length} episodes in this series? They won't be shown again for 30 days.`)) {
+                rejectEpisodes(data.episode_ids);
+            }
+        });
+}
+
+function approveSeason(seriesId, seasonNum) {
+    fetch(`/pending-deletions/series/${seriesId}/season/${seasonNum}/episodes`)
+        .then(r => r.json())
+        .then(data => {
+            if (confirm(`Approve deletion of all ${data.episode_ids.length} episodes in this season? This will permanently delete them.`)) {
+                approveEpisodes(data.episode_ids);
+            }
+        });
+}
+
+function rejectSeason(seriesId, seasonNum) {
+    fetch(`/pending-deletions/series/${seriesId}/season/${seasonNum}/episodes`)
+        .then(r => r.json())
+        .then(data => {
+            if (confirm(`Reject deletion of all ${data.episode_ids.length} episodes in this season? They won't be shown again for 30 days.`)) {
+                rejectEpisodes(data.episode_ids);
+            }
+        });
+}
+
+function approveEpisodes(episodeIds) {
+    fetch('/pending-deletions/approve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({episode_ids: episodeIds})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Successfully deleted ${data.deleted_count} episode(s)`);
+            location.reload();
+        } else {
+            alert('Error: ' + (data.errors || []).join(', '));
+        }
+    })
+    .catch(err => {
+        alert('Error approving deletions: ' + err);
+    });
+}
+
+function rejectEpisodes(episodeIds) {
+    fetch('/pending-deletions/reject', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({episode_ids: episodeIds})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Rejected ${data.rejected_count} episode(s) - won't be shown again for 30 days`);
+            location.reload();
+        } else {
+            alert('Error rejecting deletions');
+        }
+    })
+    .catch(err => {
+        alert('Error rejecting deletions: ' + err);
+    });
+}
+</script>
+
+<style>
+.btn-xs {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.75rem;
+}
+
+.season-group {
+    border-left: 3px solid #0dcaf0;
+    padding-left: 15px;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: #f8f9fa;
+}
+</style>
+{% endblock %}
