@@ -337,7 +337,18 @@
             <h4 class="mb-0"><i class="fas fa-clock me-2"></i>Grace Periods & Time-Based Cleanup</h4>
         </div>
         <div class="card-body">
-            <p>Grace periods protect your content from immediate deletion, giving shows a chance to be watched.</p>
+            <p>Grace periods free up space from inactive shows while preserving your position so you can always resume where you left off.</p>
+            
+            <div class="alert alert-info">
+                <h6><i class="fas fa-bookmark me-2"></i>Bookmark Preservation System</h6>
+                <p class="mb-0">Grace periods now keep "bookmarks" so you never lose your place! Even after cleanup, you keep:
+                <ul class="mb-0">
+                    <li><strong>Last watched episode</strong> - Your "finished watching" bookmark</li>
+                    <li><strong>Next unwatched episode</strong> - Your "resume here" bookmark</li>
+                </ul>
+                This means you can pick up exactly where you left off, even months later.
+                </p>
+            </div>
             
             <div class="row mt-3">
                 <div class="col-md-4">
@@ -346,13 +357,15 @@
                             <h6><i class="fas fa-eye text-success me-2"></i>Grace Watched</h6>
                         </div>
                         <div class="card-body">
-                            <p><strong>What:</strong> Keep watched episodes for X days after last activity</p>
-                            <p><strong>When it expires:</strong> Deletes episodes you've already watched</p>
-                            <p><strong>Reset by:</strong> Watching ANY episode in the series</p>
+                            <p><strong>What:</strong> Deletes ALL watched episodes after X days of inactivity</p>
+                            <p><strong>Exception:</strong> Keeps most recent watched episode (bookmark)</p>
+                            <p><strong>Overrides:</strong> Keep settings (independent cleanup)</p>
+                            <p><strong>Auto-resume:</strong> Checks for new episodes during cleanup</p>
                             <p><strong>Example:</strong> Grace Watched: 14 days<br>
-                            → Watch S2E5<br>
+                            → Watch S2E1-E5<br>
                             → 14 days later (no activity)<br>
-                            → Delete S2E5</p>
+                            → Delete S2E1-E4, keep S2E5 (bookmark)<br>
+                            → If S2E6 exists → auto-monitor it</p>
                         </div>
                     </div>
                 </div>
@@ -363,13 +376,15 @@
                             <h6><i class="fas fa-forward text-warning me-2"></i>Grace Unwatched</h6>
                         </div>
                         <div class="card-body">
-                            <p><strong>What:</strong> Watch deadline for new episodes</p>
-                            <p><strong>When it expires:</strong> Deletes episodes you haven't watched yet</p>
-                            <p><strong>Reset by:</strong> Watching ANY episode in the series</p>
+                            <p><strong>What:</strong> Deletes unwatched episodes after X days (watch deadline)</p>
+                            <p><strong>Exception:</strong> Keeps next unwatched episode (resume point)</p>
+                            <p><strong>Overrides:</strong> Get settings (independent cleanup)</p>
+                            <p><strong>Use case:</strong> Clear backlog while keeping position</p>
                             <p><strong>Example:</strong> Grace Unwatched: 10 days<br>
-                            → Get S2E6<br>
-                            → 10 days later (not watched)<br>
-                            → Delete S2E6</p>
+                            → Got S2E6, S2E7, S2E8<br>
+                            → 10 days later (didn't watch any)<br>
+                            → Delete S2E7, S2E8<br>
+                            → Keep S2E6 (next episode bookmark)</p>
                         </div>
                     </div>
                 </div>
@@ -383,21 +398,80 @@
                             <p><strong>What:</strong> Nuclear option for abandoned shows</p>
                             <p><strong>When it expires:</strong> Deletes EVERYTHING (all episodes)</p>
                             <p><strong>Reset by:</strong> Watching ANY episode in the series</p>
+                            <p><strong>Use case:</strong> Final cleanup for shows you'll never return to</p>
                             <p><strong>Example:</strong> Dormant: 60 days<br>
                             → No activity for 60 days<br>
-                            → Delete entire show</p>
+                            → Delete entire show (no bookmarks)</p>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div class="alert alert-success mt-3">
-                <h6><i class="fas fa-star me-2"></i>NEW: Grace Period Scope</h6>
+                <h6><i class="fas fa-lightbulb me-2"></i>How Grace Periods Work Together</h6>
+                <p><strong>Grace Watched + Grace Unwatched:</strong> Maximum space savings while preserving position</p>
+                <ul class="mb-0">
+                    <li>After inactivity, you're left with just 2 episodes: last watched + next unwatched</li>
+                    <li>Both bookmarks preserved automatically</li>
+                    <li>Can resume anytime, even months later</li>
+                    <li>Cleanup checks for new episodes during grace watched cleanup</li>
+                </ul>
+            </div>
+            
+            <div class="alert alert-warning mt-3">
+                <h6><i class="fas fa-tv me-2"></i>Mid-Season Breaks Handled Automatically</h6>
+                <p class="mb-0">Grace Watched includes smart detection: When cleanup runs, it simulates watching your last episode to check for new ones. If new episodes exist in Sonarr, they're automatically monitored/searched based on your Get rule. No manual intervention needed!</p>
+            </div>
+
+            <div class="alert alert-info mt-3">
+                <h6><i class="fas fa-star me-2"></i>Grace Period Scope</h6>
                 <p>Choose how grace timers are tracked:</p>
                 <ul class="mb-0">
                     <li><strong>Per Series (default):</strong> One timer for entire show - watching ANY episode resets grace for ALL episodes</li>
                     <li><strong>Per Season:</strong> Independent timers per season - perfect for multi-viewer households where different people watch different seasons</li>
                 </ul>
+            </div>
+
+            <div class="card bg-light mt-3">
+                <div class="card-body">
+                    <h6><i class="fas fa-question-circle me-2"></i>Grace vs Keep vs Dormant</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead>
+                            <tr>
+                                <th>Setting</th>
+                                <th>When It Acts</th>
+                                <th>What It Deletes</th>
+                                <th>Preserves Position?</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Keep</strong></td>
+                                <td>Immediately after watching</td>
+                                <td>Based on Keep rule (real-time)</td>
+                                <td>Yes (last_season/episode)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Grace Watched</strong></td>
+                                <td>After X days of inactivity</td>
+                                <td>Watched episodes (overrides Keep)</td>
+                                <td>Yes (keeps 1 watched bookmark)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Grace Unwatched</strong></td>
+                                <td>After X days of inactivity</td>
+                                <td>Unwatched episodes (overrides Get)</td>
+                                <td>Yes (keeps 1 unwatched bookmark)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Dormant</strong></td>
+                                <td>After X days of inactivity</td>
+                                <td>Everything (nuclear option)</td>
+                                <td>No (complete removal)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

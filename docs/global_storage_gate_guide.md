@@ -30,17 +30,45 @@ Automatic cleanup based on time and viewing activity. **Completely optional** - 
 
 **All optional - use any combination:**
 
-### Grace Watched (Collection Rotation)
+### Grace Watched (Override Keep)
 
-- **Days before kept episodes expire**
-- Example: `7` = Your watched episodes expire after 7 days of no series activity
-- Use for: Making room for new content
+- **What it does:** Deletes ALL watched episodes after X days of inactivity (ignores Keep settings)
+- **Exception:** Keeps the most recent watched episode as a "bookmark"
+- **Auto-resume:** Simulates watching the bookmark during cleanup to trigger Get rule for new episodes
+- **Use case:** Free up space from watched content while preserving your position
 
-### Grace Unwatched (Watch Deadlines)
+**Example:**
+  Grace Watched: 10 days
+  Last watched: S2E6 (2 weeks ago)
 
-- **Days before unwatched episodes expire**
-- Example: `14` = New episodes have 2 weeks to be watched or deleted
-- Use for: Staying current, preventing backlog
+  Result after cleanup:
+
+  S2E1-E5 deleted
+  S2E6 kept (bookmark)
+  If S2E7 exists → Get rule monitors/searches it automatically
+
+### Grace Unwatched (Watch Deadline)
+
+- **What it does:** Deletes unwatched episodes after X days if not watched
+- **Exception:** Always keeps at least 1 unwatched episode (your next episode)
+- **Use case:** Clear backlog while keeping your resume point
+
+**Example:**
+  Get: 3 episodes
+  Grace Unwatched: 14 days
+  Got: S1E11, S1E12, S1E13 (2 weeks ago, didn't watch any)
+
+  Result after cleanup:
+
+  S1E12, S1E13 deleted
+  S1E11 kept (next episode = resume point)
+
+### Important Notes:
+
+- **Mid-season breaks:** Grace Watched handles these automatically! When cleanup runs, it checks for new episodes and monitors them if available.
+- **Both grace periods preserve bookmarks:** You can always pick up where you left off
+- **Independent of Keep:** Grace periods now ignore Keep settings completely
+- **Works together:** Use both to maximize space savings while maintaining position
 
 ### Grace Period Scope (New!)
 

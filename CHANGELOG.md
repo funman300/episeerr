@@ -8,6 +8,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [Released]
+## [2.9.0] - 2026-01-16
+
+### Changed - BREAKING
+- **Grace Periods now override Keep/Get settings** for maximum flexibility
+  - Grace Watched: Deletes ALL watched episodes after inactivity (keeps position in config only)
+  - Grace Unwatched: Deletes unwatched episodes after deadline (keeps next episode file as resume point)
+  - Both preserve your position so you can resume anytime
+
+### Added
+- **Position preservation**: Grace Watched keeps last_season/last_episode in config (no file kept)
+- **Resume point file**: Grace Unwatched keeps the next unwatched episode file on disk
+- **Auto-resume for mid-season breaks**: Grace Watched simulates watch event during cleanup to check for new episodes
+- **Smart cleanup**: When cleanup runs, checks if new episodes exist and monitors them automatically
+
+### Fixed
+- Grace periods now truly independent of Keep/Get settings
+- Mid-season breaks no longer lose your position
+- Can resume shows months later without manual intervention
+
+### Technical Details
+- Grace Watched: Deletes all watched files, simulates last watched episode during cleanup
+- Grace Unwatched: Sorts unwatched episodes, keeps first one, deletes rest
+- Position data persists in config even when episode files are deleted
+- Cleanup simulation triggers Get rule to check for new episodes in Sonarr
+
+### Migration Notes
+- Existing grace periods will use new behavior automatically
+- No config changes needed
+- Test with dry run first to see new deletion patterns
+- After grace cleanup: watched files deleted (position kept), 1 unwatched file remains
+
 ## [2.8.0] - 2026-01-15
 
 ### Added
