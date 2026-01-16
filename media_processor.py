@@ -2027,7 +2027,6 @@ def run_grace_unwatched_cleanup():
     except Exception as e:
         cleanup_logger.error(f"Error in grace_unwatched cleanup: {str(e)}")
         return 0
-
 def run_dormant_cleanup():
     """
     Process dormant cleanup with optional storage gate.
