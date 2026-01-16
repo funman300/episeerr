@@ -1525,8 +1525,7 @@ def delete_episodes_in_sonarr_with_logging(
     reason=f"Grace Watched ({grace_watched_days}d) Override Keep - Season {season_num}",
     date_source="Tautulli",
     date_value=activity_date,
-    rule_name=rule_name
-:
+    rule_name=rule_name):
     """Delete episodes with detailed logging."""
     if not episode_file_ids:
         return
