@@ -1612,10 +1612,10 @@ def run_grace_watched_cleanup():
     """
     Check all series for grace_watched cleanup based on activity_date.
     
-    CORRECTED BEHAVIOR:
+    FINAL CORRECTED BEHAVIOR:
     - Deletes ALL watched episode files (including the last watched one)
-    - Keeps position in config (last_season, last_episode) as "bookmark"
-    - Simulates watch event using config data to check for new episodes
+    - Keeps position in config (last_season, last_episode) as bookmark
+    - Applies Get rule directly to check for next episodes (NO simulation, NO activity update)
     
     Supports both per-series and per-season tracking based on grace_scope setting.
     """
@@ -1644,6 +1644,10 @@ def run_grace_watched_cleanup():
             
             rule_dry_run = rule.get('dry_run', False)
             is_dry_run = global_dry_run or rule_dry_run
+            
+            # Parse Get rule settings
+            get_type = rule.get('get_type', 'episodes')
+            get_count = rule.get('get_count', 1)
             
             # Check each series in this rule
             series_dict = rule.get('series', {})
@@ -1688,7 +1692,6 @@ def run_grace_watched_cleanup():
                                 # FALLBACK: Use series-level data if per-season missing (legacy support)
                                 if not season_activity:
                                     series_last_season = series_data.get('last_season')
-                                    # Only use series-level data if this is the last watched season
                                     if series_last_season == season_num:
                                         season_activity = series_data.get('activity_date')
                                         last_episode = series_data.get('last_episode', 1)
@@ -1707,12 +1710,10 @@ def run_grace_watched_cleanup():
                                     cleanup_logger.info(f"🟡 {series_title} S{season_num}: Inactive {days_since_activity:.1f}d > {grace_watched_days}d")
                                     cleanup_logger.info(f"   📺 Last watched: S{season_num}E{last_episode}")
                                     
-                                    # CORRECTED: Delete ALL watched episodes (no bookmark file kept)
+                                    # Delete ALL watched episodes (no file kept)
                                     watched_episodes = []
-                                    
                                     for episode in season_episodes:
                                         episode_num = episode.get('episodeNumber', 0)
-                                        # Delete everything up to and including last watched
                                         if episode_num <= last_episode:
                                             watched_episodes.append(episode)
                                     
@@ -1738,18 +1739,29 @@ def run_grace_watched_cleanup():
                                     else:
                                         cleanup_logger.info(f"   ⏭️ No watched episode files to delete")
                                     
-                                    # Simulate watch event to trigger Get rule
-                                    cleanup_logger.info(f"   ⚙️ Simulating watch event for S{season_num}E{last_episode}")
+                                    # Apply Get rule directly (NO simulation, NO activity update)
+                                    cleanup_logger.info(f"   🔍 Checking for next episodes per Get rule ({get_type}: {get_count})")
                                     try:
-                                        process_episodes_for_webhook(
-                                            series_id=series_id,
-                                            season_number=season_num,
-                                            episode_number=last_episode,
-                                            rule=rule,
-                                            series_title=series_title
+                                        # Fetch next episodes based on Get rule
+                                        next_episode_ids = fetch_next_episodes_dropdown(
+                                            series_id, season_num, last_episode, get_type, get_count
                                         )
+                                        
+                                        if next_episode_ids:
+                                            # Monitor or search them (based on action_option)
+                                            monitor_or_search_episodes(
+                                                next_episode_ids, 
+                                                rule.get('action_option', 'monitor'), 
+                                                series_id, 
+                                                series_title, 
+                                                get_type
+                                            )
+                                            cleanup_logger.info(f"   ✅ Get rule applied: {len(next_episode_ids)} episodes monitored/searched")
+                                        else:
+                                            cleanup_logger.info(f"   ⏭️ No next episodes available yet")
+                                            
                                     except Exception as e:
-                                        cleanup_logger.error(f"   ❌ Simulation failed: {str(e)}")
+                                        cleanup_logger.error(f"   ❌ Get rule check failed: {str(e)}")
                                     
                                 else:
                                     cleanup_logger.debug(f"🛡️ {series_title} S{season_num}: Protected - {days_since_activity:.1f}d since activity")
@@ -1760,19 +1772,17 @@ def run_grace_watched_cleanup():
                         # ============================================================
                         # PER-SERIES TRACKING (default/legacy behavior)
                         # ============================================================
-                        # Get complete activity data from hierarchy
                         result = get_activity_date_with_hierarchy(series_id, series_title, return_complete=True)
                         if isinstance(result, tuple) and len(result) == 3:
                             activity_date, last_season, last_episode = result
                         else:
                             activity_date = result
-                            last_season, last_episode = 1, 1  # Fallback
+                            last_season, last_episode = 1, 1
                         
                         if not activity_date:
                             cleanup_logger.debug(f"⏭️ {series_title}: No activity date from any source, skipping")
                             continue
                         
-                        # Check if grace period has expired
                         days_since_activity = (current_time - activity_date) / (24 * 60 * 60)
                         
                         if days_since_activity > grace_watched_days:
@@ -1782,9 +1792,8 @@ def run_grace_watched_cleanup():
                             # Get all episodes for this series
                             all_episodes = fetch_all_episodes(series_id)
                             
-                            # CORRECTED: Delete ALL watched episodes (no bookmark file kept)
+                            # Delete ALL watched episodes (no file kept)
                             watched_episodes = []
-                            
                             for episode in all_episodes:
                                 if not episode.get('hasFile'):
                                     continue
@@ -1792,12 +1801,10 @@ def run_grace_watched_cleanup():
                                 season_num = episode.get('seasonNumber', 0)
                                 episode_num = episode.get('episodeNumber', 0)
                                 
-                                # Delete everything up to and including last watched
                                 if (season_num < last_season or 
                                     (season_num == last_season and episode_num <= last_episode)):
                                     watched_episodes.append(episode)
                             
-                            # Get episode file IDs for deletion
                             episode_file_ids = [ep['episodeFileId'] for ep in watched_episodes if 'episodeFileId' in ep]
                             
                             if episode_file_ids:
@@ -1820,18 +1827,29 @@ def run_grace_watched_cleanup():
                             else:
                                 cleanup_logger.info(f"   ⏭️ No watched episode files to delete")
                             
-                            # Simulate watch event to trigger Get rule
-                            cleanup_logger.info(f"   ⚙️ Simulating watch event for S{last_season}E{last_episode}")
+                            # Apply Get rule directly (NO simulation, NO activity update)
+                            cleanup_logger.info(f"   🔍 Checking for next episodes per Get rule ({get_type}: {get_count})")
                             try:
-                                process_episodes_for_webhook(
-                                    series_id=series_id,
-                                    season_number=last_season,
-                                    episode_number=last_episode,
-                                    rule=rule,
-                                    series_title=series_title
+                                # Fetch next episodes based on Get rule
+                                next_episode_ids = fetch_next_episodes_dropdown(
+                                    series_id, last_season, last_episode, get_type, get_count
                                 )
+                                
+                                if next_episode_ids:
+                                    # Monitor or search them (based on action_option)
+                                    monitor_or_search_episodes(
+                                        next_episode_ids, 
+                                        rule.get('action_option', 'monitor'), 
+                                        series_id, 
+                                        series_title, 
+                                        get_type
+                                    )
+                                    cleanup_logger.info(f"   ✅ Get rule applied: {len(next_episode_ids)} episodes monitored/searched")
+                                else:
+                                    cleanup_logger.info(f"   ⏭️ No next episodes available yet")
+                                    
                             except Exception as e:
-                                cleanup_logger.error(f"   ❌ Simulation failed: {str(e)}")
+                                cleanup_logger.error(f"   ❌ Get rule check failed: {str(e)}")
                         else:
                             cleanup_logger.debug(f"🛡️ {series_title}: Protected - only {days_since_activity:.1f} days since activity")
                         
