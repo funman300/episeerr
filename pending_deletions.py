@@ -1,12 +1,17 @@
 """
-Pending Deletions Management System
+Pending Deletions Management System - v2.9.0
 Handles queuing, approval, and rejection of episode deletions
+
+Changes in v2.9.0:
+- Added queue_deletion() wrapper for simpler API
+- Batched deletions by series for efficiency (one delete command per series instead of per episode)
 """
 import os
 import json
 import logging
 from datetime import datetime, timedelta
 from threading import Lock
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +88,50 @@ def is_episode_rejected(episode_id):
         return str(episode_id) in cache
 
 
+def queue_deletion(series_id, series_title, season_number, episode_number, episode_id, 
+                   episode_file_id, episode_title, file_size, 
+                   reason, date_source, date_value, rule_name):
+    """
+    NEW v2.9.0: Simplified wrapper for queueing deletions
+    
+    Args:
+        series_id: Sonarr series ID
+        series_title: Name of the series
+        season_number: Season number
+        episode_number: Episode number
+        episode_id: Sonarr episode ID
+        episode_file_id: Sonarr episode file ID
+        episode_title: Episode title
+        file_size: File size in bytes
+        reason: Why this episode is marked for deletion
+        date_source: Where the date came from
+        date_value: The actual date used for decision
+        rule_name: Name of the rule that triggered this
+    """
+    # Build minimal episode object
+    episode = {
+        'id': episode_id,
+        'seriesId': series_id,
+        'seasonNumber': season_number,
+        'episodeNumber': episode_number,
+        'title': episode_title,
+        'series': {'title': series_title},
+        'episodeFile': {
+            'id': episode_file_id,
+            'size': file_size
+        }
+    }
+    
+    # Use existing add function
+    add_to_pending_deletions(episode, reason, date_source, date_value, rule_name)
+
+
 def add_to_pending_deletions(episode, reason, date_source, date_value, rule_name):
     """
     Add an episode to pending deletions queue
     
     Args:
-        episode: Episode data from Sonarr
+        episode: Episode data from Sonarr (or minimal object from queue_deletion)
         reason: Why this episode is marked for deletion (e.g., "Grace Period", "Keep Rule")
         date_source: Where the date came from ("Tautulli" or "Sonarr Air Date")
         date_value: The actual date used for decision
@@ -176,7 +219,7 @@ def get_pending_deletions_summary():
 
 def approve_deletions(episode_ids, sonarr_delete_func):
     """
-    Approve and execute deletions for specified episodes
+    NEW v2.9.0: Approve and execute deletions with BATCHED DELETIONS BY SERIES
     
     Args:
         episode_ids: List of episode IDs to delete
@@ -190,32 +233,43 @@ def approve_deletions(episode_ids, sonarr_delete_func):
         deleted_count = 0
         errors = []
         
-        episodes_to_delete = []
+        # Group episodes by series for batched deletion
+        episodes_by_series = defaultdict(list)
         
-        # Find all episodes to delete and collect them
+        # Find all episodes to delete and group by series
         for series in pending_list:
+            series_title = series['series_title']
             for season_data in list(series['seasons'].values()):
                 for episode in list(season_data['episodes']):
                     if episode['episode_id'] in episode_ids:
-                        episodes_to_delete.append(episode)
+                        episodes_by_series[series_title].append(episode)
         
-        # Delete episodes
-        for episode in episodes_to_delete:
+        # Delete episodes in batches per series (MORE EFFICIENT!)
+        for series_title, episodes in episodes_by_series.items():
             try:
-                episode_data = episode['episode_data']
-                episode_file_id = episode_data.get('episodeFile', {}).get('id')
-                series_title = episode_data['series']['title']
+                # Collect all episode file IDs for this series
+                episode_file_ids = []
+                for episode in episodes:
+                    episode_data = episode['episode_data']
+                    episode_file_id = episode_data.get('episodeFile', {}).get('id')
+                    if episode_file_id:
+                        episode_file_ids.append(episode_file_id)
+                    else:
+                        errors.append(f"No file ID for episode {episode['episode_id']}")
                 
-                if episode_file_id:
-                    # Call the actual deletion function
-                    sonarr_delete_func([episode_file_id], False, series_title)
-                    deleted_count += 1
-                    logger.info(f"✓ Deleted: {series_title} S{episode_data['seasonNumber']:02d}E{episode_data['episodeNumber']:02d}")
-                else:
-                    errors.append(f"No file ID for episode {episode['episode_id']}")
+                if episode_file_ids:
+                    # ONE DELETE CALL FOR ALL EPISODES IN THIS SERIES
+                    logger.info(f"Deleting {len(episode_file_ids)} episodes from {series_title} in batch")
+                    sonarr_delete_func(episode_file_ids, False, series_title)
+                    deleted_count += len(episode_file_ids)
+                    
+                    # Log individual episodes
+                    for episode in episodes:
+                        episode_data = episode['episode_data']
+                        logger.info(f"✓ Deleted: {series_title} S{episode_data['seasonNumber']:02d}E{episode_data['episodeNumber']:02d}")
                     
             except Exception as e:
-                error_msg = f"Failed to delete episode {episode['episode_id']}: {str(e)}"
+                error_msg = f"Failed to delete episodes from {series_title}: {str(e)}"
                 errors.append(error_msg)
                 logger.error(error_msg)
         
