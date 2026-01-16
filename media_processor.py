@@ -1522,21 +1522,66 @@ def delete_episodes_in_sonarr_with_logging(
     episode_file_ids, 
     is_dry_run, 
     series_title,
-    reason=f"Grace Watched ({grace_watched_days}d) Override Keep - Season {season_num}",
-    date_source="Tautulli",
-    date_value=activity_date,
-    rule_name=rule_name)
-    """Delete episodes with detailed logging."""
+    reason=None,        # ✅ Default to None, caller provides actual value
+    date_source=None,   # ✅ Default to None, caller provides actual value
+    date_value=None,    # ✅ Default to None, caller provides actual value
+    rule_name=None):    # ✅ Default to None, caller provides actual value
+    """
+    Delete episodes with detailed logging for pending deletions system.
+    
+    Args:
+        episode_file_ids: List of Sonarr episode file IDs to delete
+        is_dry_run: If True, queue for approval instead of deleting
+        series_title: Name of the series
+        reason: Explanation for deletion (e.g., "Grace Period - Watched (10 days)")
+        date_source: Where the date came from (e.g., "Tautulli", "Sonarr")
+        date_value: The date used in decision (e.g., "2025-06-21")
+        rule_name: Name of the rule triggering deletion
+    """
     if not episode_file_ids:
         return
-
-    if dry_run:
-        print(f"🔍 DRY RUN: Would delete {len(episode_file_ids)} episode files from {series_title}")
-        print(f"🔍 DRY RUN: Episode file IDs: {episode_file_ids[:5]}{'...' if len(episode_file_ids) > 5 else ''}")
+    
+    # Import here to avoid circular imports
+    from pending_deletions import queue_deletion
+    
+    if is_dry_run:
+        # Queue each episode for approval
+        cleanup_logger.info(f"🔍 DRY RUN: Queueing {len(episode_file_ids)} episodes for approval")
+        
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        
+        for episode_file_id in episode_file_ids:
+            try:
+                # Get episode details
+                ep_url = f"{SONARR_URL}/api/v3/episodefile/{episode_file_id}"
+                ep_response = requests.get(ep_url, headers=headers)
+                
+                if ep_response.ok:
+                    ep_data = ep_response.json()
+                    
+                    # Queue for deletion approval
+                    queue_deletion(
+                        series_id=ep_data.get('seriesId'),
+                        season_number=ep_data.get('seasonNumber'),
+                        episode_number=ep_data.get('episodeNumber', 0),
+                        episode_file_id=episode_file_id,
+                        reason=reason or "Cleanup",
+                        date_source=date_source or "Unknown",
+                        date_value=date_value or "N/A",
+                        rule_name=rule_name or "Unknown",
+                        file_size=ep_data.get('size', 0)
+                    )
+                else:
+                    cleanup_logger.warning(f"Could not fetch details for episode file {episode_file_id}")
+                    
+            except Exception as e:
+                cleanup_logger.error(f"Error queueing episode {episode_file_id}: {str(e)}")
+        
+        cleanup_logger.info(f"✅ Queued {len(episode_file_ids)} episodes for approval")
         return
-
-    # Live deletion with detailed logging
-    print(f"🗑️  DELETING: {len(episode_file_ids)} episode files from {series_title}")
+    
+    # LIVE DELETION (dry_run = False)
+    cleanup_logger.info(f"🗑️  DELETING: {len(episode_file_ids)} episode files from {series_title}")
     
     headers = {'X-Api-Key': SONARR_API_KEY}
     successful_deletes = 0
@@ -1548,14 +1593,16 @@ def delete_episodes_in_sonarr_with_logging(
             response = requests.delete(url, headers=headers)
             response.raise_for_status()
             successful_deletes += 1
-            print(f"✅ Deleted episode file ID: {episode_file_id}")
+            cleanup_logger.info(f"✅ Deleted episode file ID: {episode_file_id}")
         except Exception as err:
             failed_deletes.append(episode_file_id)
-            print(f"❌ Failed to delete episode file {episode_file_id}: {err}")
-
-    print(f"📊 Deletion summary: {successful_deletes} successful, {len(failed_deletes)} failed")
+            cleanup_logger.error(f"❌ Failed to delete episode file {episode_file_id}: {err}")
+    
+    cleanup_logger.info(f"📊 Deletion summary: {successful_deletes} successful, {len(failed_deletes)} failed")
     if failed_deletes:
-        print(f"❌ Failed deletes: {failed_deletes}")
+        cleanup_logger.error(f"❌ Failed deletes: {failed_deletes}")
+
+
 
 # ============================================================================
 # CLEANUP FUNCTIONS - Your new simplified 3-function system

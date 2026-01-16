@@ -471,7 +471,25 @@ def get_pending_deletions_count():
         'size_gb': summary['total_size_gb']
     })
 # Add these routes to episeerr.py
-
+@app.route('/api/recent-cleanup-activity')
+def recent_cleanup_activity():
+    """Get recent cleanup activity for dashboard."""
+    try:
+        # Use the correct log path from environment or default
+        log_path = os.getenv('CLEANUP_LOG_PATH', '/app/logs/cleanup.log')
+        
+        if os.path.exists(log_path):
+            with open(log_path, 'r') as f:
+                lines = f.readlines()
+                # Get last 50 lines for context
+                recent_lines = lines[-50:] if len(lines) > 50 else lines
+                return jsonify({
+                    'success': True,
+                    'log_lines': [line.strip() for line in recent_lines]
+                })
+        return jsonify({'success': False, 'error': 'Log file not found'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 @app.route('/logs')
 def view_logs():
     """View and filter log files."""
