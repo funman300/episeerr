@@ -1611,9 +1611,12 @@ def delete_episodes_in_sonarr_with_logging(
 def run_grace_watched_cleanup():
     """
     Check all series for grace_watched cleanup based on activity_date.
-    If series inactive for X days, delete watched episodes (UP TO AND INCLUDING last watched).
-    NEW: Keeps most recent watched episode as bookmark, simulates watch event to trigger Get rule.
-    NEW: Falls back to series-level activity data when per-season data is missing (legacy support).
+    
+    CORRECTED BEHAVIOR:
+    - Deletes ALL watched episode files (including the last watched one)
+    - Keeps position in config (last_season, last_episode) as "bookmark"
+    - Simulates watch event using config data to check for new episodes
+    
     Supports both per-series and per-season tracking based on grace_scope setting.
     """
     try:
@@ -1704,24 +1707,20 @@ def run_grace_watched_cleanup():
                                     cleanup_logger.info(f"🟡 {series_title} S{season_num}: Inactive {days_since_activity:.1f}d > {grace_watched_days}d")
                                     cleanup_logger.info(f"   📺 Last watched: S{season_num}E{last_episode}")
                                     
-                                    # NEW: Separate bookmark from deletable episodes
+                                    # CORRECTED: Delete ALL watched episodes (no bookmark file kept)
                                     watched_episodes = []
-                                    bookmark_episode = None
                                     
                                     for episode in season_episodes:
                                         episode_num = episode.get('episodeNumber', 0)
+                                        # Delete everything up to and including last watched
                                         if episode_num <= last_episode:
-                                            # Is this THE most recent watched episode?
-                                            if episode_num == last_episode:
-                                                bookmark_episode = episode  # Keep this one
-                                            else:
-                                                watched_episodes.append(episode)  # Delete this one
+                                            watched_episodes.append(episode)
                                     
                                     episode_file_ids = [ep['episodeFileId'] for ep in watched_episodes if 'episodeFileId' in ep]
                                     
                                     if episode_file_ids:
-                                        cleanup_logger.info(f"   📊 Deleting {len(episode_file_ids)} watched episodes from S{season_num}")
-                                        cleanup_logger.info(f"   🔖 Keeping S{season_num}E{last_episode} as bookmark")
+                                        cleanup_logger.info(f"   📊 Deleting ALL {len(episode_file_ids)} watched episodes from S{season_num}")
+                                        cleanup_logger.info(f"   📝 Position bookmark kept in config: S{season_num}E{last_episode}")
                                         
                                         from datetime import datetime
                                         activity_date = datetime.fromtimestamp(season_activity).strftime('%Y-%m-%d')
@@ -1737,21 +1736,20 @@ def run_grace_watched_cleanup():
                                         )
                                         total_deleted += len(episode_file_ids)
                                     else:
-                                        cleanup_logger.info(f"   ⏭️ No deletable watched episodes (only bookmark remains)")
+                                        cleanup_logger.info(f"   ⏭️ No watched episode files to delete")
                                     
-                                    # NEW: Simulate watch event to trigger Get rule
-                                    if bookmark_episode or last_episode:
-                                        cleanup_logger.info(f"   ⚙️ Simulating watch event for S{season_num}E{last_episode}")
-                                        try:
-                                            process_episodes_for_webhook(
-                                                series_id=series_id,
-                                                season_number=season_num,
-                                                episode_number=last_episode,
-                                                rule=rule,
-                                                series_title=series_title
-                                            )
-                                        except Exception as e:
-                                            cleanup_logger.error(f"   ❌ Simulation failed: {str(e)}")
+                                    # Simulate watch event to trigger Get rule
+                                    cleanup_logger.info(f"   ⚙️ Simulating watch event for S{season_num}E{last_episode}")
+                                    try:
+                                        process_episodes_for_webhook(
+                                            series_id=series_id,
+                                            season_number=season_num,
+                                            episode_number=last_episode,
+                                            rule=rule,
+                                            series_title=series_title
+                                        )
+                                    except Exception as e:
+                                        cleanup_logger.error(f"   ❌ Simulation failed: {str(e)}")
                                     
                                 else:
                                     cleanup_logger.debug(f"🛡️ {series_title} S{season_num}: Protected - {days_since_activity:.1f}d since activity")
@@ -1784,9 +1782,8 @@ def run_grace_watched_cleanup():
                             # Get all episodes for this series
                             all_episodes = fetch_all_episodes(series_id)
                             
-                            # NEW: Separate bookmark from deletable episodes
+                            # CORRECTED: Delete ALL watched episodes (no bookmark file kept)
                             watched_episodes = []
-                            bookmark_episode = None
                             
                             for episode in all_episodes:
                                 if not episode.get('hasFile'):
@@ -1795,22 +1792,17 @@ def run_grace_watched_cleanup():
                                 season_num = episode.get('seasonNumber', 0)
                                 episode_num = episode.get('episodeNumber', 0)
                                 
-                                # Episode is "watched" if it's at or before the last watched position
+                                # Delete everything up to and including last watched
                                 if (season_num < last_season or 
                                     (season_num == last_season and episode_num <= last_episode)):
-                                    
-                                    # Is this THE most recent watched episode?
-                                    if season_num == last_season and episode_num == last_episode:
-                                        bookmark_episode = episode  # Keep this one
-                                    else:
-                                        watched_episodes.append(episode)  # Delete this one
+                                    watched_episodes.append(episode)
                             
                             # Get episode file IDs for deletion
                             episode_file_ids = [ep['episodeFileId'] for ep in watched_episodes if 'episodeFileId' in ep]
                             
                             if episode_file_ids:
-                                cleanup_logger.info(f"   📊 Deleting {len(episode_file_ids)} watched episodes")
-                                cleanup_logger.info(f"   🔖 Keeping S{last_season}E{last_episode} as bookmark")
+                                cleanup_logger.info(f"   📊 Deleting ALL {len(episode_file_ids)} watched episodes")
+                                cleanup_logger.info(f"   📝 Position bookmark kept in config: S{last_season}E{last_episode}")
                                 
                                 from datetime import datetime
                                 activity_date_str = datetime.fromtimestamp(activity_date).strftime('%Y-%m-%d')
@@ -1826,21 +1818,20 @@ def run_grace_watched_cleanup():
                                 )
                                 total_deleted += len(episode_file_ids)
                             else:
-                                cleanup_logger.info(f"   ⏭️ No deletable watched episodes (only bookmark remains)")
+                                cleanup_logger.info(f"   ⏭️ No watched episode files to delete")
                             
-                            # NEW: Simulate watch event to trigger Get rule
-                            if bookmark_episode or (last_season and last_episode):
-                                cleanup_logger.info(f"   ⚙️ Simulating watch event for S{last_season}E{last_episode}")
-                                try:
-                                    process_episodes_for_webhook(
-                                        series_id=series_id,
-                                        season_number=last_season,
-                                        episode_number=last_episode,
-                                        rule=rule,
-                                        series_title=series_title
-                                    )
-                                except Exception as e:
-                                    cleanup_logger.error(f"   ❌ Simulation failed: {str(e)}")
+                            # Simulate watch event to trigger Get rule
+                            cleanup_logger.info(f"   ⚙️ Simulating watch event for S{last_season}E{last_episode}")
+                            try:
+                                process_episodes_for_webhook(
+                                    series_id=series_id,
+                                    season_number=last_season,
+                                    episode_number=last_episode,
+                                    rule=rule,
+                                    series_title=series_title
+                                )
+                            except Exception as e:
+                                cleanup_logger.error(f"   ❌ Simulation failed: {str(e)}")
                         else:
                             cleanup_logger.debug(f"🛡️ {series_title}: Protected - only {days_since_activity:.1f} days since activity")
                         
@@ -1856,9 +1847,7 @@ def run_grace_watched_cleanup():
         return 0
 
 
-# ==============================================================================
-# REPLACE run_grace_unwatched_cleanup() WITH THIS VERSION
-# ==============================================================================
+
 
 def run_grace_unwatched_cleanup():
     """
