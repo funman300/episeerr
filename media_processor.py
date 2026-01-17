@@ -268,6 +268,21 @@ def update_activity_date(series_id, season_number=None, episode_number=None, tim
             save_config(config)
             logger.info(f"✅ Config saved - series {series_id} activity data updated")
             
+            # NEW: Clear grace_cleaned flag - allows re-entry to grace cleanup
+            try:
+                config = load_config()  # Reload to ensure we have latest
+                for rule_name, rule_details in config['rules'].items():
+                    series_dict = rule_details.get('series', {})
+                    if str(series_id) in series_dict:
+                        series_data = series_dict[str(series_id)]
+                        if isinstance(series_data, dict):
+                            series_data['grace_cleaned'] = False
+                            save_config(config)
+                            logger.info(f"🔄 Watch detected - cleared grace_cleaned flag for series {series_id}")
+                        break
+            except Exception as e:
+                logger.debug(f"Could not clear grace_cleaned flag: {e}")
+            
             # NEW: Log watch event
             try:
                 from activity_storage import save_watch_event
@@ -1610,249 +1625,134 @@ def delete_episodes_in_sonarr_with_logging(
 
 def run_grace_watched_cleanup():
     """
-    Check all series for grace_watched cleanup based on activity_date.
+    Grace Watched Cleanup - Keep last watched episode as reference point.
     
-    FINAL CORRECTED BEHAVIOR:
-    - Deletes ALL watched episode files (including the last watched one)
-    - Keeps position in config (last_season, last_episode) as bookmark
-    - Applies Get rule directly to check for next episodes (NO simulation, NO activity update)
-    
-    Supports both per-series and per-season tracking based on grace_scope setting.
+    NEW BEHAVIOR:
+    - Deletes all watched episodes EXCEPT the last one
+    - Last watched episode = reference point to catch up from
+    - Does NOT apply Get rule (that's only for watch webhooks)
+    - Does NOT update activity_date (preserves real watch timestamp)
     """
     try:
         cleanup_logger.info("🟡 GRACE WATCHED CLEANUP: Checking inactive series")
         
         config = load_config()
-        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
-        total_deleted = 0
         
-        # Get all series from Sonarr for title lookup
+        # MASTER SAFETY SWITCH
+        global_dry_run_config = config.get('dry_run_mode', False)
+        global_dry_run_env = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        global_dry_run = global_dry_run_config or global_dry_run_env
+        
+        if global_dry_run:
+            cleanup_logger.info("🛡️ Global dry run mode ENABLED - all deletions will be queued for approval")
+        
+        total_deleted = 0
         headers = {'X-Api-Key': SONARR_API_KEY}
         response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
         all_series = response.json() if response.ok else []
-        
         current_time = int(time.time())
         
-        # Check each rule for grace_watched settings
         for rule_name, rule in config['rules'].items():
             grace_watched_days = rule.get('grace_watched')
             if not grace_watched_days:
                 continue
             
-            grace_scope = rule.get('grace_scope', 'series')
-            cleanup_logger.info(f"📋 Rule '{rule_name}': grace_watched={grace_watched_days}d, scope={grace_scope}")
+            cleanup_logger.info(f"📋 Rule '{rule_name}': grace_watched={grace_watched_days}d")
             
+            # Apply master safety switch
             rule_dry_run = rule.get('dry_run', False)
-            is_dry_run = global_dry_run or rule_dry_run
+            if global_dry_run:
+                is_dry_run = True
+                cleanup_logger.info(f"   🛡️ Global dry run enforced")
+            else:
+                is_dry_run = rule_dry_run
             
-            # Parse Get rule settings
-            get_type = rule.get('get_type', 'episodes')
-            get_count = rule.get('get_count', 1)
-            
-            # Check each series in this rule
             series_dict = rule.get('series', {})
             for series_id_str, series_data in series_dict.items():
                 try:
                     series_id = int(series_id_str)
                     series_info = next((s for s in all_series if s['id'] == series_id), None)
-                    
                     if not series_info:
                         continue
                     
                     series_title = series_info['title']
                     
-                    if grace_scope == 'season':
-                        # ============================================================
-                        # PER-SEASON TRACKING
-                        # ============================================================
-                        cleanup_logger.info(f"🔍 {series_title}: Checking per-season grace")
-                        
-                        # Get all episodes grouped by season
-                        all_episodes = fetch_all_episodes(series_id)
-                        episodes_by_season = {}
-                        for ep in all_episodes:
-                            if not ep.get('hasFile'):
-                                continue
-                            season_num = ep.get('seasonNumber', 0)
-                            if season_num not in episodes_by_season:
-                                episodes_by_season[season_num] = []
-                            episodes_by_season[season_num].append(ep)
-                        
-                        # Check each season independently
-                        for season_num, season_episodes in episodes_by_season.items():
-                            # Get season-specific activity from config
-                            if isinstance(series_data, dict):
-                                seasons_data = series_data.get('seasons', {})
-                                season_data = seasons_data.get(str(season_num), {})
-                                
-                                # Try per-season data first
-                                season_activity = season_data.get('activity_date')
-                                last_episode = season_data.get('last_episode')
-                                
-                                # FALLBACK: Use series-level data if per-season missing (legacy support)
-                                if not season_activity:
-                                    series_last_season = series_data.get('last_season')
-                                    if series_last_season == season_num:
-                                        season_activity = series_data.get('activity_date')
-                                        last_episode = series_data.get('last_episode', 1)
-                                        cleanup_logger.debug(f"   Using series-level activity for S{season_num} (legacy data)")
-                                
-                                if not last_episode:
-                                    last_episode = 1
-                            else:
-                                season_activity = None
-                                last_episode = 1
-                            
-                            if season_activity:
-                                days_since_activity = (current_time - season_activity) / (24 * 60 * 60)
-                                
-                                if days_since_activity > grace_watched_days:
-                                    cleanup_logger.info(f"🟡 {series_title} S{season_num}: Inactive {days_since_activity:.1f}d > {grace_watched_days}d")
-                                    cleanup_logger.info(f"   📺 Last watched: S{season_num}E{last_episode}")
-                                    
-                                    # Delete ALL watched episodes (no file kept)
-                                    watched_episodes = []
-                                    for episode in season_episodes:
-                                        episode_num = episode.get('episodeNumber', 0)
-                                        if episode_num <= last_episode:
-                                            watched_episodes.append(episode)
-                                    
-                                    episode_file_ids = [ep['episodeFileId'] for ep in watched_episodes if 'episodeFileId' in ep]
-                                    
-                                    if episode_file_ids:
-                                        cleanup_logger.info(f"   📊 Deleting ALL {len(episode_file_ids)} watched episodes from S{season_num}")
-                                        cleanup_logger.info(f"   📝 Position bookmark kept in config: S{season_num}E{last_episode}")
-                                        
-                                        from datetime import datetime
-                                        activity_date = datetime.fromtimestamp(season_activity).strftime('%Y-%m-%d')
-                                        
-                                        delete_episodes_in_sonarr_with_logging(
-                                            episode_file_ids, 
-                                            is_dry_run, 
-                                            series_title,
-                                            reason=f"Grace Watched ({grace_watched_days}d) Override Keep - Season {season_num}",
-                                            date_source="Tautulli",
-                                            date_value=activity_date,
-                                            rule_name=rule_name
-                                        )
-                                        total_deleted += len(episode_file_ids)
-                                    else:
-                                        cleanup_logger.info(f"   ⏭️ No watched episode files to delete")
-                                    
-                                    # Apply Get rule directly (NO simulation, NO activity update)
-                                    cleanup_logger.info(f"   🔍 Checking for next episodes per Get rule ({get_type}: {get_count})")
-                                    try:
-                                        # Fetch next episodes based on Get rule
-                                        next_episode_ids = fetch_next_episodes_dropdown(
-                                            series_id, season_num, last_episode, get_type, get_count
-                                        )
-                                        
-                                        if next_episode_ids:
-                                            # Monitor or search them (based on action_option)
-                                            monitor_or_search_episodes(
-                                                next_episode_ids, 
-                                                rule.get('action_option', 'monitor'), 
-                                                series_id, 
-                                                series_title, 
-                                                get_type
-                                            )
-                                            cleanup_logger.info(f"   ✅ Get rule applied: {len(next_episode_ids)} episodes monitored/searched")
-                                        else:
-                                            cleanup_logger.info(f"   ⏭️ No next episodes available yet")
-                                            
-                                    except Exception as e:
-                                        cleanup_logger.error(f"   ❌ Get rule check failed: {str(e)}")
-                                    
-                                else:
-                                    cleanup_logger.debug(f"🛡️ {series_title} S{season_num}: Protected - {days_since_activity:.1f}d since activity")
-                            else:
-                                cleanup_logger.debug(f"⏭️ {series_title} S{season_num}: No activity data")
+                    # CHECK: Already cleaned?
+                    if isinstance(series_data, dict) and series_data.get('grace_cleaned', False):
+                        cleanup_logger.debug(f"⏭️ {series_title}: Already cleaned, skipping")
+                        continue
                     
+                    # Get activity date
+                    result = get_activity_date_with_hierarchy(series_id, series_title, return_complete=True)
+                    if isinstance(result, tuple) and len(result) == 3:
+                        activity_date, last_season, last_episode = result
                     else:
-                        # ============================================================
-                        # PER-SERIES TRACKING (default/legacy behavior)
-                        # ============================================================
-                        result = get_activity_date_with_hierarchy(series_id, series_title, return_complete=True)
-                        if isinstance(result, tuple) and len(result) == 3:
-                            activity_date, last_season, last_episode = result
-                        else:
-                            activity_date = result
-                            last_season, last_episode = 1, 1
+                        activity_date = result
+                        last_season, last_episode = 1, 1
+                    
+                    if not activity_date:
+                        cleanup_logger.debug(f"⏭️ {series_title}: No activity date, skipping")
+                        continue
+                    
+                    days_since_activity = (current_time - activity_date) / (24 * 60 * 60)
+                    
+                    if days_since_activity > grace_watched_days:
+                        cleanup_logger.info(f"🟡 {series_title}: Inactive {days_since_activity:.1f}d > {grace_watched_days}d")
+                        cleanup_logger.info(f"   📺 Last watched: S{last_season}E{last_episode}")
                         
-                        if not activity_date:
-                            cleanup_logger.debug(f"⏭️ {series_title}: No activity date from any source, skipping")
-                            continue
+                        # Get all episodes
+                        all_episodes = fetch_all_episodes(series_id)
                         
-                        days_since_activity = (current_time - activity_date) / (24 * 60 * 60)
+                        # Find watched episodes
+                        watched_episodes = []
+                        for episode in all_episodes:
+                            if not episode.get('hasFile'):
+                                continue
+                            season_num = episode.get('seasonNumber', 0)
+                            episode_num = episode.get('episodeNumber', 0)
+                            
+                            if (season_num < last_season or 
+                                (season_num == last_season and episode_num <= last_episode)):
+                                watched_episodes.append(episode)
                         
-                        if days_since_activity > grace_watched_days:
-                            cleanup_logger.info(f"🟡 {series_title}: Inactive for {days_since_activity:.1f} days > {grace_watched_days} days")
-                            cleanup_logger.info(f"   📺 Last watched: S{last_season}E{last_episode}")
+                        # Sort by season/episode
+                        watched_episodes.sort(key=lambda ep: (ep['seasonNumber'], ep['episodeNumber']))
+                        
+                        if len(watched_episodes) > 1:
+                            # Keep last watched, delete rest
+                            keep_episode = watched_episodes[-1]
+                            delete_episodes = watched_episodes[:-1]
                             
-                            # Get all episodes for this series
-                            all_episodes = fetch_all_episodes(series_id)
-                            
-                            # Delete ALL watched episodes (no file kept)
-                            watched_episodes = []
-                            for episode in all_episodes:
-                                if not episode.get('hasFile'):
-                                    continue
-                                    
-                                season_num = episode.get('seasonNumber', 0)
-                                episode_num = episode.get('episodeNumber', 0)
-                                
-                                if (season_num < last_season or 
-                                    (season_num == last_season and episode_num <= last_episode)):
-                                    watched_episodes.append(episode)
-                            
-                            episode_file_ids = [ep['episodeFileId'] for ep in watched_episodes if 'episodeFileId' in ep]
+                            episode_file_ids = [ep['episodeFileId'] for ep in delete_episodes if 'episodeFileId' in ep]
                             
                             if episode_file_ids:
-                                cleanup_logger.info(f"   📊 Deleting ALL {len(episode_file_ids)} watched episodes")
-                                cleanup_logger.info(f"   📝 Position bookmark kept in config: S{last_season}E{last_episode}")
+                                cleanup_logger.info(f"   📊 Deleting {len(episode_file_ids)} old watched episodes")
+                                cleanup_logger.info(f"   🔖 Keeping S{keep_episode['seasonNumber']}E{keep_episode['episodeNumber']} as reference")
                                 
                                 from datetime import datetime
                                 activity_date_str = datetime.fromtimestamp(activity_date).strftime('%Y-%m-%d')
                                 
                                 delete_episodes_in_sonarr_with_logging(
-                                    episode_file_ids, 
-                                    is_dry_run, 
+                                    episode_file_ids,
+                                    is_dry_run,
                                     series_title,
-                                    reason=f"Grace Watched ({grace_watched_days}d) Override Keep - Whole Series",
-                                    date_source="Tautulli",
+                                    reason=f"Grace Watched ({grace_watched_days}d) - Keep Last Watched",
+                                    date_source="Last Activity",
                                     date_value=activity_date_str,
                                     rule_name=rule_name
                                 )
                                 total_deleted += len(episode_file_ids)
-                            else:
-                                cleanup_logger.info(f"   ⏭️ No watched episode files to delete")
-                            
-                            # Apply Get rule directly (NO simulation, NO activity update)
-                            cleanup_logger.info(f"   🔍 Checking for next episodes per Get rule ({get_type}: {get_count})")
-                            try:
-                                # Fetch next episodes based on Get rule
-                                next_episode_ids = fetch_next_episodes_dropdown(
-                                    series_id, last_season, last_episode, get_type, get_count
-                                )
-                                
-                                if next_episode_ids:
-                                    # Monitor or search them (based on action_option)
-                                    monitor_or_search_episodes(
-                                        next_episode_ids, 
-                                        rule.get('action_option', 'monitor'), 
-                                        series_id, 
-                                        series_title, 
-                                        get_type
-                                    )
-                                    cleanup_logger.info(f"   ✅ Get rule applied: {len(next_episode_ids)} episodes monitored/searched")
-                                else:
-                                    cleanup_logger.info(f"   ⏭️ No next episodes available yet")
-                                    
-                            except Exception as e:
-                                cleanup_logger.error(f"   ❌ Get rule check failed: {str(e)}")
+                        elif len(watched_episodes) == 1:
+                            cleanup_logger.info(f"   🔖 Only 1 watched episode - keeping as reference")
                         else:
-                            cleanup_logger.debug(f"🛡️ {series_title}: Protected - only {days_since_activity:.1f} days since activity")
+                            cleanup_logger.info(f"   ⏭️ No watched episodes to delete")
                         
+                        # Mark as cleaned (unwatched cleanup will verify bookmark exists)
+                        # Don't mark here - let unwatched cleanup decide
+                        
+                    else:
+                        cleanup_logger.debug(f"🛡️ {series_title}: Protected - {days_since_activity:.1f}d since activity")
+                
                 except (ValueError, TypeError) as e:
                     cleanup_logger.error(f"Error processing series {series_id_str}: {str(e)}")
                     continue
@@ -1865,219 +1765,152 @@ def run_grace_watched_cleanup():
         return 0
 
 
-
+# ==============================================================================
+# REPLACE run_grace_unwatched_cleanup() WITH THIS
+# ==============================================================================
 
 def run_grace_unwatched_cleanup():
     """
-    Check all series for grace_unwatched cleanup based on activity_date.
-    If series inactive for X days, delete unwatched episodes (AFTER last watched).
-    NEW: Always keeps at least 1 unwatched episode (the next one = bookmark).
-    NEW: Falls back to series-level activity data when per-season data is missing (legacy support).
-    Supports both per-series and per-season tracking based on grace_scope setting.
+    Grace Unwatched Cleanup - Keep first unwatched as bookmark.
+    
+    NEW BEHAVIOR:
+    - Keeps first unwatched episode (after last watched) as bookmark
+    - Deletes all other unwatched episodes
+    - Marks series as cleaned if bookmark exists
+    - Keeps checking if no next episode exists yet (waits for grab webhook)
     """
     try:
         cleanup_logger.info("⏰ GRACE UNWATCHED CLEANUP: Checking inactive series")
         
         config = load_config()
-        global_dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
-        total_deleted = 0
         
-        # Get all series from Sonarr for title lookup
+        # MASTER SAFETY SWITCH
+        global_dry_run_config = config.get('dry_run_mode', False)
+        global_dry_run_env = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        global_dry_run = global_dry_run_config or global_dry_run_env
+        
+        if global_dry_run:
+            cleanup_logger.info("🛡️ Global dry run mode ENABLED - all deletions will be queued for approval")
+        
+        total_deleted = 0
         headers = {'X-Api-Key': SONARR_API_KEY}
         response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
         all_series = response.json() if response.ok else []
-        
         current_time = int(time.time())
         
-        # Check each rule for grace_unwatched settings
         for rule_name, rule in config['rules'].items():
             grace_unwatched_days = rule.get('grace_unwatched')
             if not grace_unwatched_days:
                 continue
             
-            grace_scope = rule.get('grace_scope', 'series')
-            cleanup_logger.info(f"📋 Rule '{rule_name}': grace_unwatched={grace_unwatched_days}d, scope={grace_scope}")
+            cleanup_logger.info(f"📋 Rule '{rule_name}': grace_unwatched={grace_unwatched_days}d")
             
+            # Apply master safety switch
             rule_dry_run = rule.get('dry_run', False)
-            is_dry_run = global_dry_run or rule_dry_run
+            if global_dry_run:
+                is_dry_run = True
+                cleanup_logger.info(f"   🛡️ Global dry run enforced")
+            else:
+                is_dry_run = rule_dry_run
             
-            # Check each series in this rule
             series_dict = rule.get('series', {})
             for series_id_str, series_data in series_dict.items():
                 try:
                     series_id = int(series_id_str)
                     series_info = next((s for s in all_series if s['id'] == series_id), None)
-                    
                     if not series_info:
                         continue
                     
                     series_title = series_info['title']
                     
-                    if grace_scope == 'season':
-                        # ============================================================
-                        # PER-SEASON TRACKING
-                        # ============================================================
-                        cleanup_logger.info(f"🔍 {series_title}: Checking per-season grace")
+                    # CHECK: Already cleaned?
+                    if isinstance(series_data, dict) and series_data.get('grace_cleaned', False):
+                        cleanup_logger.debug(f"⏭️ {series_title}: Already cleaned, skipping")
+                        continue
+                    
+                    # Get activity date
+                    result = get_activity_date_with_hierarchy(series_id, series_title, return_complete=True)
+                    if isinstance(result, tuple) and len(result) == 3:
+                        activity_date, last_season, last_episode = result
+                    else:
+                        activity_date = result
+                        last_season, last_episode = 1, 1
+                    
+                    if not activity_date:
+                        cleanup_logger.debug(f"⏭️ {series_title}: No activity date, skipping")
+                        continue
+                    
+                    days_since_activity = (current_time - activity_date) / (24 * 60 * 60)
+                    
+                    if days_since_activity > grace_unwatched_days:
+                        cleanup_logger.info(f"⏰ {series_title}: Inactive {days_since_activity:.1f}d > {grace_unwatched_days}d")
+                        cleanup_logger.info(f"   📺 Last watched: S{last_season}E{last_episode}")
                         
-                        # Get all episodes grouped by season
+                        # Get all episodes
                         all_episodes = fetch_all_episodes(series_id)
-                        episodes_by_season = {}
-                        for ep in all_episodes:
-                            if not ep.get('hasFile'):
-                                continue
-                            season_num = ep.get('seasonNumber', 0)
-                            if season_num not in episodes_by_season:
-                                episodes_by_season[season_num] = []
-                            episodes_by_season[season_num].append(ep)
                         
-                        # Check each season independently
-                        for season_num, season_episodes in episodes_by_season.items():
-                            # Get season-specific activity from config
-                            if isinstance(series_data, dict):
-                                seasons_data = series_data.get('seasons', {})
-                                season_data = seasons_data.get(str(season_num), {})
-                                
-                                # Try per-season data first
-                                season_activity = season_data.get('activity_date')
-                                last_episode = season_data.get('last_episode')
-                                
-                                # FALLBACK: Use series-level data if per-season missing (legacy support)
-                                if not season_activity:
-                                    series_last_season = series_data.get('last_season')
-                                    # Only use series-level data if this is the last watched season
-                                    if series_last_season == season_num:
-                                        season_activity = series_data.get('activity_date')
-                                        last_episode = series_data.get('last_episode', 1)
-                                        cleanup_logger.debug(f"   Using series-level activity for S{season_num} (legacy data)")
-                                
-                                if not last_episode:
-                                    last_episode = 1
-                            else:
-                                season_activity = None
-                                last_episode = 1
+                        # Find unwatched episodes (AFTER last watched)
+                        unwatched_episodes = []
+                        for episode in all_episodes:
+                            if not episode.get('hasFile'):
+                                continue
+                            season_num = episode.get('seasonNumber', 0)
+                            episode_num = episode.get('episodeNumber', 0)
                             
-                            if season_activity:
-                                days_since_activity = (current_time - season_activity) / (24 * 60 * 60)
+                            if (season_num > last_season or 
+                                (season_num == last_season and episode_num > last_episode)):
+                                unwatched_episodes.append(episode)
+                        
+                        # Sort by season/episode
+                        unwatched_episodes.sort(key=lambda ep: (ep['seasonNumber'], ep['episodeNumber']))
+                        
+                        if len(unwatched_episodes) > 1:
+                            # Keep first unwatched, delete rest
+                            bookmark_episode = unwatched_episodes[0]
+                            delete_episodes = unwatched_episodes[1:]
+                            
+                            episode_file_ids = [ep['episodeFileId'] for ep in delete_episodes if 'episodeFileId' in ep]
+                            
+                            if episode_file_ids:
+                                cleanup_logger.info(f"   📊 Deleting {len(episode_file_ids)} extra unwatched episodes")
+                                cleanup_logger.info(f"   🔖 Keeping S{bookmark_episode['seasonNumber']}E{bookmark_episode['episodeNumber']} as bookmark")
                                 
-                                if days_since_activity > grace_unwatched_days:
-                                    cleanup_logger.info(f"⏰ {series_title} S{season_num}: Inactive {days_since_activity:.1f}d > {grace_unwatched_days}d")
-                                    cleanup_logger.info(f"   📺 Last watched: S{season_num}E{last_episode}")
-                                    
-                                    # Get unwatched episodes (AFTER last watched)
-                                    unwatched_episodes = []
-                                    for episode in season_episodes:
-                                        episode_num = episode.get('episodeNumber', 0)
-                                        if episode_num > last_episode:
-                                            unwatched_episodes.append(episode)
-                                    
-                                    # NEW: Sort and keep first unwatched as bookmark
-                                    unwatched_episodes.sort(key=lambda ep: ep.get('episodeNumber', 0))
-                                    
-                                    if len(unwatched_episodes) > 1:
-                                        next_episode = unwatched_episodes[0]  # Keep this
-                                        episodes_to_delete = unwatched_episodes[1:]  # Delete rest
-                                        
-                                        episode_file_ids = [ep['episodeFileId'] for ep in episodes_to_delete if 'episodeFileId' in ep]
-                                        
-                                        if episode_file_ids:
-                                            cleanup_logger.info(f"   📊 Deleting {len(episode_file_ids)} unwatched episodes from S{season_num}")
-                                            cleanup_logger.info(f"   🔖 Keeping S{season_num}E{next_episode['episodeNumber']} as next episode")
-                                            
-                                            from datetime import datetime
-                                            activity_date = datetime.fromtimestamp(season_activity).strftime('%Y-%m-%d')
-                                            
-                                            delete_episodes_in_sonarr_with_logging(
-                                                episode_file_ids, 
-                                                is_dry_run, 
-                                                series_title,
-                                                reason=f"Grace Unwatched ({grace_unwatched_days}d) Override Get - Season {season_num}",
-                                                date_source="Tautulli",
-                                                date_value=activity_date,
-                                                rule_name=rule_name
-                                            )
-                                            total_deleted += len(episode_file_ids)
-                                    elif len(unwatched_episodes) == 1:
-                                        cleanup_logger.info(f"   🔖 Only 1 unwatched episode, keeping as bookmark")
-                                    else:
-                                        cleanup_logger.info(f"   ⏭️ No unwatched episodes to delete from S{season_num}")
-                                else:
-                                    cleanup_logger.debug(f"🛡️ {series_title} S{season_num}: Protected - {days_since_activity:.1f}d since activity")
-                            else:
-                                cleanup_logger.debug(f"⏭️ {series_title} S{season_num}: No activity data")
+                                from datetime import datetime
+                                activity_date_str = datetime.fromtimestamp(activity_date).strftime('%Y-%m-%d')
+                                
+                                delete_episodes_in_sonarr_with_logging(
+                                    episode_file_ids,
+                                    is_dry_run,
+                                    series_title,
+                                    reason=f"Grace Unwatched ({grace_unwatched_days}d) - Keep First Unwatched",
+                                    date_source="Last Activity",
+                                    date_value=activity_date_str,
+                                    rule_name=rule_name
+                                )
+                                total_deleted += len(episode_file_ids)
+                            
+                            # Mark as cleaned - has bookmark
+                            if isinstance(series_data, dict):
+                                series_data['grace_cleaned'] = True
+                                save_config(config)
+                                cleanup_logger.info(f"   ✅ Bookmark established - marked as cleaned")
+                        
+                        elif len(unwatched_episodes) == 1:
+                            cleanup_logger.info(f"   🔖 Has 1 unwatched episode as bookmark")
+                            # Mark as cleaned - already has bookmark
+                            if isinstance(series_data, dict):
+                                series_data['grace_cleaned'] = True
+                                save_config(config)
+                                cleanup_logger.info(f"   ✅ Bookmark exists - marked as cleaned")
+                        
+                        else:
+                            cleanup_logger.info(f"   ⏭️ No unwatched episodes - waiting for next episode")
+                            cleanup_logger.info(f"   🔄 Will keep checking until grab webhook")
+                            # DON'T mark as cleaned - keep checking
                     
                     else:
-                        # ============================================================
-                        # PER-SERIES TRACKING (default/legacy behavior)
-                        # ============================================================
-                        # Get complete activity data from hierarchy
-                        result = get_activity_date_with_hierarchy(series_id, series_title, return_complete=True)
-                        if isinstance(result, tuple) and len(result) == 3:
-                            activity_date, last_season, last_episode = result
-                        else:
-                            activity_date = result
-                            last_season, last_episode = 1, 1  # Fallback
-                        
-                        if not activity_date:
-                            cleanup_logger.debug(f"⏭️ {series_title}: No activity date from any source, skipping")
-                            continue
-                        
-                        # Check if grace period has expired
-                        days_since_activity = (current_time - activity_date) / (24 * 60 * 60)
-                        
-                        if days_since_activity > grace_unwatched_days:
-                            cleanup_logger.info(f"⏰ {series_title}: Inactive for {days_since_activity:.1f} days > {grace_unwatched_days} days")
-                            cleanup_logger.info(f"   📺 Last watched: S{last_season}E{last_episode}")
-                            
-                            # Get all episodes for this series
-                            all_episodes = fetch_all_episodes(series_id)
-                            
-                            # Find unwatched episodes (AFTER last watched)
-                            unwatched_episodes = []
-                            for episode in all_episodes:
-                                if not episode.get('hasFile'):
-                                    continue
-                                    
-                                season_num = episode.get('seasonNumber', 0)
-                                episode_num = episode.get('episodeNumber', 0)
-                                
-                                # Episode is "unwatched" if AFTER last watched
-                                if (season_num > last_season or 
-                                    (season_num == last_season and episode_num > last_episode)):
-                                    unwatched_episodes.append(episode)
-                            
-                            # NEW: Sort and keep first unwatched as bookmark
-                            unwatched_episodes.sort(key=lambda ep: (ep['seasonNumber'], ep['episodeNumber']))
-                            
-                            if len(unwatched_episodes) > 1:
-                                next_episode = unwatched_episodes[0]  # Keep this
-                                episodes_to_delete = unwatched_episodes[1:]  # Delete rest
-                                
-                                episode_file_ids = [ep['episodeFileId'] for ep in episodes_to_delete if 'episodeFileId' in ep]
-                                
-                                if episode_file_ids:
-                                    cleanup_logger.info(f"   📊 Deleting {len(episode_file_ids)} unwatched episodes")
-                                    cleanup_logger.info(f"   🔖 Keeping S{next_episode['seasonNumber']}E{next_episode['episodeNumber']} as next episode")
-                                    
-                                    from datetime import datetime
-                                    activity_date_str = datetime.fromtimestamp(activity_date).strftime('%Y-%m-%d')
-                                    
-                                    delete_episodes_in_sonarr_with_logging(
-                                        episode_file_ids, 
-                                        is_dry_run, 
-                                        series_title,
-                                        reason=f"Grace Unwatched ({grace_unwatched_days}d) Override Get - Whole Series",
-                                        date_source="Tautulli",
-                                        date_value=activity_date_str,
-                                        rule_name=rule_name
-                                    )
-                                    total_deleted += len(episode_file_ids)
-                            elif len(unwatched_episodes) == 1:
-                                cleanup_logger.info(f"   🔖 Only 1 unwatched episode, keeping as bookmark")
-                            else:
-                                cleanup_logger.info(f"   ⏭️ No unwatched episodes to delete")
-                        else:
-                            cleanup_logger.debug(f"🛡️ {series_title}: Protected - only {days_since_activity:.1f} days since activity")
-                        
+                        cleanup_logger.debug(f"🛡️ {series_title}: Protected - {days_since_activity:.1f}d since activity")
+                
                 except (ValueError, TypeError) as e:
                     cleanup_logger.error(f"Error processing series {series_id_str}: {str(e)}")
                     continue
@@ -2088,18 +1921,39 @@ def run_grace_unwatched_cleanup():
     except Exception as e:
         cleanup_logger.error(f"Error in grace_unwatched cleanup: {str(e)}")
         return 0
+    
+
+
+# UPDATED DORMANT CLEANUP WITH MASTER SAFETY SWITCH
+# Matches the same safety logic as grace watched/unwatched
+
 def run_dormant_cleanup():
     """
-    Process dormant cleanup with optional storage gate.
+    Process dormant cleanup with optional storage gate and MASTER SAFETY SWITCH.
+    
     NOTE: Dormant cleanup ALWAYS uses series-wide activity (not per-season),
     as it's meant to detect completely abandoned shows.
+    
+    MASTER SAFETY: Global dry_run_mode=true overrides all rule settings.
     """
     try:
         cleanup_logger.info("🔴 DORMANT CLEANUP: Checking abandoned series")
         
         config = load_config()
         global_settings = load_global_settings()
-        global_dry_run = global_settings.get('dry_run_mode', False)
+        
+        # MASTER SAFETY SWITCH: Check global dry_run from config.json
+        global_dry_run_config = global_settings.get('dry_run_mode', False)
+        
+        # Also check environment variable
+        global_dry_run_env = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
+        
+        # If EITHER is true, enforce dry run globally
+        global_dry_run = global_dry_run_config or global_dry_run_env
+        
+        if global_dry_run:
+            cleanup_logger.info("🛡️ Global dry run mode ENABLED - all deletions will be queued for approval")
+        
         # Check storage gate
         storage_min_gb = global_settings.get('global_storage_min_gb')
         if storage_min_gb:
@@ -2122,11 +1976,17 @@ def run_dormant_cleanup():
             if not dormant_days:
                 continue
             
-            grace_scope = rule.get('grace_scope', 'series')
             cleanup_logger.info(f"📋 Rule '{rule_name}': dormant={dormant_days}d (always uses series-wide activity)")
             
+            # Apply master safety switch
             rule_dry_run = rule.get('dry_run', False)
-            is_dry_run = global_dry_run or rule_dry_run
+            if global_dry_run:
+                is_dry_run = True  # Global override - ALWAYS dry run
+                cleanup_logger.info(f"   🛡️ Global dry run enforced (rule setting ignored)")
+            else:
+                is_dry_run = rule_dry_run  # Use rule-specific setting
+                if is_dry_run:
+                    cleanup_logger.info(f"   🔍 Rule-level dry run enabled")
             
             series_dict = rule.get('series', {})
             for series_id_str, series_data in series_dict.items():
@@ -2161,7 +2021,9 @@ def run_dormant_cleanup():
                                 'title': series_info['title'],
                                 'days_since_activity': days_since_activity,
                                 'episode_file_ids': episode_file_ids,
-                                'is_dry_run': is_dry_run
+                                'is_dry_run': is_dry_run,
+                                'last_activity': activity_date,
+                                'rule_name': rule_name
                             })
                             
                 except (ValueError, TypeError):
@@ -2197,7 +2059,7 @@ def run_dormant_cleanup():
                 reason=f"Dormant Series ({candidate['days_since_activity']:.1f} days inactive)",
                 date_source=date_source,
                 date_value=activity_date,
-                rule_name=candidate.get('rule_name', 'storage-gate')
+                rule_name=candidate.get('rule_name', 'dormant')
             )
             processed_count += 1
         

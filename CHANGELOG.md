@@ -8,6 +8,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [Released]
+
+## [2.9.1] - 2026-01-17
+### Changed - BREAKING
+- **Grace Periods reimagined as Bookmark System** for inactive shows
+  - Grace Watched: Keeps last watched episode as reference point, deletes older watched episodes
+  - Grace Unwatched: Keeps first unwatched episode as bookmark, deletes extra unwatched episodes
+  - Result: Maximum 2 episodes per inactive show (last watched + next unwatched)
+  - Grace cleanup no longer applies Get rule - Get rule only runs on watch webhooks
+
+### Added
+- **grace_cleaned flag**: Prevents repeated processing of already-bookmarked shows
+- **Grab webhook support**: Series marked as cleaned when new episodes grabbed
+- **Smart cleanup loop**: Shows missing next episodes stay in cleanup until grab webhook fires
+- **Master safety switch**: Global dry_run_mode always overrides rule-level settings
+- **Sonarr Grab event handling**: Stops checking loop for incomplete series when content becomes available
+
+### Fixed
+- Grace cleanup no longer re-downloads same episodes every 5 days
+- Incomplete series properly handled - keeps checking until content available
+- Master dry_run_mode setting now cannot be overridden by individual rules
+- Storage savings: Inactive shows reduced to 1-2 episodes instead of full seasons
+
+### Technical Details
+**Grace Bookmark Philosophy:**
+- Watched: Delete all except last watched (keeps reference point for catch-up)
+- Unwatched: Delete all except first unwatched (keeps bookmark for resume)
+- Ignores Keep/Get rules during cleanup (those only apply during active watching)
+- Marks series as "cleaned" when bookmarks established
+- Stops processing until activity resumes
+
+**Cleanup Loop Behavior:**
+- Has bookmark → Mark grace_cleaned=true → Skip on future cleanups
+- Missing bookmark → grace_cleaned=false → Check every cleanup cycle
+- Watch webhook → Clear grace_cleaned=false → Re-enter grace period after inactivity
+- Grab webhook → Set grace_cleaned=true → Exit checking loop
+
+**Webhooks Required:**
+- Watch webhook (Tautulli/Jellyfin): Updates activity_date, clears grace_cleaned flag
+- Grab webhook (Sonarr): Sets grace_cleaned flag to stop checking loop
+
+**Master Safety:**
+- Global dry_run_mode=true: ALL deletions forced to pending queue regardless of rule settings
+- Rule dry_run=true: That specific rule uses pending queue  
+- Rule dry_run=false + Global=false: Direct deletion allowed
+
+### Migration Notes
+- Configure Sonarr webhook to include "On Grab" event in addition to "On Series Add"
+- grace_cleaned field will be added automatically to config.json as series are processed
+- Highly recommended: Set dry_run_mode: true in global settings during initial testing
+- After grace runs: Each show has 1-2 episodes (reference + bookmark)
+- Missing episodes: Series stays in cleanup loop until Sonarr grabs the content
+
+### Example Scenarios
+**Complete Series (Countdown):**
+```
+Initial: S1E1-S1E13 (13 episodes)
+After Grace Cleanup:
+  - S1E1 (last watched - your reference point)
+  - S1E2 (first unwatched - your bookmark)
+  - grace_cleaned = true
+Result: Won't process again until you watch S1E2
+Space Saved: 11 episodes
+```
+
+**Incomplete Series (Stranger Things):**
+```
+Initial: S5E1-S5E4 watched, no S5E5 available yet
+After Grace Cleanup:
+  - S5E4 (last watched - your reference point)
+  - No unwatched exists
+  - grace_cleaned = false
+Result: Checks every cleanup cycle
+When S5E5 grabbed: grace_cleaned = true, stops checking
+Space Saved: 3 episodes
+```
+
+**Active Series Returns:**
+```
+You watch S1E2 (webhook fires)
+  → grace_cleaned = false
+  → Get rule applies: Gets S1E3
+  → After 5 days inactive: Grace cleanup runs again
+  → Bookmarks to S1E2 + S1E3
+  → grace_cleaned = true
+```
+
 ## [2.9.0] - 2026-01-16
 
 ### Changed - BREAKING

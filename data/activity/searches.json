@@ -1,32 +1,112 @@
 [
   {
-    "series_id": 380,
-    "series_title": "MobLand",
-    "season": 1,
-    "episode": 2,
+    "series_id": 489,
+    "series_title": "The Office (US)",
+    "season": 2,
+    "episode": 1,
     "episode_ids": [
-      72126
+      100258
     ],
-    "timestamp": 1767755695
+    "backdrop_url": "https://artworks.thetvdb.com/banners/graphical/73244-g9.jpg",
+    "timestamp": 1768582082
   },
   {
-    "series_id": 380,
-    "series_title": "MobLand",
-    "season": 1,
-    "episode": 2,
+    "series_id": 489,
+    "series_title": "The Office (US)",
+    "season": 2,
+    "episode": 1,
     "episode_ids": [
-      72126
+      100258
     ],
-    "timestamp": 1767755694
+    "backdrop_url": "https://artworks.thetvdb.com/banners/graphical/73244-g9.jpg",
+    "timestamp": 1768582082
   },
   {
-    "series_id": 380,
-    "series_title": "MobLand",
+    "series_id": 486,
+    "series_title": "UNTAMED",
+    "season": 1,
+    "episode": 5,
+    "episode_ids": [
+      99973
+    ],
+    "backdrop_url": "https://artworks.thetvdb.com/banners/v4/series/447456/banners/687e77ec7e7a7.jpg",
+    "timestamp": 1768582082
+  },
+  {
+    "series_id": 486,
+    "series_title": "UNTAMED",
+    "season": 1,
+    "episode": 5,
+    "episode_ids": [
+      99973
+    ],
+    "backdrop_url": "https://artworks.thetvdb.com/banners/v4/series/447456/banners/687e77ec7e7a7.jpg",
+    "timestamp": 1768582082
+  },
+  {
+    "series_id": 498,
+    "series_title": "The Last Frontier (2025)",
+    "season": 1,
+    "episode": 5,
+    "episode_ids": [
+      100602
+    ],
+    "backdrop_url": "https://artworks.thetvdb.com/banners/v4/series/431488/banners/68e8b2f1ef8f5.jpg",
+    "timestamp": 1768582082
+  },
+  {
+    "series_id": 498,
+    "series_title": "The Last Frontier (2025)",
+    "season": 1,
+    "episode": 5,
+    "episode_ids": [
+      100602
+    ],
+    "backdrop_url": "https://artworks.thetvdb.com/banners/v4/series/431488/banners/68e8b2f1ef8f5.jpg",
+    "timestamp": 1768582082
+  },
+  {
+    "series_id": 497,
+    "series_title": "The Lowdown (2025)",
     "season": 1,
     "episode": 2,
     "episode_ids": [
-      72126
+      100556
     ],
-    "timestamp": 1767755460
+    "backdrop_url": "https://artworks.thetvdb.com/banners/v4/series/450085/banners/68dd565f51c06.jpg",
+    "timestamp": 1768582082
+  },
+  {
+    "series_id": 497,
+    "series_title": "The Lowdown (2025)",
+    "season": 1,
+    "episode": 2,
+    "episode_ids": [
+      100556
+    ],
+    "backdrop_url": "https://artworks.thetvdb.com/banners/v4/series/450085/banners/68dd565f51c06.jpg",
+    "timestamp": 1768582082
+  },
+  {
+    "series_id": 496,
+    "series_title": "Countdown (2025)",
+    "season": 1,
+    "episode": 2,
+    "episode_ids": [
+      100543
+    ],
+    "backdrop_url": "https://artworks.thetvdb.com/banners/v4/series/450932/banners/686b4bdf00996.jpg",
+    "timestamp": 1768582082
+  },
+  {
+    "series_id": 496,
+    "series_title": "Countdown (2025)",
+    "season": 1,
+    "episode": 2,
+    "episode_ids": [
+      100543
+    ],
+    "backdrop_url": "https://artworks.thetvdb.com/banners/v4/series/450932/banners/686b4bdf00996.jpg",
+    "timestamp": 1768582082
   }
 ]

@@ -1,4 +1,4 @@
-__version__ = "2.9.0"
+__version__ = "2.9.1"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -2418,6 +2418,44 @@ def process_sonarr_webhook():
             
     except Exception as e:
         app.logger.error(f"Error processing Sonarr webhook: {str(e)}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
+def handle_episode_grab(json_data):
+    """
+    Mark series as cleaned when episode is grabbed.
+    This stops the "waiting for content" checking loop.
+    """
+    try:
+        series = json_data.get('series', {})
+        series_id = series.get('id')
+        series_title = series.get('title', 'Unknown')
+        episodes = json_data.get('episodes', [])
+        
+        if not episodes:
+            app.logger.warning(f"Grab webhook for {series_title} has no episodes")
+            return jsonify({"status": "success", "message": "No episodes in grab"}), 200
+        
+        episode_info = episodes[0]
+        season_num = episode_info.get('seasonNumber')
+        episode_num = episode_info.get('episodeNumber')
+        
+        # Load config and find series
+        config = load_config()
+        
+        for rule_name, rule in config['rules'].items():
+            if str(series_id) in rule.get('series', {}):
+                series_data = rule['series'][str(series_id)]
+                
+                if isinstance(series_data, dict):
+                    # Mark as cleaned - stops grace checking loop
+                    series_data['grace_cleaned'] = True
+                    save_config(config)
+                    app.logger.info(f"✅ {series_title}: Grabbed S{season_num}E{episode_num} - marked as cleaned")
+                break
+        
+        return jsonify({"status": "success", "message": "Grab processed"}), 200
+                
+    except Exception as e:
+        app.logger.error(f"Error handling grab webhook: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/seerr-webhook', methods=['POST'])

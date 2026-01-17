@@ -357,15 +357,14 @@
                             <h6><i class="fas fa-eye text-success me-2"></i>Grace Watched</h6>
                         </div>
                         <div class="card-body">
-                            <p><strong>What:</strong> Deletes ALL watched episodes after X days of inactivity</p>
-                            <p><strong>Exception:</strong> Keeps most recent watched episode (bookmark)</p>
+                            <p><strong>What:</strong> Deletes all watched episodes EXCEPT the last one after X days of inactivity</p>
+                            <p><strong>Exception:</strong> Keeps most recent watched episode (reference point)</p>
                             <p><strong>Overrides:</strong> Keep settings (independent cleanup)</p>
-                            <p><strong>Auto-resume:</strong> Checks for new episodes during cleanup</p>
                             <p><strong>Example:</strong> Grace Watched: 14 days<br>
                             → Watch S2E1-E5<br>
                             → 14 days later (no activity)<br>
                             → Delete S2E1-E4, keep S2E5 (bookmark)<br>
-                            → If S2E6 exists → auto-monitor it</p>
+                            → Marked as cleaned until you watch again</p>
                         </div>
                     </div>
                 </div>
@@ -414,13 +413,22 @@
                     <li>After inactivity, you're left with just 2 episodes: last watched + next unwatched</li>
                     <li>Both bookmarks preserved automatically</li>
                     <li>Can resume anytime, even months later</li>
-                    <li>Cleanup checks for new episodes during grace watched cleanup</li>
                 </ul>
             </div>
             
-            <div class="alert alert-warning mt-3">
-                <h6><i class="fas fa-tv me-2"></i>Mid-Season Breaks Handled Automatically</h6>
-                <p class="mb-0">Grace Watched includes smart detection: When cleanup runs, it simulates watching your last episode to check for new ones. If new episodes exist in Sonarr, they're automatically monitored/searched based on your Get rule. No manual intervention needed!</p>
+            <div class="alert alert-primary mt-3">
+                <h6><i class="fas fa-sync me-2"></i>Cleanup Loop Behavior</h6>
+                <p><strong>How grace cleanup stops and starts:</strong></p>
+                <ul class="mb-2">
+                    <li><strong>Has bookmark:</strong> Marked as cleaned → Won't check again until you watch</li>
+                    <li><strong>Missing next episode:</strong> Keeps checking daily until episode grabbed</li>
+                    <li><strong>Watch activity:</strong> Clears flag → Re-enters grace period after inactivity</li>
+                </ul>
+                <p class="mb-0"><strong>Webhooks required:</strong></p>
+                <ul class="mb-0">
+                    <li><strong>Watch webhook</strong> (Tautulli/Jellyfin): Clears grace_cleaned flag, applies Get rule</li>
+                    <li><strong>Grab webhook</strong> (Sonarr): Sets grace_cleaned flag, stops checking loop</li>
+                </ul>
             </div>
 
             <div class="alert alert-info mt-3">
@@ -454,13 +462,13 @@
                             <tr>
                                 <td><strong>Grace Watched</strong></td>
                                 <td>After X days of inactivity</td>
-                                <td>Watched episodes (overrides Keep)</td>
+                                <td>Watched episodes except last one</td>
                                 <td>Yes (keeps 1 watched bookmark)</td>
                             </tr>
                             <tr>
                                 <td><strong>Grace Unwatched</strong></td>
                                 <td>After X days of inactivity</td>
-                                <td>Unwatched episodes (overrides Get)</td>
+                                <td>Unwatched episodes except first one</td>
                                 <td>Yes (keeps 1 unwatched bookmark)</td>
                             </tr>
                             <tr>
