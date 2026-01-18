@@ -1587,14 +1587,7 @@ def delete_episodes_in_sonarr_with_logging(
     # If EITHER is true, use dry run
     is_dry_run = global_dry_run or rule_dry_run
     
-    if is_dry_run:
-        if global_dry_run and rule_dry_run:
-            cleanup_logger.info(f"🔍 DRY RUN (global + rule): Queueing {len(episode_file_ids)} episodes")
-        elif global_dry_run:
-            cleanup_logger.info(f"🔍 DRY RUN (global): Queueing {len(episode_file_ids)} episodes")
-        else:
-            cleanup_logger.info(f"🔍 DRY RUN (rule '{rule_name}'): Queueing {len(episode_file_ids)} episodes")
-    if is_dry_run:
+    if is_dry_run:  # ✅ KEEP THIS ONE
         if global_dry_run and rule_dry_run:
             cleanup_logger.info(f"🔍 DRY RUN (global + rule): Queueing {len(episode_file_ids)} episodes")
         elif global_dry_run:

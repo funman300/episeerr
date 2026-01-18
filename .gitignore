@@ -6,3 +6,4 @@ preferences.json
 /logs/*
 /temp/*
 /config/*
+/data/*

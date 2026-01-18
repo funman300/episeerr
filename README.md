@@ -1,4 +1,5 @@
 # Episeerr
+
 Smart episode management for Sonarr - Get episodes as you watch, clean up automatically when storage gets low.
 
 **Perfect for:**
@@ -13,65 +14,58 @@ This project started as scratching my own itch - I wanted more granular series m
 
 [![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/vansmak)
 
-- [Episeerr](#episeerr)
-  - [What It Does](#what-it-does)
-  - [Quick Start](#quick-start)
-    - [Full Setup (All Features)](#full-setup-all-features)
-    - [Basic Setup (Works Immediately)](#basic-setup-works-immediately)
-    - [Optional Additions (Add Only What You Want)](#optional-additions-add-only-what-you-want)
-  - [How It Works](#how-it-works)
-    - [Smart Rules (NEW!)](#smart-rules-new)
-    - [Grace Periods (NEW!)](#grace-periods-new)
-    - [Example: Popular Show Rule](#example-popular-show-rule)
-    - [Storage Gate](#storage-gate)
-  - [Three Ways to Use Episeerr (Pick What You Need)](#three-ways-to-use-episeerr-pick-what-you-need)
-    - [🎯 **Just Episode Selection**](#-just-episode-selection)
-    - [⚡ **Add Viewing Automation**](#-add-viewing-automation)
-    - [💾 **Add Storage Management**](#-add-storage-management)
-  - [Key Benefits](#key-benefits)
-  - [What's New in v2.2](#whats-new-in-v22)
-  - [Documentation](#documentation)
-  - [Support](#support)
+---
+
+## 🚀 Quick Start
+
+**New to Episeerr?** Get running in 5 minutes: **[Quick Start Guide](./docs/getting-started/quick-start.md)**
+
+**Want to understand first?** Read: **[How Episeerr Works](./docs/core-concepts/deletion-system.md)**
+
+---
 
 ## What It Does
 
-Episeerr automates your TV library with three simple features:
+Episeerr automates your TV library with three independent features:
 
-🎯 **Episode Selection** - Choose exactly which episodes you want  
-⚡ **Smart Rules** - For example, next episode ready when you watch, old episodes cleaned up  
-💾 **Smart Cleanup** - Automatic cleanup that can be based on when storage gets low
+🎯 **[Episode Selection](./docs/features/episode-selection.md)** - Choose exactly which episodes you want  
+⚡ **[Viewing Automation](./docs/features/viewing-automation.md)** - Next episode ready when you watch  
+💾 **[Storage Management](./docs/features/storage-management.md)** - Automatic cleanup when storage gets low
 
-## Quick Start
+**Use one, some, or all** - they work independently!
 
-### Full Setup (All Features)
+---
+
+## Installation
+
+### Docker Compose (Recommended)
 
 ```yaml
 services:
   episeerr:
     image: vansmak/episeerr:latest
     environment:
-      # Required for all features
-      - SONARR_URL=http://your-sonarr:8989 # add webhook in sonarr
+      # Required
+      - SONARR_URL=http://your-sonarr:8989
       - SONARR_API_KEY=your_sonarr_api_key
       - TMDB_API_KEY=your_tmdb_api_key
-      # Add your seer info if you want to use episeer to manage by episode
-      - JELLYSEERR_URL=http://your overseer or jellyseer url #leave field name as jellyseer even if you use overseerr
-      - JELLYSEERR_API_KEY:
-      # Add these ONLY if you want viewing automation #add webhook in tautulli
+      
+      # Optional - For viewing automation
       - TAUTULLI_URL=http://your-tautulli:8181
       - TAUTULLI_API_KEY=your_tautulli_key
-      # Or
-      # For Jellyfin users (add webhook in Jellyfin)
+      # OR
       - JELLYFIN_URL=http://your-jellyfin:8096
-      - JELLYFIN_API_KEY=your_api_key  
-      - JELLYFIN_USER_ID=your_username  # REQUIRED - your Jellyfin username
-      - JELLYFIN_TRIGGER_MIN=50.0  # Real-time mode (recommended)
-      - JELLYFIN_TRIGGER_MAX=55.0
-     
-      # Optional quicklinks
-      - CUSTOMAPP_URL=http://192.168.254.205:8080 # example SABNZBD_URL=http...
-      - CUSTOMAPP_NAME=My Custom App  # Optional
-      - CUSTOMAPP_ICON=fas fa-cog    # Optional
+      - JELLYFIN_API_KEY=your_api_key
+      - JELLYFIN_USER_ID=your_username
+      
+      # Optional - For request integration
+      - JELLYSEERR_URL=http://your-jellyseerr:5055
+      - JELLYSEERR_API_KEY=your_jellyseerr_key
+      
+      # Optional - Quick links
+      - CUSTOMAPP_URL=http://192.168.1.100:8080
+      - CUSTOMAPP_NAME=My Custom App
+      - CUSTOMAPP_ICON=fas fa-cog
 
     volumes:
       - ./config:/app/config
@@ -83,132 +77,108 @@ services:
     restart: unless-stopped
 ```
 
-### Basic Setup (Works Immediately)
+**After starting:** Open `http://your-server:5002`
 
-1. **Start container** and go to `http://your-server:5002`
-2. **That's it!** You can now use episode selection
-
-### Optional Additions (Add Only What You Want)
-
-- **Storage cleanup**: Set threshold in Scheduler page
-- **Smart rules**: Create rules for automatic management
-- **Viewing automation**: Add webhooks for next episode ready
-- **Add `watched` tag in Sonarr**: Removes these series from Episeer Series Management
+**Full installation guide:** [Installation Documentation](./docs/getting-started/installation.md)
 
 ---
 
 ## How It Works
 
-### Smart Rules (NEW!)
+### Smart Rules System
 
-Create rules with the new dropdown system:
+Create rules with intuitive dropdowns:
 
-**Get Episodes:**
+**GET:** What to prepare next (e.g., "3 episodes", "1 season", "all")  
+**KEEP:** What to retain (e.g., "1 episode", "1 season", "all")  
+**ACTION:** Monitor or search immediately
 
-- Type: Episodes/Seasons/All + Count
-- Example: "3 episodes" = next 3 episodes ready
+### Grace Periods (Time-Based Cleanup)
 
-**Keep Episodes:**
-
-- Type: Episodes/Seasons/All + Count
-- Example: "1 season" = keep current season after watching
-
-### Grace Periods (NEW!)
-
-Create rules with two independent grace timers:
-
-**Grace Watched (Rotating Collection):**
-
-- Your kept episodes expire after X days of inactivity
-- Example: 14 days = watched rotate out after 2 weeks
-
-**Grace Unwatched (Watch Deadlines):**
-
-- New episodes get X days to be watched if no activity
-- Example: 10 days = pressure to watch new content
-
-**Dormant Timer (NEW!):**
-
-- Removes content from abandoned shows
-- Example: 30 days = if no activity for a month, clean up the show
-
-### Example: Popular Show Rule
-
-```log
-Get: 5 episodes (next 5 episodes ready)
-Keep: 2 episodes (last 2 watched episodes)
-Grace: 7 days (keep last 2 watched episodes, delete after a week)
-Dormant: 60 days (cleanup if abandoned for 2 months)
-```
-
-**What happens:**
-
-1. Watch E10 → Get E11-E15, Keep E9-E10
-2. After 7 days → Delete E9-10 (grace expired)
-3. After 60 days no activity → Delete show (series abandoned)
+**Grace Watched:** Deletes OLD watched episodes after X days, keeps last watched as bookmark  
+**Grace Unwatched:** Deletes unwatched episodes after X days, keeps first unwatched as bookmark  
+**Dormant:** Deletes EVERYTHING after X days of no activity (abandoned shows)
 
 ### Storage Gate
 
 - Set one global threshold: "Keep 20GB free"
 - Cleanup only runs when below threshold
 - Stops immediately when back above threshold
-- Only affects shows with grace/dormant timers
+
+**Learn more:** [Deletion System Guide](./docs/core-concepts/deletion-system.md)
 
 ---
 
-## Three Ways to Use Episeerr (Pick What You Need)
+## Example Configuration
 
-### 🎯 **Just Episode Selection**
+### Binge Watcher Rule
 
-Good for picking specific episodes. Even across seasons.
+```yaml
+Get: 3 episodes
+Keep: 1 episode
+Grace Watched: 7 days
+Grace Unwatched: 14 days
+Dormant: 30 days
+```
 
-- **Setup**: Just the 3 required environment variables
-- **create sonarr and optional seer webhooks**
-- **No rules needed**
-- **Use**: Manual episode selection interface
+**What happens:**
 
-### ⚡ **Add Viewing Automation**
+1. **Watch E10** → Next 3 episodes (E11-E13) monitored/searched
+2. **Keep E10** → Delete E1-E9 (outside keep window)
+3. **After 7 days inactive** → Delete E10 (grace expired, bookmark kept)
+4. **After 30 days inactive** → Delete entire show (abandoned)
 
-Next episode ready as you watch (optional upgrade).
+---
 
-- **Setup**: Add Tautulli/Jellyfin webhook + create rules  
-- **No storage management required**
-- **Use**: Episodes managed automatically as you watch, get this many, keep this many
+## 📚 Documentation
 
-### 💾 **Add Storage Management**
+### For New Users
 
-Automatic cleanup when storage gets low (optional upgrade).
+1. **[Installation Guide](./docs/getting-started/installation.md)** - Get Episeerr running
+2. **[Quick Start](./docs/getting-started/quick-start.md)** - Configure in 5 minutes
+3. **[Add Your First Series](./docs/getting-started/first-series.md)** - Step-by-step tutorial
 
-- **Setup**: Set storage threshold + add grace/dormant timers to rules
-- **No viewing automation required**
-- **Use**: Hands-off storage management
+### Essential Reading
+
+- **[Deletion System Guide](./docs/core-concepts/deletion-system.md)** ⭐ - How Keep/Grace/Dormant work
+- **[Tags & Auto-Assign](./docs/core-concepts/tags-and-auto-assign.md)** - How series get managed
+- **[Rules Explained](./docs/core-concepts/rules-explained.md)** - Understanding rule settings
+- **[Webhooks Explained](./docs/core-concepts/webhooks-explained.md)** - Why webhooks matter
+
+### Features
+
+- **[Episode Selection](./docs/features/episode-selection.md)** - Manual episode picking
+- **[Viewing Automation](./docs/features/viewing-automation.md)** - Rule-based management
+- **[Storage Management](./docs/features/storage-management.md)** - Automatic cleanup
+
+### Configuration
+
+- **[Webhook Setup](./docs/configuration/webhook-setup.md)** - Connect Tautulli/Jellyfin/Sonarr
+- **[Rules Guide](./docs/configuration/rules-guide.md)** - Create and manage rules
+- **[Rule Examples](./docs/configuration/rule-examples.md)** - Copy/paste configs
+
+### Help
+
+- **[Common Issues](./docs/troubleshooting/common-issues.md)** - Quick fixes
+- **[Debugging Guide](./docs/troubleshooting/debugging.md)** - Log analysis
+
+**[📖 Full Documentation Index](./docs/)**
 
 ---
 
 ## Key Benefits
 
-✅ **Intuitive**: New dropdown system makes rules easy to understand  
-✅ **Smart**: Grace periods that actually make sense  
-✅ **Safe**: Storage gate prevents unnecessary cleanup  
+✅ **Intuitive**: Dropdown system makes rules easy to understand  
+✅ **Safe**: Dry run mode + approval queue for testing  
 ✅ **Flexible**: Use only the features you need  
-✅ **Storage-Aware**: Cleanup respects your storage limits
-
----
-Screenshot <img width="1856" height="1301" alt="Episeerr" src="https://github.com/user-attachments/assets/ddad6213-ea53-4af9-9997-2a1f605b827c" />
-
+✅ **Storage-Aware**: Cleanup respects your storage limits  
+✅ **Bookmark System**: Never lose your viewing position
 
 ---
 
-## Documentation
+## Screenshots
 
-**[📚 Full Documentation](./docs/)** - Complete guides and setup
-
-**Quick Links:**
-
-- [Installation Guide](./docs/installation.md) - Docker setup and configuration
-- [Rules Guide](./docs/rules-guide.md) - Creating and managing rules
-- [Episode Selection](./docs/episode-selection.md) - Manual episode management
-- [Storage Gate](./docs/global_storage_gate_guide.md) - Automatic cleanup system
+<img width="1856" height="1301" alt="Episeerr Interface" src="https://github.com/user-attachments/assets/ddad6213-ea53-4af9-9997-2a1f605b827c" />
 
 ---
 
@@ -216,6 +186,21 @@ Screenshot <img width="1856" height="1301" alt="Episeerr" src="https://github.co
 
 - **Issues**: [GitHub Issues](https://github.com/Vansmak/episeerr/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/Vansmak/episeerr/discussions)
-- **Coffee**: [Buy Me A Coffee](https://buymeacoffee.com/vansmak) ☕
+- **Buy Me Coffee**: [☕ Support Development](https://buymeacoffee.com/vansmak)
+
+---
+
+## What's New
+
+**v2.2 Highlights:**
+- Complete documentation restructure
+- Comprehensive deletion system guide
+- Tag behavior explained
+- New quick start and tutorial
+- Improved rule explanations
+
+**[Full Changelog](./docs/reference/changelog.md)**
+
+---
 
 *Simple, smart episode management that just works.*
