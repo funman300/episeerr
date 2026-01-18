@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Released]
 
+## [2.9.2] - 2026-01-18
+
+### Documentation
+
+**Major documentation restructure v2.0** - Complete reorganization for clarity and discoverability
+
+#### Added
+- **New folder structure**: Organized into getting-started, core-concepts, features, configuration, guides, troubleshooting, reference
+- **[Deletion System Guide](docs/core-concepts/deletion-system.md)**: Comprehensive explanation of Keep vs Grace vs Dormant with bookmark system
+- **[Tags & Auto-Assign Guide](docs/core-concepts/tags-and-auto-assign.md)**: Clear explanation of `episeerr_default` and `episeerr_select` tag behavior
+- **[Quick Start Guide](docs/getting-started/quick-start.md)**: Get running in 5 minutes
+- **[First Series Tutorial](docs/getting-started/first-series.md)**: Step-by-step walkthrough for beginners
+- **[Rules Explained](docs/core-concepts/rules-explained.md)**: Conceptual guide to GET/KEEP/Action settings
+- **[Webhooks Explained](docs/core-concepts/webhooks-explained.md)**: Why webhooks exist and how they work
+- **Learning paths**: Different guides for different user types (new users, power users, specific features)
+
+#### Changed
+- **Main README.md**: Streamlined with better navigation and links to full documentation
+- **Documentation index**: `docs/README.md` now serves as comprehensive navigation hub
+- **File organization**: Moved all docs into logical folders with clear naming
+- **Content consolidation**: One authoritative source per topic, eliminated duplication
+
+#### Fixed
+- **Tag confusion**: Clearly documented that tags are temporary signals, not permanent labels
+- **Deletion confusion**: Comprehensive guide explains bookmark system and when deletions happen
+- **"Tag disappeared" issue**: Documentation now explains this is normal and expected behavior
+
+#### Improved
+- Clear separation between concepts and how-to guides
+- Better cross-linking between related topics
+- Consistent formatting across all documentation
+- Improved discoverability with table of contents and quick links
+
+### Bug Fixes
+- Fixed duplicate dry run check in `delete_episodes_in_sonarr_with_logging()`
+
+### Repository Cleanup
+- Removed `data/activity/` files from git tracking
+- Updated `.gitignore` to exclude data, logs, config, and temp folders
+- Cleaned up accidentally committed runtime data
+
 ## [2.9.1] - 2026-01-17
 ### Changed - BREAKING
 - **Grace Periods reimagined as Bookmark System** for inactive shows
