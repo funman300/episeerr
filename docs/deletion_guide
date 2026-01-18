@@ -78,7 +78,7 @@ Result: Current season (up to where you watched) is kept
 ### Two Types:
 
 #### A. Grace Watched (grace_watched)
-**What:** Deletes watched episodes (up to and including last watched)  
+**What:** Deletes OLD watched episodes, keeps last watched as bookmark  
 **When:** After X days of inactivity
 
 ```
@@ -88,16 +88,16 @@ Today: Jan 12 (11 days later)
 
 Episode Status:
 [S3E1][S3E2][S3E3][S3E4][S3E5] ← All watched
-  ❌    ❌    ❌    ❌    ❌
+  ❌    ❌    ❌    ❌    🔖
 
 [S3E6][S3E7][S3E8] ← Unwatched, not affected by grace_watched
   ✅    ✅    ✅
 
-Result: Deletes S3E1-S3E5 (all watched episodes)
+Result: Deletes S3E1-S3E4, KEEPS S3E5 as bookmark
 ```
 
 #### B. Grace Unwatched (grace_unwatched)
-**What:** Deletes unwatched episodes (after last watched)  
+**What:** Deletes unwatched episodes EXCEPT first unwatched (bookmark)  
 **When:** After X days of inactivity
 
 ```
@@ -110,10 +110,34 @@ Episode Status:
   ✅    ✅    ✅    ✅    ✅
 
 [S3E6][S3E7][S3E8] ← Unwatched episodes
-  ❌    ❌    ❌
+  🔖    ❌    ❌
 
-Result: Deletes S3E6-S3E8 (all unwatched episodes)
+Result: Deletes S3E7-S3E8, KEEPS S3E6 as "next episode" bookmark
 ```
+
+### 🔖 The Bookmark System
+
+**Grace cleanup ALWAYS preserves your viewing position:**
+
+```
+Example: 10 episodes, watched 1-5, both grace periods expire
+
+BEFORE Cleanup:
+Watched: [E1✅][E2✅][E3✅][E4✅][E5✅]
+Unwatched: [E6⬜][E7⬜][E8⬜][E9⬜][E10⬜]
+
+AFTER Grace Watched:
+[E5🔖] ← Last watched kept as bookmark
+[E6⬜][E7⬜][E8⬜][E9⬜][E10⬜]
+
+AFTER Grace Unwatched:
+[E5🔖][E6🔖] ← First unwatched kept as "next" bookmark
+```
+
+**You always have a resume point:**
+- Grace Watched → Keeps last watched
+- Grace Unwatched → Keeps first unwatched  
+- **You never lose your place!**
 
 ---
 
@@ -155,19 +179,22 @@ Purpose: Reclaim space from shows you'll never finish
 
 **January 11 (10 days later) - Scheduled cleanup runs**
 - Grace watched check: 10 days since activity
-- DELETE: S6E10 (the watched episode)
-- Result: Nothing remains (show is empty)
+- DELETE: Nothing! (S6E10 is the bookmark - always kept)
+- Result: S6E10 still there as your resume point
 
-**If you had watched another episode on January 5:**
-- Grace watched: 6 days since activity → NO DELETION (protected)
-- Result: S6E10 still there
+**If you had multiple watched episodes:**
+- Watched: S6E1-S6E10
+- Grace expires after 10 days
+- DELETE: S6E1-S6E9
+- KEEP: S6E10 (bookmark)
 
 **January 22 (20 days later) - If you had unwatched episodes**
-- Grace unwatched check: 20 days since activity
-- DELETE: Any downloaded but unwatched episodes
-- Result: Unwatched episodes removed
+- Grace unwatched check: 20 days since activity  
+- Downloaded but unwatched: S6E11, S6E12, S6E13
+- DELETE: S6E12, S6E13
+- KEEP: S6E11 (next episode bookmark)
 
-**April 5 (90 days later) - If any episodes somehow remained**
+**April 5 (90 days later) - Dormant cleanup**
 - Dormant check: 90 days since ANY activity
 - DELETE: Everything (nuclear option)
 - Result: Entire show removed
@@ -181,19 +208,20 @@ Day 0: Watch S6E10
 ├─ IMMEDIATE: Keep rule deletes S6E1-S6E9
 └─ Remaining: [S6E10✅]
 
-Day 10: Scheduled cleanup
-├─ Grace Watched triggered (10 day threshold)
-├─ DELETE: S6E10
-└─ Remaining: []
+Day 10: Scheduled cleanup (Grace Watched)
+├─ Only 1 watched episode exists (S6E10)
+├─ KEPT: S6E10 (bookmark - always keep last watched)
+└─ Remaining: [S6E10🔖]
 
-Day 20: Scheduled cleanup
-├─ Grace Unwatched triggered (20 day threshold)
-├─ Would delete unwatched episodes if any existed
-└─ Remaining: []
+Day 20: Scheduled cleanup (Grace Unwatched) 
+├─ If you had S6E11, S6E12, S6E13 downloaded
+├─ DELETE: S6E12, S6E13
+├─ KEEP: S6E11 (next episode bookmark)
+└─ Remaining: [S6E10🔖][S6E11🔖]
 
-Day 90: Scheduled cleanup
+Day 90: Scheduled cleanup (Dormant)
 ├─ Dormant triggered (90 day threshold)
-├─ Would delete EVERYTHING if anything remained
+├─ DELETE: Everything (nuclear option)
 └─ Remaining: []
 ```
 
@@ -205,7 +233,8 @@ Day 90: Scheduled cleanup
 |---------|-----------|---------------|---------|
 | **Trigger** | Watch episode | Scheduled timer | Scheduled timer |
 | **Speed** | Immediate | Delayed | Delayed |
-| **What** | Sliding window | Time-based | Nuclear |
+| **What** | Sliding window | Time-based + bookmark | Nuclear |
+| **Bookmark** | N/A | Always keeps 1 episode | Deletes everything |
 | **Dry Run** | Never (always deletes) | Respects dry_run | Respects dry_run |
 | **Purpose** | Active watching | Inactive shows | Abandoned shows |
 
@@ -328,7 +357,10 @@ The scheduled cleanup interval is configurable in `global_settings.json`:
 A: Check your Keep rule config. If keep_count=3, you'll keep the last 3 watched episodes.
 
 **Q: Why did episodes get deleted even though I'm still watching?**  
-A: If you took longer than your grace_watched period between episodes, Grace cleanup deleted them. Increase grace_watched or disable it.
+A: If you took longer than your grace period between episodes, Grace cleanup deleted OLD episodes but kept your bookmark (last watched OR first unwatched). Increase grace periods or disable them.
+
+**Q: Will Grace cleanup delete my progress?**  
+A: No! Grace Watched keeps your last watched episode as a bookmark. Grace Unwatched keeps your next episode. You can always resume.
 
 **Q: I set dry_run=true but Keep rule still deletes!**  
 A: Keep rule ALWAYS deletes immediately (by design). Dry run only affects Grace/Dormant cleanup.
