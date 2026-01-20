@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Released]
 
+##[2.9.5] - 2026-01-20
+Added
+
+Automatic tag system: Rule-specific tags (episeerr_<rulename>) auto-created in Sonarr
+Tag migration: One-time bulk sync applies tags to all existing series on first startup
+Drift detection: Auto-corrects when tags manually changed in Sonarr
+
+Detects tag changes during watch webhooks (Jellyfin/Tautulli)
+Moves series to correct rule in config automatically
+Syncs missing tags back to Sonarr
+
+
+Delay profile integration: Automatically manages episeerr tags in Sonarr delay profiles
+
+Finds existing custom delay profile with episeerr tags
+Adds/removes rule tags when rules created/deleted
+Always preserves episeerr_default and episeerr_select tags
+
+
+
+Changed
+
+Rule creation/deletion now manages tags automatically in Sonarr and delay profiles
+Tags removed from series and Sonarr when rules deleted
+
+Fixed
+
+Config parameter passing in delay profile functions
+Import statements for tag functions across modules
+
+Technical Details
+
+Tag functions centralized in episeerr_utils.py
+Drift detection in media_processor.py webhook processing
+Migration controlled by tag_migration_complete flag in config
+Delay profile managed via delay_profile_migrated flag
+
+Migration Notes
+
+Fully automatic - no user action required
+First startup: creates all rule tags, syncs to series, updates delay profile
+Existing delay profile with episeerr tags will be detected and used
+Tags in Sonarr will match rules in Episeerr config automatically
+
 ## [2.9.2] - 2026-01-18
 
 ### Documentation

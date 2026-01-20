@@ -207,7 +207,55 @@
                         </div>
                     </div>
                 </div>
-
+                <!-- ADD THIS FILTER SECTION HERE -->
+            <div class="row mb-3 mt-3 g-2">
+                <div class="col-md-4">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-dark border-secondary">
+                            <i class="fas fa-search text-muted"></i>
+                        </span>
+                        <input 
+                            type="text" 
+                            id="seriesSearchInput" 
+                            class="form-control form-control-sm bg-dark text-light border-secondary" 
+                            placeholder="Search series..."
+                            autocomplete="off"
+                        />
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <select id="ruleFilterSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
+                        <option value="all">All Rules</option>
+                        {% for rule_name in config.rules.keys() | sort %}
+                        <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
+                        {% endfor %}
+                        <option value="unassigned">Unassigned</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <select id="statusFilterSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
+                        <option value="all">All Status</option>
+                        <option value="continuing">Continuing</option>
+                        <option value="ended">Ended</option>
+                        <option value="upcoming">Upcoming</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-2">
+                    <button onclick="clearAllFilters()" class="btn btn-sm btn-outline-secondary w-100">
+                        <i class="fas fa-times me-1"></i>Clear
+                    </button>
+                </div>
+            </div>
+            
+            <div class="mb-2">
+                <small class="text-muted">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <span id="filterResultCount">Loading series...</span>
+                </small>
+            </div>
                 <!-- Enhanced Series Table with Sorting -->
                 <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
                     <table class="table table-dark table-striped table-sm" id="seriesTable">
@@ -801,21 +849,79 @@ function sortDataByColumn(column) {
     });
 }
 
-// Render the table with current data
+// Render the table with current data (with filtering)
 function renderTable() {
     const tbody = document.getElementById('seriesTableBody');
     if (!tbody) return;
     
     tbody.innerHTML = '';
     
-    seriesData.forEach(series => {
+    // Apply filters
+    const filteredData = applyFilters(seriesData);
+    
+    filteredData.forEach(series => {
         const row = createSeriesRow(series);
         tbody.appendChild(row);
     });
     
     updateCheckboxStates();
+    updateFilterCount(filteredData.length, seriesData.length);
+}
+// NEW: Apply all active filters
+function applyFilters(data) {
+    const searchTerm = document.getElementById('seriesSearchInput')?.value.toLowerCase().trim() || '';
+    const ruleFilter = document.getElementById('ruleFilterSelect')?.value || 'all';
+    const statusFilter = document.getElementById('statusFilterSelect')?.value || 'all';
+    
+    return data.filter(series => {
+        // Search filter
+        if (searchTerm && !series.title.toLowerCase().includes(searchTerm)) {
+            return false;
+        }
+        
+        // Rule filter
+        if (ruleFilter !== 'all') {
+            if (ruleFilter === 'unassigned' && series.assigned_rule && series.assigned_rule !== 'None') {
+                return false;
+            } else if (ruleFilter !== 'unassigned' && series.assigned_rule !== ruleFilter) {
+                return false;
+            }
+        }
+        
+        // Status filter
+        if (statusFilter !== 'all' && series.status !== statusFilter) {
+            return false;
+        }
+        
+        return true;
+    });
 }
 
+// NEW: Update filter result count
+function updateFilterCount(filtered, total) {
+    const countElement = document.getElementById('filterResultCount');
+    if (countElement) {
+        if (filtered === total) {
+            countElement.textContent = `Showing all ${total} series`;
+        } else {
+            countElement.textContent = `Showing ${filtered} of ${total} series`;
+            countElement.classList.add('text-warning');
+        }
+    }
+}
+
+// NEW: Clear all filters
+function clearAllFilters() {
+    const searchInput = document.getElementById('seriesSearchInput');
+    const ruleFilter = document.getElementById('ruleFilterSelect');
+    const statusFilter = document.getElementById('statusFilterSelect');
+    
+    if (searchInput) searchInput.value = '';
+    if (ruleFilter) ruleFilter.value = 'all';
+    if (statusFilter) statusFilter.value = 'all';
+    
+    renderTable();
+}
 // Create a series table row
 function createSeriesRow(series) {
     const row = document.createElement('tr');
@@ -914,6 +1020,31 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize enhanced sortable series table
     loadEnhancedSeriesData();
     setupSortHandlers();
+    
+    // ADD THESE NEW EVENT LISTENERS FOR FILTERS
+    const searchInput = document.getElementById('seriesSearchInput');
+    const ruleFilter = document.getElementById('ruleFilterSelect');
+    const statusFilter = document.getElementById('statusFilterSelect');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', renderTable);
+        // Keyboard shortcut: Ctrl/Cmd + F focuses search
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                searchInput.focus();
+            }
+        });
+    }
+    
+    if (ruleFilter) {
+        ruleFilter.addEventListener('change', renderTable);
+    }
+    
+    if (statusFilter) {
+        statusFilter.addEventListener('change', renderTable);
+    }
+    // END NEW EVENT LISTENERS
     
     // Initialize auto-refresh with better change detection
     new RulesPageAutoRefresh();

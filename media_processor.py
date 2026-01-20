@@ -12,6 +12,7 @@ import threading
 import subprocess
 import pending_deletions
 from episeerr import normalize_url
+from episeerr_utils import validate_series_tag, sync_rule_tag_to_sonarr
 
 
 # Add these imports at the top if missing
@@ -194,6 +195,64 @@ def save_config(config):
     with open(config_path, 'w') as file:
         json.dump(config, file, indent=4)
 
+def move_series_in_config(series_id, from_rule, to_rule):
+    """
+    Move a series from one rule to another in config.json, preserving activity data.
+    This is called when tag drift is detected (user changed tag manually in Sonarr).
+    
+    Args:
+        series_id: Sonarr series ID
+        from_rule: Current rule name in config
+        to_rule: Target rule name (from Sonarr tag)
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        config = load_config()
+        
+        # Validate rules exist
+        if from_rule not in config['rules']:
+            logger.error(f"Source rule '{from_rule}' not found in config")
+            return False
+            
+        if to_rule not in config['rules']:
+            logger.error(f"Target rule '{to_rule}' not found in config")
+            return False
+        
+        # Get series data from source rule
+        source_series = config['rules'][from_rule].get('series', {})
+        series_id_str = str(series_id)
+        
+        if series_id_str not in source_series:
+            logger.warning(f"Series {series_id} not found in rule '{from_rule}'")
+            return False
+        
+        # Get the series data (preserve activity info)
+        series_data = source_series[series_id_str]
+        
+        # Remove from source rule
+        del source_series[series_id_str]
+        logger.info(f"Removed series {series_id} from rule '{from_rule}'")
+        
+        # Add to target rule
+        target_series = config['rules'][to_rule].setdefault('series', {})
+        target_series[series_id_str] = series_data
+        logger.info(f"Added series {series_id} to rule '{to_rule}' (preserving activity data)")
+        
+        # Save config
+        save_config(config)
+        
+        # Sync tag in Sonarr to ensure consistency (remove any duplicates)
+        from episeerr_utils import sync_rule_tag_to_sonarr
+        sync_rule_tag_to_sonarr(series_id, to_rule)
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error moving series {series_id} from '{from_rule}' to '{to_rule}': {str(e)}")
+        return False
+    
 def get_episode_details_by_id(episode_id):
     """Get episode details by episode ID from Sonarr."""
     try:
@@ -400,7 +459,7 @@ def get_activity_date_with_hierarchy(series_id, series_title=None, return_comple
     if sonarr_date:
         if return_complete:
             logger.info(f"✅ Using Sonarr file date with S1E1 fallback for series {series_id}: {datetime.fromtimestamp(sonarr_date)}")
-            return sonarr_date, 1, 1  # Default fallback
+            return sonarr_date, 1, 1
         else:
             logger.info(f"✅ Using Sonarr file date for series {series_id}: {datetime.fromtimestamp(sonarr_date)}")
             return sonarr_date
@@ -1125,7 +1184,7 @@ def get_jellyfin_last_watched(series_title, return_complete=False):
 def get_sonarr_latest_file_date(series_id):
     """Get the most recent episode file date from Sonarr - FIXED VERSION."""
     try:
-        headers = {'X-Api-Key': SONARR_API_KEY}
+        headers = {'X-Api': SONARR_API_KEY}
         logger.info(f"Getting episode file dates for series {series_id}")
         
         # Use the correct endpoint for episode files
@@ -1211,7 +1270,7 @@ def parse_date_fixed(date_str, context):
         
         # Method 3: Strip milliseconds and try again
         if '.' in date_str:
-            clean_date = re.sub(r'\.\d+', '', date_str)
+            clean_date = re.sub(r'\\.\\d+', '', date_str)
             if clean_date.endswith('Z'):
                 clean_date = clean_date.replace('Z', '+00:00')
             try:
@@ -1437,7 +1496,6 @@ def load_global_settings():
             'discord_webhook_url': '',
             'episeerr_url': 'http://localhost:5002'
         }
-
 
 def save_global_settings(settings):
     """Save global settings to file with automatic backup."""
@@ -1981,7 +2039,6 @@ def run_grace_unwatched_cleanup():
         return 0
     
 
-
 # UPDATED DORMANT CLEANUP WITH MASTER SAFETY SWITCH
 # Matches the same safety logic as grace watched/unwatched
 
@@ -2191,6 +2248,55 @@ def run_unified_cleanup():
             # No storage gate - always run
             cleanup_logger.info("⏰ No storage gate - running all cleanup functions")
             storage_gated = False
+        
+        # ==================== NEW: PHASE 0 - TAG DRIFT DETECTION ====================
+        cleanup_logger.info("=" * 80)
+        cleanup_logger.info("🏷️  Phase 0: Tag drift detection")
+        try:
+            config = load_config()
+            drift_fixed = 0
+            drift_synced = 0
+            
+            for rule_name, rule_details in config['rules'].items():
+                for series_id_str in list(rule_details.get('series', {}).keys()):
+                    try:
+                        series_id = int(series_id_str)
+                        matches, actual_tag_rule = validate_series_tag(series_id, rule_name)
+                        
+                        if not matches:
+                            if actual_tag_rule:
+                                # Drift detected: tag changed in Sonarr
+                                cleanup_logger.warning(f"⚠️  DRIFT: Series {series_id} config={rule_name}, tag={actual_tag_rule}")
+                                
+                                # Move series to new rule
+                                series_data = rule_details['series'][series_id_str]
+                                del rule_details['series'][series_id_str]
+                                
+                                target_rule = config['rules'][actual_tag_rule]
+                                target_rule.setdefault('series', {})[series_id_str] = series_data
+                                
+                                drift_fixed += 1
+                                cleanup_logger.info(f"   ✓ Moved to '{actual_tag_rule}' rule")
+                            else:
+                                # No tag found: sync from config
+                                sync_rule_tag_to_sonarr(series_id, rule_name)
+                                drift_synced += 1
+                                cleanup_logger.info(f"   ✓ Synced missing tag for series {series_id}")
+                                
+                    except Exception as e:
+                        cleanup_logger.error(f"   ✗ Error checking series {series_id_str}: {str(e)}")
+            
+            if drift_fixed > 0:
+                save_config(config)
+                cleanup_logger.info(f"🏷️  Drift result: {drift_fixed} moved, {drift_synced} synced")
+            elif drift_synced > 0:
+                cleanup_logger.info(f"🏷️  Drift result: 0 moved, {drift_synced} synced")
+            else:
+                cleanup_logger.info("🏷️  Drift result: No drift detected")
+                
+        except Exception as e:
+            cleanup_logger.error(f"❌ Error in drift detection: {str(e)}")
+        # ==================== END PHASE 0 ====================
         
         total_processed = 0
         
@@ -2684,7 +2790,6 @@ def cleanup_old_processed_episodes():
         current_time = time.time()
         twentyfour_hours_ago = current_time - (24 * 60 * 60)
         
-        # Remove episodes processed more than 24 hours ago
         old_episodes = [
             key for key, data in processed_episodes.items() 
             if data['timestamp'] < twentyfour_hours_ago
@@ -2823,20 +2928,40 @@ def main():
         # Webhook mode - process the episode that was just watched
         series_id = get_series_id(series_name, thetvdb_id, themoviedb_id)
         if series_id:
+            # NEW: Handle tag validation and drift correction before processing
             config = load_config()
-            rule = None
+            
+            # Find current rule in config
+            config_rule = None
             for rule_name, rule_details in config['rules'].items():
                 if str(series_id) in rule_details.get('series', {}):
-                    rule = rule_details
+                    config_rule = rule_name
                     break
             
-            if rule:
+            if config_rule:
+                matches, actual_tag_rule = validate_series_tag(series_id, config_rule)
+                
+                if not matches:
+                    if actual_tag_rule:
+                        # Drift: move config to match tag
+                        logger.warning(f"DRIFT DETECTED: config={config_rule}, tag={actual_tag_rule}")
+                        move_series_in_config(series_id, config_rule, actual_tag_rule)
+                        config_rule = actual_tag_rule
+                    else:
+                        # No tag: sync from config
+                        logger.warning(f"No episeerr tag found - syncing to {config_rule}")
+                        sync_rule_tag_to_sonarr(series_id, config_rule)
+                
+                # Now process with (possibly updated) rule
+                rule = config['rules'][config_rule]
                 process_episodes_for_webhook(series_id, season_number, episode_number, rule, series_name)
             else:
                 update_activity_date(series_id, season_number, episode_number)
+            return True
     else:
         # Cleanup mode - run unified cleanup (manual or scheduled)
         run_unified_cleanup()
+        return False
 
 if __name__ == "__main__":
     main()
