@@ -9,49 +9,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Released]
 
-##[2.9.5] - 2026-01-20
-Added
+## [2.9.6] - 2026-01-20
 
-Automatic tag system: Rule-specific tags (episeerr_<rulename>) auto-created in Sonarr
-Tag migration: One-time bulk sync applies tags to all existing series on first startup
-Drift detection: Auto-corrects when tags manually changed in Sonarr
+### Added
+- **Rule descriptions**: Optional description field for rules to document their purpose
+  - Appears as tooltip when hovering over rule name
+  - Helps organize and understand multiple rules
+- **Orphaned tag detection**: Finds shows with episeerr tags but not in config, adds them automatically
+  - Runs on startup
+  - Runs during cleanup cycles  
+  - Runs when "Clean Config" button clicked
+  - Allows tag-based management entirely through Sonarr
+- **Enhanced drift detection**: Now runs in multiple locations
+  - Detects during watch webhooks (existing)
+  - Detects during startup (new)
+  - Detects during cleanup cycles (new)
+  - Detects during "Clean Config" button (new)
 
-Detects tag changes during watch webhooks (Jellyfin/Tautulli)
-Moves series to correct rule in config automatically
-Syncs missing tags back to Sonarr
+### Changed
+- **Case-insensitive tag matching**: Sonarr lowercases all tags internally
+  - All tag comparisons now case-insensitive
+  - Prevents false drift detection from case differences
+  - Rule names can use any case (Get1keepseason vs get1keepseason)
 
+### Fixed
+- **False drift detection** from Sonarr's tag lowercasing behavior
+- **Case-sensitivity bugs** in drift detection and rule lookups
+- **Description field** now saves properly in create/edit rule forms
+- **Notification import** errors in webhook processing
 
-Delay profile integration: Automatically manages episeerr tags in Sonarr delay profiles
+### Technical Details
+- Comprehensive tag reconciliation runs on startup (create, migrate, drift, orphaned in single pass)
+- Orphaned tag detection integrated into cleanup cycles
+- All rule name lookups now case-insensitive
+- Description field added to rule schema (optional, max 200 chars recommended)
 
-Finds existing custom delay profile with episeerr tags
-Adds/removes rule tags when rules created/deleted
-Always preserves episeerr_default and episeerr_select tags
+### Migration Notes
+- Fully automatic - no user action required
+- Rule descriptions will be blank for existing rules (optional field)
+- Orphaned shows will be automatically discovered and added to matching rules
+- Case variations in rule names will be handled transparently
 
+## [2.9.5] - 2026-01-19
 
+### Added
+- **Automatic tag system**: Rule-specific tags (`episeerr_<rulename>`) auto-created in Sonarr
+- **Tag migration**: One-time bulk sync applies tags to all existing series on first startup
+- **Drift detection**: Auto-corrects when tags manually changed in Sonarr
+  - Detects tag changes during watch webhooks (Jellyfin/Tautulli)
+  - Moves series to correct rule in config automatically
+  - Syncs missing tags back to Sonarr
+- **Delay profile integration**: Automatically manages episeerr tags in Sonarr delay profiles
+  - Finds existing custom delay profile with episeerr tags
+  - Adds/removes rule tags when rules created/deleted
+  - Always preserves `episeerr_default` and `episeerr_select` tags
 
-Changed
+### Changed
+- Rule creation/deletion now manages tags automatically in Sonarr and delay profiles
+- Tags removed from series and Sonarr when rules deleted
 
-Rule creation/deletion now manages tags automatically in Sonarr and delay profiles
-Tags removed from series and Sonarr when rules deleted
+### Fixed
+- Config parameter passing in delay profile functions
+- Import statements for tag functions across modules
 
-Fixed
+### Technical Details
+- Tag functions centralized in `episeerr_utils.py`
+- Drift detection in `media_processor.py` webhook processing
+- Migration controlled by `tag_migration_complete` flag in config
+- Delay profile managed via `delay_profile_migrated` flag
 
-Config parameter passing in delay profile functions
-Import statements for tag functions across modules
-
-Technical Details
-
-Tag functions centralized in episeerr_utils.py
-Drift detection in media_processor.py webhook processing
-Migration controlled by tag_migration_complete flag in config
-Delay profile managed via delay_profile_migrated flag
-
-Migration Notes
-
-Fully automatic - no user action required
-First startup: creates all rule tags, syncs to series, updates delay profile
-Existing delay profile with episeerr tags will be detected and used
-Tags in Sonarr will match rules in Episeerr config automatically
+### Migration Notes
+- Fully automatic - no user action required
+- First startup: creates all rule tags, syncs to series, updates delay profile
+- Existing delay profile with episeerr tags will be detected and used
+- Tags in Sonarr will match rules in Episeerr config automatically
 
 ## [2.9.2] - 2026-01-18
 

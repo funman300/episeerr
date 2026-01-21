@@ -117,7 +117,16 @@
                     <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded {% if rule_name == default_rule_name %}border-warning bg-warning bg-opacity-10{% endif %}">
                         <div>
                             <div class="d-flex align-items-center">
-                                <strong>{{ rule_name.replace('_', ' ').title() }}</strong>
+                                <strong 
+                                    {% if rule_details.get('description') %}
+                                    data-bs-toggle="tooltip" 
+                                    data-bs-placement="top" 
+                                    title="{{ rule_details.description }}"
+                                    style="cursor: help;"
+                                    {% endif %}
+                                >
+                                    {{ rule_name.replace('_', ' ').title() }}
+                                </strong>
                                 {% if rule_name == default_rule_name %}
                                 <span class="badge bg-warning text-dark ms-2">
                                     <i class="fas fa-star me-1"></i>Default
@@ -148,7 +157,16 @@
                     <div class="rule-item-mobile {% if rule_name == default_rule_name %}default{% endif %}">
                         <div class="rule-info-mobile">
                             <div class="d-flex align-items-center">
-                                <strong>{{ rule_name.replace('_', ' ').title() }}</strong>
+                                <strong 
+                                    {% if rule_details.get('description') %}
+                                    data-bs-toggle="tooltip" 
+                                    data-bs-placement="top" 
+                                    title="{{ rule_details.description }}"
+                                    style="cursor: help;"
+                                    {% endif %}
+                                >
+                                    {{ rule_name.replace('_', ' ').title() }}
+                                </strong>
                                 {% if rule_name == default_rule_name %}
                                 <span class="badge bg-warning text-dark ms-2">
                                     <i class="fas fa-star me-1"></i>Default

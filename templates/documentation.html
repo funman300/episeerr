@@ -25,6 +25,7 @@
                     <a href="#grace-periods" class="btn btn-outline-primary btn-sm w-100 mb-2">Grace Periods</a>
                     <a href="#pending-deletions" class="btn btn-outline-warning btn-sm w-100 mb-2">Pending Deletions</a>
                     <a href="#workflows" class="btn btn-outline-primary btn-sm w-100 mb-2">Workflows</a>
+                    <a href="#tag-management" class="btn btn-outline-success btn-sm w-100 mb-2">Tag Management</a>
                     
                 </div>
                 <div class="col-md-3">
@@ -691,7 +692,143 @@
             </div>
         </div>
     </div>
+    <!-- Tag Management & Drift Detection -->
+    <div class="card mb-3" id="tag-management">
+        <div class="card-header bg-success text-white">
+            <h4 class="mb-0"><i class="fas fa-tags me-2"></i>Tag Management & Drift Detection</h4>
+        </div>
+        <div class="card-body">
+            <p class="lead">Tags are automatically created and managed by Episeerr. You don't need to manually create or maintain them.</p>
+            
+            <h5 class="mt-4">How Tags Work:</h5>
+            <ol>
+                <li><strong>When you create a rule</strong> called "binge_watcher":
+                    <ul>
+                        <li>Episeerr creates <code>episeerr_binge_watcher</code> tag in Sonarr automatically</li>
+                        <li>Tag is added to Sonarr's delay profile (if configured)</li>
+                    </ul>
+                </li>
+                <li><strong>When series is assigned to that rule</strong>:
+                    <ul>
+                        <li>Episeerr applies <code>episeerr_binge_watcher</code> tag to the series in Sonarr</li>
+                        <li>Tag indicates which rule manages this series</li>
+                    </ul>
+                </li>
+                <li><strong>If you manually change the tag in Sonarr</strong>:
+                    <ul>
+                        <li>Episeerr detects the drift (on next watch, cleanup, or startup)</li>
+                        <li>Automatically moves the series to the correct rule in config</li>
+                        <li>Your manual tag change becomes the new source of truth</li>
+                    </ul>
+                </li>
+                <li><strong>When you delete a rule</strong>:
+                    <ul>
+                        <li>Tag removed from all series</li>
+                        <li>Tag removed from Sonarr entirely</li>
+                        <li>Tag removed from delay profile</li>
+                    </ul>
+                </li>
+            </ol>
 
+            <h5 class="mt-4">Drift Detection:</h5>
+            <p>Episeerr checks for tag mismatches in 4 places:</p>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="card border-primary mb-2">
+                        <div class="card-body text-center">
+                            <i class="fas fa-eye fa-2x text-primary mb-2"></i>
+                            <p class="mb-0"><strong>Watch Webhooks</strong><br><small>When you watch an episode</small></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-success mb-2">
+                        <div class="card-body text-center">
+                            <i class="fas fa-clock fa-2x text-success mb-2"></i>
+                            <p class="mb-0"><strong>Cleanup Cycles</strong><br><small>Every 6 hours (configurable)</small></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-warning mb-2">
+                        <div class="card-body text-center">
+                            <i class="fas fa-power-off fa-2x text-warning mb-2"></i>
+                            <p class="mb-0"><strong>Startup</strong><br><small>When Episeerr starts</small></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-info mb-2">
+                        <div class="card-body text-center">
+                            <i class="fas fa-broom fa-2x text-info mb-2"></i>
+                            <p class="mb-0"><strong>Clean Config</strong><br><small>When you click button</small></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-4">What Gets Detected:</h5>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Scenario</th>
+                        <th>Detection</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Tag changed in Sonarr</td>
+                        <td><span class="badge bg-success">✓ Detected</span></td>
+                        <td>Series moved to matching rule</td>
+                    </tr>
+                    <tr>
+                        <td>Tag removed in Sonarr</td>
+                        <td><span class="badge bg-success">✓ Detected</span></td>
+                        <td>Tag re-added from config</td>
+                    </tr>
+                    <tr>
+                        <td>Tag added to unmanaged series</td>
+                        <td><span class="badge bg-success">✓ Detected</span></td>
+                        <td>Series added to that rule</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="alert alert-success mt-3">
+                <h6><i class="fas fa-magic me-2"></i>Tag-Based Management</h6>
+                <p class="mb-0">You can manage series assignment <strong>entirely through Sonarr tags</strong> if you prefer! 
+                Just tag shows in Sonarr with <code>episeerr_rulename</code> and Episeerr will automatically detect and assign them. 
+                No need to use the Episeerr UI at all.</p>
+            </div>
+
+            <h5 class="mt-4">Example Workflow:</h5>
+            <div class="card bg-light">
+                <div class="card-body">
+                    <p><strong>Scenario:</strong> Series "Breaking Bad" is in "binge_watcher" rule</p>
+                    <ol>
+                        <li>You manually change tag to <code>episeerr_weekly</code> in Sonarr</li>
+                        <li>Next time Episeerr checks (watch/cleanup/startup/clean_config):
+                            <ul>
+                                <li>✓ Detects drift</li>
+                                <li>✓ Moves "Breaking Bad" from "binge_watcher" to "weekly" rule</li>
+                                <li>✓ Series now managed by "weekly" rule</li>
+                            </ul>
+                        </li>
+                    </ol>
+                    <p class="mb-0"><em>Your manual tag change in Sonarr becomes the new source of truth!</em></p>
+                </div>
+            </div>
+
+            <h5 class="mt-4">Rule Descriptions:</h5>
+            <p>Add optional descriptions to rules to document their purpose:</p>
+            <ul>
+                <li>Hover over rule names to see descriptions as tooltips</li>
+                <li>Helps organize and understand multiple rules</li>
+                <li>Examples: "Weekly shows I'm actively watching", "Binge-watching mode - get full seasons"</li>
+            </ul>
+        </div>
+    </div>
     <!-- Integration -->
     <div class="card mb-3" id="integration">
         <div class="card-header bg-secondary text-white">

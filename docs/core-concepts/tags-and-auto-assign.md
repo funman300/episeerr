@@ -74,6 +74,67 @@ Tags and auto-assignment control **when and how** Episeerr takes control of seri
 **Use case:** You want to choose specific episodes (pilots, finales, etc.)
 
 ---
+## Tag Lifecycle and Drift Detection
+
+**Tags are automatically managed by Episeerr.** You don't need to manually create or maintain them.
+
+### How Tags Work
+
+1. **When you create a rule** called "binge_watcher":
+   - Episeerr creates `episeerr_binge_watcher` tag in Sonarr automatically
+   - Tag is added to Sonarr's delay profile (if configured)
+
+2. **When series is assigned to that rule**:
+   - Episeerr applies `episeerr_binge_watcher` tag to the series in Sonarr
+   - Tag indicates which rule manages this series
+
+3. **If you manually change the tag in Sonarr**:
+   - Episeerr detects the drift (on next watch, cleanup, or startup)
+   - Automatically moves the series to the correct rule in config
+   - Your manual tag change becomes the new source of truth
+
+4. **When you delete a rule**:
+   - Tag removed from all series
+   - Tag removed from Sonarr entirely
+   - Tag removed from delay profile
+
+### Drift Detection
+
+**Episeerr checks for tag mismatches in 4 places:**
+
+1. **Watch webhooks** - When you watch an episode
+2. **Cleanup cycles** - Every 6 hours (configurable)
+3. **Startup** - When Episeerr starts
+4. **Clean Config** - When you click the "Clean Config" button
+
+**What gets detected:**
+- ✅ Tag changed in Sonarr → Series moved to matching rule
+- ✅ Tag removed in Sonarr → Tag re-added from config
+- ✅ Tag added to unmanaged series → Series added to that rule
+
+**Example:**
+```
+Series "Breaking Bad" is in "binge_watcher" rule
+You manually change tag to "episeerr_weekly" in Sonarr
+Next time Episeerr checks:
+  → Detects drift
+  → Moves "Breaking Bad" from "binge_watcher" to "weekly" rule
+  → Series now managed by "weekly" rule
+```
+
+### Orphaned Tags
+
+**What happens if you tag a series in Sonarr before adding it to Episeerr?**
+
+Episeerr will detect it and add the series to the matching rule automatically:
+```
+1. You add series to Sonarr manually
+2. You tag it with episeerr_binge_watcher in Sonarr
+3. Episeerr detects orphaned tag (on startup/cleanup/clean_config)
+4. Series automatically added to "binge_watcher" rule
+```
+
+This allows you to manage series assignment entirely through Sonarr tags if you prefer!
 
 ## Auto-Assign Setting (No Tag Required)
 

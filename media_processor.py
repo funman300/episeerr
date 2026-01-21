@@ -203,7 +203,7 @@ def move_series_in_config(series_id, from_rule, to_rule):
     Args:
         series_id: Sonarr series ID
         from_rule: Current rule name in config
-        to_rule: Target rule name (from Sonarr tag)
+        to_rule: Target rule name (from Sonarr tag, may be lowercase)
         
     Returns:
         bool: True if successful, False otherwise
@@ -211,41 +211,51 @@ def move_series_in_config(series_id, from_rule, to_rule):
     try:
         config = load_config()
         
+        # Find actual rule names (case-insensitive) since Sonarr lowercases tags
+        actual_from_rule = None
+        actual_to_rule = None
+        
+        for rule_name in config['rules'].keys():
+            if rule_name.lower() == from_rule.lower():
+                actual_from_rule = rule_name
+            if rule_name.lower() == to_rule.lower():
+                actual_to_rule = rule_name
+        
         # Validate rules exist
-        if from_rule not in config['rules']:
+        if not actual_from_rule:
             logger.error(f"Source rule '{from_rule}' not found in config")
             return False
             
-        if to_rule not in config['rules']:
+        if not actual_to_rule:
             logger.error(f"Target rule '{to_rule}' not found in config")
             return False
         
         # Get series data from source rule
-        source_series = config['rules'][from_rule].get('series', {})
+        source_series = config['rules'][actual_from_rule].get('series', {})
         series_id_str = str(series_id)
         
         if series_id_str not in source_series:
-            logger.warning(f"Series {series_id} not found in rule '{from_rule}'")
+            logger.warning(f"Series {series_id} not found in rule '{actual_from_rule}'")
             return False
         
-        # Get the series data (preserve activity info)
+        # Get series data
         series_data = source_series[series_id_str]
         
-        # Remove from source rule
+        # Remove from source
         del source_series[series_id_str]
-        logger.info(f"Removed series {series_id} from rule '{from_rule}'")
+        logger.info(f"Removed series {series_id} from rule '{actual_from_rule}'")
         
-        # Add to target rule
-        target_series = config['rules'][to_rule].setdefault('series', {})
+        # Add to target
+        target_series = config['rules'][actual_to_rule].setdefault('series', {})
         target_series[series_id_str] = series_data
-        logger.info(f"Added series {series_id} to rule '{to_rule}' (preserving activity data)")
+        logger.info(f"Added series {series_id} to rule '{actual_to_rule}' (preserving activity data)")
         
         # Save config
         save_config(config)
         
-        # Sync tag in Sonarr to ensure consistency (remove any duplicates)
+        # Sync tag in Sonarr to ensure consistency (use actual rule name)
         from episeerr_utils import sync_rule_tag_to_sonarr
-        sync_rule_tag_to_sonarr(series_id, to_rule)
+        sync_rule_tag_to_sonarr(series_id, actual_to_rule)
         
         return True
         
@@ -715,26 +725,28 @@ def trigger_episode_search_in_sonarr(episode_ids, series_id=None, series_title=N
     # Send pending notification and store message ID
     if series_id and series_title:
         try:
-            from notification_utils import send_pending_notification
+            from notifications import send_notification
             
             episode_details = get_episode_details_by_id(episode_ids[0])
             if episode_details:
                 season_number = episode_details['seasonNumber']
                 episode_number = episode_details['episodeNumber']
                 
-                episode_count = len(episode_ids)
-                if episode_count == 1:
-                    message = f"Searching for {series_title} S{season_number}E{episode_number}"
-                else:
-                    message = f"Searching for {episode_count} episodes of {series_title}"
-                
-                message_id = send_pending_notification(message)
+                # Send notification using the notifications module
+                message_id = send_notification(
+                    "episode_search_pending",
+                    series=series_title,
+                    season=season_number,
+                    episode=episode_number,
+                    air_date=episode_details.get('airDateUtc'),
+                    series_id=series_id
+                )
                 
                 if message_id:
                     store_pending_search(series_id, episode_ids, message_id)
                     logger.info(f"Stored pending search notification: {message_id}")
         except Exception as e:
-            logger.debug(f"Could not send pending notification: {e}")
+            logger.debug(f"Could not send pending notification: {str(e)}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
 
@@ -2249,14 +2261,15 @@ def run_unified_cleanup():
             cleanup_logger.info("⏰ No storage gate - running all cleanup functions")
             storage_gated = False
         
-        # ==================== NEW: PHASE 0 - TAG DRIFT DETECTION ====================
+        # ==================== NEW: PHASE 0 - TAG RECONCILIATION ====================
         cleanup_logger.info("=" * 80)
-        cleanup_logger.info("🏷️  Phase 0: Tag drift detection")
+        cleanup_logger.info("🏷️  Phase 0: Tag reconciliation (drift + orphaned)")
         try:
             config = load_config()
             drift_fixed = 0
             drift_synced = 0
             
+            # Step 1: Drift detection - fix mismatched tags
             for rule_name, rule_details in config['rules'].items():
                 for series_id_str in list(rule_details.get('series', {}).keys()):
                     try:
@@ -2272,11 +2285,20 @@ def run_unified_cleanup():
                                 series_data = rule_details['series'][series_id_str]
                                 del rule_details['series'][series_id_str]
                                 
-                                target_rule = config['rules'][actual_tag_rule]
-                                target_rule.setdefault('series', {})[series_id_str] = series_data
-                                
-                                drift_fixed += 1
-                                cleanup_logger.info(f"   ✓ Moved to '{actual_tag_rule}' rule")
+                                # Find actual rule name (case-insensitive)
+                                actual_rule_name = None
+                                for rn in config['rules'].keys():
+                                    if rn.lower() == actual_tag_rule.lower():
+                                        actual_rule_name = rn
+                                        break
+
+                                if actual_rule_name:
+                                    target_rule = config['rules'][actual_rule_name]
+                                    target_rule.setdefault('series', {})[series_id_str] = series_data
+                                    drift_fixed += 1
+                                    cleanup_logger.info(f"   ✓ Moved to '{actual_rule_name}' rule")
+                                else:
+                                    cleanup_logger.error(f"   ✗ Target rule '{actual_tag_rule}' not found")
                             else:
                                 # No tag found: sync from config
                                 sync_rule_tag_to_sonarr(series_id, rule_name)
@@ -2286,16 +2308,57 @@ def run_unified_cleanup():
                     except Exception as e:
                         cleanup_logger.error(f"   ✗ Error checking series {series_id_str}: {str(e)}")
             
-            if drift_fixed > 0:
+            # Step 2: Orphaned tags - find shows tagged in Sonarr but not in config
+            all_series = get_sonarr_series()
+            
+            # Build set of series IDs in config
+            config_series_ids = set()
+            for rule_details in config['rules'].values():
+                config_series_ids.update(rule_details.get('series', {}).keys())
+            
+            orphaned = 0
+            for series in all_series:
+                series_id = str(series['id'])
+                
+                # Skip if already in config
+                if series_id in config_series_ids:
+                    continue
+                
+                # Check if has episeerr tag
+                tag_mapping = get_tag_mapping()
+                for tag_id in series.get('tags', []):
+                    tag_name = tag_mapping.get(tag_id, '').lower()
+                    
+                    # Found episeerr rule tag (not default/select)
+                    if tag_name.startswith('episeerr_'):
+                        rule_name = tag_name.replace('episeerr_', '')
+                        if rule_name not in ['default', 'select']:
+                            # Find actual rule name (case-insensitive)
+                            actual_rule_name = None
+                            for rn in config['rules'].keys():
+                                if rn.lower() == rule_name:
+                                    actual_rule_name = rn
+                                    break
+                            
+                            if actual_rule_name:
+                                # Add to config
+                                config['rules'][actual_rule_name].setdefault('series', {})[series_id] = {}
+                                orphaned += 1
+                                cleanup_logger.info(f"   ✓ ORPHANED: Added {series.get('title', series_id)} to '{actual_rule_name}'")
+                                break
+            
+            # Save if any changes made
+            if drift_fixed > 0 or orphaned > 0:
                 save_config(config)
-                cleanup_logger.info(f"🏷️  Drift result: {drift_fixed} moved, {drift_synced} synced")
-            elif drift_synced > 0:
-                cleanup_logger.info(f"🏷️  Drift result: 0 moved, {drift_synced} synced")
+            
+            # Summary
+            if drift_fixed > 0 or drift_synced > 0 or orphaned > 0:
+                cleanup_logger.info(f"🏷️  Tag reconciliation: {drift_fixed} moved, {drift_synced} synced, {orphaned} orphaned")
             else:
-                cleanup_logger.info("🏷️  Drift result: No drift detected")
+                cleanup_logger.info("🏷️  Tag reconciliation: All tags in sync")
                 
         except Exception as e:
-            cleanup_logger.error(f"❌ Error in drift detection: {str(e)}")
+            cleanup_logger.error(f"❌ Error in tag reconciliation: {str(e)}")
         # ==================== END PHASE 0 ====================
         
         total_processed = 0
@@ -2945,8 +3008,14 @@ def main():
                     if actual_tag_rule:
                         # Drift: move config to match tag
                         logger.warning(f"DRIFT DETECTED: config={config_rule}, tag={actual_tag_rule}")
-                        move_series_in_config(series_id, config_rule, actual_tag_rule)
-                        config_rule = actual_tag_rule
+                        if move_series_in_config(series_id, config_rule, actual_tag_rule):
+                            # Find actual rule name in config (case-insensitive)
+                            # move_series_in_config already handled the case, but we need to update config_rule
+                            for rn in config['rules'].keys():
+                                if rn.lower() == actual_tag_rule.lower():
+                                    config_rule = rn
+                                    logger.info(f"Updated config_rule to '{config_rule}' (matched case from config)")
+                                    break
                     else:
                         # No tag: sync from config
                         logger.warning(f"No episeerr tag found - syncing to {config_rule}")

@@ -1,4 +1,4 @@
-__version__ = "2.9.5"
+__version__ = "2.9.6"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -23,6 +23,7 @@ from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID, norm
 import pending_deletions
 
 app = Flask(__name__)
+# Run initialization immediately on module load (Gunicorn workers)
 
 # Load environment variables
 load_dotenv()
@@ -882,6 +883,7 @@ def create_rule():
         
         # Save rule
         config['rules'][rule_name] = {
+            'description': request.form.get('description', ''),
             'get_type': get_type,
             'get_count': get_count,
             'keep_type': keep_type,
@@ -948,6 +950,7 @@ def edit_rule(rule_name):
         
         # Update rule
         config['rules'][rule_name].update({
+            'description': request.form.get('description', ''),
             'get_type': get_type,
             'get_count': get_count,
             'keep_type': keep_type,
@@ -1010,6 +1013,7 @@ def sonarr_series_url_simple(series_id):
     """Generate Sonarr series URL from series ID."""
     return f"{SONARR_URL}/series/{series_id}"
 @app.route('/delete-rule/<rule_name>', methods=['POST'])
+
 def delete_rule(rule_name):
     """Delete a rule and clean up its tag from Sonarr and delay profile."""
     config = load_config()
@@ -1019,17 +1023,25 @@ def delete_rule(rule_name):
     if rule_name == config.get('default_rule'):
         return redirect(url_for('index', message="Cannot delete the default rule"))
     
+    # PROTECTION: Never delete special workflow tags
+    if rule_name.lower() in ['select', 'default']:
+        return redirect(url_for('index', message=f"Cannot delete special tag '{rule_name}'"))
+    
     # Delete rule from config
     del config['rules'][rule_name]
     save_config(config)
     
-    # Clean up the tag in Sonarr
-    tag_removed = False
+    # Get tag ID for the deleted rule (do this before deleting)
+    tag_id = None
     try:
-        # Get tag ID for the deleted rule
         tag_id = episeerr_utils.get_or_create_rule_tag_id(rule_name)
-        if tag_id:
-            # Remove this tag from ALL series in Sonarr
+    except Exception as e:
+        app.logger.warning(f"Could not get tag ID for '{rule_name}': {str(e)}")
+    
+    # Clean up the tag from series in Sonarr
+    tag_removed = False
+    if tag_id:
+        try:
             headers = episeerr_utils.get_sonarr_headers()
             series_response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
             if series_response.ok:
@@ -1058,36 +1070,37 @@ def delete_rule(rule_name):
                     app.logger.debug(f"No series had the tag for deleted rule '{rule_name}'")
             else:
                 app.logger.error("Failed to fetch series list for tag cleanup")
-    except Exception as e:
-        app.logger.warning(f"Could not clean up tag for deleted rule '{rule_name}': {str(e)}")
+        except Exception as e:
+            app.logger.warning(f"Could not clean up tag for deleted rule '{rule_name}': {str(e)}")
     
-    # Optional: Also remove from delay profile (recommended)
-    try:
-        profile_id = episeerr_utils.get_episeerr_delay_profile_id()  # Changed function name
-        if profile_id and tag_id:
-            headers = episeerr_utils.get_sonarr_headers()
-            get_resp = requests.get(f"{SONARR_URL}/api/v3/delayprofile/{profile_id}", headers=headers)
-            if get_resp.ok:
-                profile = get_resp.json()
-                current_tags = profile.get('tags', [])
-                if tag_id in current_tags:
-                    current_tags.remove(tag_id)
-                    profile['tags'] = current_tags
-                    put_resp = requests.put(
-                        f"{SONARR_URL}/api/v3/delayprofile/{profile_id}",
-                        headers=headers,
-                        json=profile
-                    )
-                    if put_resp.ok:
-                        app.logger.info(f"Removed deleted rule tag from delay profile {profile_id}")
-                    else:
-                        app.logger.warning(f"Failed to remove tag from delay profile")
-    except Exception as e:
-        app.logger.warning(f"Could not clean up delay profile for deleted rule: {str(e)}")
+    # Remove from delay profile (only the deleted tag, don't touch others)
+    if tag_id:
+        try:
+            profile_id = episeerr_utils.get_episeerr_delay_profile_id()
+            if profile_id:
+                headers = episeerr_utils.get_sonarr_headers()
+                get_resp = requests.get(f"{SONARR_URL}/api/v3/delayprofile/{profile_id}", headers=headers)
+                if get_resp.ok:
+                    profile = get_resp.json()
+                    current_tags = profile.get('tags', [])
+                    if tag_id in current_tags:
+                        current_tags.remove(tag_id)
+                        profile['tags'] = current_tags
+                        put_resp = requests.put(
+                            f"{SONARR_URL}/api/v3/delayprofile/{profile_id}",
+                            headers=headers,
+                            json=profile
+                        )
+                        if put_resp.ok:
+                            app.logger.info(f"Removed deleted rule tag from delay profile {profile_id}")
+                        else:
+                            app.logger.warning(f"Failed to remove tag from delay profile")
+        except Exception as e:
+            app.logger.warning(f"Could not clean up delay profile for deleted rule: {str(e)}")
     
-    # NEW: Delete the tag from Sonarr entirely
-    try:
-        if tag_id:
+    # Delete the tag from Sonarr entirely (last step after all cleanup)
+    if tag_id:
+        try:
             headers = episeerr_utils.get_sonarr_headers()
             delete_resp = requests.delete(
                 f"{SONARR_URL}/api/v3/tag/{tag_id}",
@@ -1097,8 +1110,8 @@ def delete_rule(rule_name):
                 app.logger.info(f"✓ Deleted tag 'episeerr_{rule_name}' from Sonarr (ID: {tag_id})")
             else:
                 app.logger.warning(f"Could not delete tag from Sonarr: {delete_resp.status_code}")
-    except Exception as e:
-        app.logger.warning(f"Could not delete tag from Sonarr: {str(e)}")
+        except Exception as e:
+            app.logger.warning(f"Could not delete tag from Sonarr: {str(e)}")
     
     message = f"Rule '{rule_name}' deleted successfully"
     if tag_removed:
@@ -1380,7 +1393,7 @@ def series_stats():
         return jsonify({'error': str(e)}), 500
 
 def cleanup_config_rules():
-    """Clean up config by removing non-existent series AND sync tags."""
+    """Clean up config by removing non-existent series AND comprehensive tag reconciliation."""
     try:
         config = load_config()
         existing_series = get_sonarr_series()
@@ -1399,23 +1412,100 @@ def cleanup_config_rules():
                 app.logger.info(f"Cleaned up rule '{rule_name}': Removed {removed_count} non-existent series")
                 changes_made = True
         
-        # Remove empty rules
-        config['rules'] = {
-            rule: details for rule, details in config['rules'].items()
-            if details.get('series') or rule == config.get('default_rule', 'default')
-        }
         
-        if changes_made:
+        
+        # NEW: Comprehensive tag reconciliation (create, drift, orphaned)
+        app.logger.info("Starting tag reconciliation during cleanup...")
+        
+        # Step 1: Create/verify all rule tags exist in Sonarr
+        created, failed = migrate_create_rule_tags()
+        if created > 0 or failed > 0:
+            app.logger.info(f"  Tag creation: {created} verified, {failed} failed")
+        
+        # Step 2: Drift detection - fix mismatched tags
+        drift_fixed = 0
+        drift_synced = 0
+        
+        for rule_name, rule_details in config['rules'].items():
+            for series_id_str in list(rule_details.get('series', {}).keys()):
+                try:
+                    series_id = int(series_id_str)
+                    matches, actual_tag_rule = episeerr_utils.validate_series_tag(series_id, rule_name)
+                    
+                    if not matches:
+                        if actual_tag_rule:
+                            # Find actual rule name (case-insensitive)
+                            actual_rule_name = None
+                            for rn in config['rules'].keys():
+                                if rn.lower() == actual_tag_rule.lower():
+                                    actual_rule_name = rn
+                                    break
+                            
+                            if actual_rule_name:
+                                # Move series to new rule
+                                series_data = rule_details['series'][series_id_str]
+                                del rule_details['series'][series_id_str]
+                                
+                                target_rule = config['rules'][actual_rule_name]
+                                target_rule.setdefault('series', {})[series_id_str] = series_data
+                                
+                                drift_fixed += 1
+                                app.logger.info(f"  Drift: Moved series {series_id} to '{actual_rule_name}'")
+                                changes_made = True
+                            else:
+                                app.logger.error(f"Target rule '{actual_tag_rule}' not found")
+                        else:
+                            # No tag found: sync from config
+                            episeerr_utils.sync_rule_tag_to_sonarr(series_id, rule_name)
+                            drift_synced += 1
+                
+                except Exception as e:
+                    app.logger.error(f"Error checking drift for series {series_id_str}: {str(e)}")
+        
+        # Step 3: Orphaned tags - find shows tagged in Sonarr but not in config
+        # Build set of series IDs in config
+        config_series_ids = set()
+        for rule_details in config['rules'].values():
+            config_series_ids.update(rule_details.get('series', {}).keys())
+        
+        orphaned = 0
+        for series in existing_series:
+            series_id = str(series['id'])
+            
+            # Skip if already in config
+            if series_id in config_series_ids:
+                continue
+            
+            # Check if has episeerr tag
+            tag_mapping = episeerr_utils.get_tag_mapping()
+            for tag_id in series.get('tags', []):
+                tag_name = tag_mapping.get(tag_id, '').lower()
+                
+                # Found episeerr rule tag (not default/select)
+                if tag_name.startswith('episeerr_'):
+                    rule_name = tag_name.replace('episeerr_', '')
+                    if rule_name not in ['default', 'select']:
+                        # Find actual rule name (case-insensitive)
+                        actual_rule_name = None
+                        for rn in config['rules'].keys():
+                            if rn.lower() == rule_name:
+                                actual_rule_name = rn
+                                break
+                        
+                        if actual_rule_name:
+                            # Add to config
+                            config['rules'][actual_rule_name].setdefault('series', {})[series_id] = {}
+                            orphaned += 1
+                            app.logger.info(f"  Orphaned: Added {series['title']} to '{actual_rule_name}'")
+                            changes_made = True
+                            break
+        
+        # Save if any changes made
+        if changes_made or drift_fixed > 0 or drift_synced > 0 or orphaned > 0:
             save_config(config)
-            app.logger.info("Configuration cleanup completed")
-        
-        # NEW: Also create/verify tags for all existing rules
-        try:
-            created, failed = migrate_create_rule_tags()
-            if created > 0 or failed > 0:
-                app.logger.info(f"Tag sync during cleanup: {created} verified, {failed} failed")
-        except Exception as e:
-            app.logger.error(f"Error syncing tags during cleanup: {str(e)}")
+            app.logger.info(f"✓ Config cleanup complete: {drift_fixed} moved, {drift_synced} synced, {orphaned} orphaned")
+        else:
+            app.logger.info("✓ Config cleanup complete: No changes needed")
             
     except Exception as e:
         app.logger.error(f"Error during config cleanup: {str(e)}")
@@ -3012,67 +3102,6 @@ def internal_error(error):
     """Handle 500 errors."""
     return render_template('error.html', message="Internal server error"), 500
 
-# ============================================================================
-# INITIALIZATION
-# ============================================================================
-
-def initialize_episeerr():
-    """Initialize episeerr components."""
-    app.logger.debug("Entering initialize_episeerr()")
-    
-    # Existing code...
-    try:
-        episeerr_utils.check_and_cancel_unmonitored_downloads()
-    except Exception as e:
-        app.logger.error(f"Error in initial download check: {str(e)}")
-    
-    # NEW: Migrate rule tags (creates episeerr_<rulename> tags)
-    try:
-        created, failed = migrate_create_rule_tags()
-        if created > 0 or failed > 0:
-            app.logger.info(f"Rule tag migration: {created} created, {failed} failed")
-    except Exception as e:
-        app.logger.error(f"Error in rule tag migration: {str(e)}")
-    
-    # NEW: Bulk sync series tags (one-time, controlled by flag)
-    try:
-        config = load_config()
-        if not config.get('tag_migration_complete', False):
-            app.logger.info("🏷️  First-time tag migration - syncing all series tags...")
-            synced, failed, not_found = sync_all_series_tags()
-            app.logger.info(f"Series tag sync: {synced} synced, {failed} failed, {not_found} not found")
-            
-            # Mark migration as complete
-            config['tag_migration_complete'] = True
-            save_config(config)
-            app.logger.info("✓ Tag migration marked as complete")
-        else:
-            app.logger.debug("Tag migration already completed, skipping bulk sync")
-    except Exception as e:
-        app.logger.error(f"Error in series tag sync: {str(e)}")
-     # NEW: Ensure delay profile has all current episeerr_* tags
-    # NEW: Ensure delay profile has all current episeerr_* tags
-    try:
-        config = load_config()
-        updated = episeerr_utils.update_delay_with_all_episeerr_tags(config)  # Pass config
-        if updated:
-            app.logger.info("✓ Delay profile updated with current episeerr tags")
-        else:
-            app.logger.warning("Delay profile update skipped or failed (check logs)")
-    except Exception as e:
-        app.logger.error(f"Error updating delay profile with episeerr tags: {str(e)}")
-    # NEW: Add Jellyfin active polling
-    try:
-        from media_processor import start_jellyfin_active_polling
-        started = start_jellyfin_active_polling()
-        if started:
-            app.logger.info("✅ Jellyfin active polling started (every 15 minutes)")
-        else:
-            app.logger.info("⏭️ Jellyfin not configured - active polling disabled")
-    except Exception as e:
-        app.logger.error(f"Error starting Jellyfin active polling: {str(e)}")
-    
-    app.logger.debug("Exiting initialize_episeerr()")
 
 @app.route('/api/migrate-tags', methods=['POST'])
 def migrate_tags_endpoint():
@@ -3319,11 +3348,162 @@ def sync_all_series_tags():
         
     except Exception as e:
         app.logger.error(f"Bulk sync failed: {str(e)}")
-        return 0, 0, 0            
+        return 0, 0, 0  
+
+# ============================================================================
+# FINAL STARTUP (run AFTER everything is defined)
+# ============================================================================
+
+def initialize_episeerr():
+    """Initialize episeerr components."""
+    app.logger.debug("Entering initialize_episeerr()")
+    
+    # Existing code
+    try:
+        episeerr_utils.check_and_cancel_unmonitored_downloads()
+    except Exception as e:
+        app.logger.error(f"Error in initial download check: {str(e)}")
+    
+    # NEW: Comprehensive tag reconciliation (create, migrate, drift, orphaned)
+    try:
+        app.logger.info("🏷️  Starting comprehensive tag reconciliation...")
+        
+        config = load_config()
+        
+        # Step 1: Create/verify all rule tags exist in Sonarr
+        created, failed = migrate_create_rule_tags()
+        if created > 0 or failed > 0:
+            app.logger.info(f"  Tag creation: {created} verified, {failed} failed")
+        
+        # Step 2: One-time bulk sync (migrate existing series to have tags)
+        if not config.get('tag_migration_complete', False):
+            app.logger.info("  First-time migration - syncing all series tags...")
+            synced, failed, not_found = sync_all_series_tags()
+            app.logger.info(f"  Series tag sync: {synced} synced, {failed} failed, {not_found} not found")
+            
+            # Mark migration as complete
+            config['tag_migration_complete'] = True
+            save_config(config)
+            app.logger.info("  ✓ Tag migration marked as complete")
+        
+        # Step 3: Drift detection - fix mismatched tags
+        drift_fixed = 0
+        drift_synced = 0
+        
+        for rule_name, rule_details in config['rules'].items():
+            for series_id_str in list(rule_details.get('series', {}).keys()):
+                try:
+                    series_id = int(series_id_str)
+                    matches, actual_tag_rule = episeerr_utils.validate_series_tag(series_id, rule_name)
+                    
+                    if not matches:
+                        if actual_tag_rule:
+                            # Find actual rule name (case-insensitive)
+                            actual_rule_name = None
+                            for rn in config['rules'].keys():
+                                if rn.lower() == actual_tag_rule.lower():
+                                    actual_rule_name = rn
+                                    break
+                            
+                            if actual_rule_name:
+                                # Move series to new rule
+                                series_data = rule_details['series'][series_id_str]
+                                del rule_details['series'][series_id_str]
+                                
+                                target_rule = config['rules'][actual_rule_name]
+                                target_rule.setdefault('series', {})[series_id_str] = series_data
+                                
+                                drift_fixed += 1
+                                app.logger.info(f"  Drift: Moved series {series_id} to '{actual_rule_name}'")
+                        else:
+                            # Sync missing tag
+                            episeerr_utils.sync_rule_tag_to_sonarr(series_id, rule_name)
+                            drift_synced += 1
+                
+                except Exception as e:
+                    app.logger.debug(f"Error checking series {series_id_str}: {str(e)}")
+        
+        # Step 4: Orphaned tags - find shows tagged in Sonarr but not in config
+        all_series = get_sonarr_series()
+        
+        # Build set of series IDs in config
+        config_series_ids = set()
+        for rule_details in config['rules'].values():
+            config_series_ids.update(rule_details.get('series', {}).keys())
+        
+        orphaned = 0
+        for series in all_series:
+            series_id = str(series['id'])
+            
+            # Skip if already in config
+            if series_id in config_series_ids:
+                continue
+            
+            # Check if has episeerr tag
+            tag_mapping = episeerr_utils.get_tag_mapping()
+            for tag_id in series.get('tags', []):
+                tag_name = tag_mapping.get(tag_id, '').lower()
+                
+                # Found episeerr rule tag (not default/select)
+                if tag_name.startswith('episeerr_'):
+                    rule_name = tag_name.replace('episeerr_', '')
+                    if rule_name not in ['default', 'select']:
+                        # Find actual rule name (case-insensitive)
+                        actual_rule_name = None
+                        for rn in config['rules'].keys():
+                            if rn.lower() == rule_name:
+                                actual_rule_name = rn
+                                break
+                        
+                        if actual_rule_name:
+                            # Add to config
+                            config['rules'][actual_rule_name].setdefault('series', {})[series_id] = {}
+                            orphaned += 1
+                            app.logger.info(f"  Orphaned: Added {series['title']} to '{actual_rule_name}'")
+                            break
+        
+        # Save if any changes made
+        if drift_fixed > 0 or drift_synced > 0 or orphaned > 0:
+            save_config(config)
+        
+        # Summary
+        app.logger.info(f"✓ Tag reconciliation complete: {drift_fixed} moved, {drift_synced} synced, {orphaned} orphaned")
+            
+    except Exception as e:
+        app.logger.error(f"Error during tag reconciliation: {str(e)}")
+    
+    # NEW: Ensure delay profile has all current episeerr_* tags
+    try:
+        config = load_config()
+        updated = episeerr_utils.update_delay_with_all_episeerr_tags(config)
+        if updated:
+            app.logger.info("✓ Delay profile updated with current episeerr tags")
+        else:
+            app.logger.warning("Delay profile update skipped or failed (check logs)")
+    except Exception as e:
+        app.logger.error(f"Error updating delay profile with episeerr tags: {str(e)}")
+    
+    # NEW: Add Jellyfin active polling
+    try:
+        from media_processor import start_jellyfin_active_polling
+        started = start_jellyfin_active_polling()
+        if started:
+            app.logger.info("✅ Jellyfin active polling started (every 15 minutes)")
+        else:
+            app.logger.info("⏭️ Jellyfin not configured - active polling disabled")
+    except Exception as e:
+        app.logger.error(f"Error starting Jellyfin active polling: {str(e)}")
+    
+    app.logger.debug("Exiting initialize_episeerr()")
+
+# Run initialization (after function is defined!)
+initialize_episeerr()
+
 # Create scheduler instance
 cleanup_scheduler = OCDarrScheduler()
 app.logger.info("✓ OCDarrScheduler instantiated successfully")
 cleanup_scheduler.start_scheduler()
+
 # Initialize notification config 
 notification_config = get_notification_config()
 NOTIFICATIONS_ENABLED = notification_config['NOTIFICATIONS_ENABLED']
@@ -3336,6 +3516,5 @@ notifications.init_notifications(NOTIFICATIONS_ENABLED, DISCORD_WEBHOOK_URL, EPI
 
 if __name__ == '__main__':
     cleanup_config_rules()
-    initialize_episeerr()
     app.logger.info("🚀 Enhanced Episeerr starting")
     app.run(host='0.0.0.0', port=5002, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
