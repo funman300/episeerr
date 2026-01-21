@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Released]
 
+[2.9.7] - 2026-01-21
+Added
+
+Orphaned tag detection in watch webhooks: Series with episeerr tags but not in config are automatically added when watched
+
+Enables fully tag-based workflow - tag shows in Sonarr, watch episodes, Episeerr picks them up
+Complements existing startup/cleanup orphaned detection
+
+
+
+Fixed
+
+Case-sensitivity in drift detection: move_series_in_config() now uses case-insensitive rule lookups
+
+Prevents errors when tag case doesn't match config rule case
+Completes case-insensitive tag matching from 2.9.6
+
+
+Jellyfin configuration detection: Moved load_dotenv() before environment variable reads in media_processor
+
+Fixes "Jellyfin not configured" error when env vars are actually set
+Ensures active polling starts correctly
+
+
+Sonarr webhook rule assignment: New series with episeerr tags now use case-insensitive rule matching
+
+Tag episeerr_One_At_A_Time correctly matches rule one_at_a_time
+
+
+
+Technical Details
+
+Watch webhooks now perform full tag reconciliation (drift + orphaned detection)
+All rule name comparisons system-wide are now case-insensitive
+Environment variables load before being accessed in media_processor.py
+
+Migration Notes
+
+Fully automatic - no user action required
+Users with Jellyfin will need to restart for configuration fix to take effect
+
 ## [2.9.6] - 2026-01-20
 
 ### Added

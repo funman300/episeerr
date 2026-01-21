@@ -1,4 +1,4 @@
-__version__ = "2.9.6"
+__version__ = "2.9.7"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -2401,9 +2401,17 @@ def process_sonarr_webhook():
                 # potential direct rule tag
                 if config is None:
                     config = load_config()
-                if rule_name in config.get('rules', {}):
-                    assigned_rule = rule_name
-                    app.logger.info(f"Detected direct rule tag: episeerr_{rule_name}")
+                
+                # Case-insensitive rule lookup
+                actual_rule_name = None
+                for rn in config.get('rules', {}).keys():
+                    if rn.lower() == rule_name.lower():
+                        actual_rule_name = rn
+                        break
+                
+                if actual_rule_name:
+                    assigned_rule = actual_rule_name
+                    app.logger.info(f"Detected direct rule tag: episeerr_{rule_name} → matched rule '{actual_rule_name}'")
                     break
                 else:
                     app.logger.warning(f"Ignoring unknown rule tag: episeerr_{rule_name}")
@@ -2690,9 +2698,69 @@ def handle_server_webhook():
                 else:
                     final_rule = config_rule
                     app.logger.debug(f"Tag matches config rule: {final_rule}")
+            if config_rule:
+                matches, actual_tag_rule = validate_series_tag(series_id, config_rule)
+                
+                if not matches:
+                    if actual_tag_rule:
+                        app.logger.warning(f"DRIFT DETECTED - config: {config_rule} → tag: {actual_tag_rule}")
+                        move_series_in_config(series_id, config_rule, actual_tag_rule)
+                        final_rule = actual_tag_rule
+                    else:
+                        app.logger.warning(f"No episeerr tag on series {series_id} → restoring episeerr_{config_rule}")
+                        sync_rule_tag_to_sonarr(series_id, config_rule)
+                        final_rule = config_rule
+                else:
+                    final_rule = config_rule
+                    app.logger.debug(f"Tag matches config rule: {final_rule}")
             else:
-                final_rule = None
-                app.logger.info(f"Series {series_id} not assigned to any rule → skipping tag sync")
+                # ORPHANED TAG DETECTION: Series not in config but might have episeerr tag in Sonarr
+                series = episeerr_utils.get_series_from_sonarr(series_id)
+                if series:
+                    tag_mapping = episeerr_utils.get_tag_mapping()
+                    found_orphaned_tag = False
+                    
+                    for tag_id in series.get('tags', []):
+                        tag_name = tag_mapping.get(tag_id, '').lower()
+                        
+                        if tag_name.startswith('episeerr_'):
+                            rule_name = tag_name.replace('episeerr_', '')
+                            
+                            # Skip special tags
+                            if rule_name in ['default', 'select']:
+                                continue
+                            
+                            # Find the rule (case-insensitive)
+                            actual_rule_name = None
+                            for rn in config['rules'].keys():
+                                if rn.lower() == rule_name:
+                                    actual_rule_name = rn
+                                    break
+                            
+                            if actual_rule_name:
+                                # Add series to config
+                                import time
+                                config['rules'][actual_rule_name].setdefault('series', {})[series_id_str] = {
+                                    'activity_date': int(time.time())
+                                }
+                                save_config(config)
+                                app.logger.info(f"🏷️ ORPHANED: Added series {series_id} ('{series_title}') to '{actual_rule_name}' based on Sonarr tag")
+                                final_rule = actual_rule_name
+                                found_orphaned_tag = True
+                                break
+                            else:
+                                app.logger.warning(f"Found episeerr tag '{tag_name}' on series {series_id} but rule '{rule_name}' doesn't exist in config")
+                                final_rule = None
+                                found_orphaned_tag = True
+                                break
+                    
+                    if not found_orphaned_tag:
+                        # No episeerr tags found
+                        final_rule = None
+                        app.logger.info(f"Series {series_id} not assigned to any rule → skipping tag sync")
+                else:
+                    final_rule = None
+                    app.logger.warning(f"Could not fetch series {series_id} from Sonarr")
 
         # ─── Original temp file creation ───
         temp_dir = os.path.join(os.getcwd(), 'temp')

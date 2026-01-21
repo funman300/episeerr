@@ -14,8 +14,10 @@ import pending_deletions
 from episeerr import normalize_url
 from episeerr_utils import validate_series_tag, sync_rule_tag_to_sonarr
 
+# Load environment variables
+load_dotenv()
 
-# Add these imports at the top if missing
+
 LAST_PROCESSED_JELLYFIN_EPISODES = {}
 LAST_PROCESSED_LOCK = threading.Lock()
 
@@ -29,8 +31,6 @@ JELLYFIN_TRIGGER_MAX = float(os.getenv('JELLYFIN_TRIGGER_MAX', '55.0'))
 
 # Track processed episodes to prevent duplicates
 processed_jellyfin_episodes = set()
-# Load environment variables
-load_dotenv()
 
 # Define log paths
 LOG_PATH = os.getenv('LOG_PATH', '/app/logs/app.log')
@@ -202,8 +202,8 @@ def move_series_in_config(series_id, from_rule, to_rule):
     
     Args:
         series_id: Sonarr series ID
-        from_rule: Current rule name in config
-        to_rule: Target rule name (from Sonarr tag, may be lowercase)
+        from_rule: Current rule name in config (from tag, may have different case)
+        to_rule: Target rule name (from Sonarr tag, may have different case)
         
     Returns:
         bool: True if successful, False otherwise
@@ -211,20 +211,23 @@ def move_series_in_config(series_id, from_rule, to_rule):
     try:
         config = load_config()
         
-        # Find actual rule names (case-insensitive) since Sonarr lowercases tags
+        # Case-insensitive lookup for from_rule
         actual_from_rule = None
-        actual_to_rule = None
-        
-        for rule_name in config['rules'].keys():
-            if rule_name.lower() == from_rule.lower():
-                actual_from_rule = rule_name
-            if rule_name.lower() == to_rule.lower():
-                actual_to_rule = rule_name
-        
-        # Validate rules exist
+        for rn in config['rules'].keys():
+            if rn.lower() == from_rule.lower():
+                actual_from_rule = rn
+                break
+
         if not actual_from_rule:
             logger.error(f"Source rule '{from_rule}' not found in config")
             return False
+
+        # Case-insensitive lookup for to_rule
+        actual_to_rule = None
+        for rn in config['rules'].keys():
+            if rn.lower() == to_rule.lower():
+                actual_to_rule = rn
+                break
             
         if not actual_to_rule:
             logger.error(f"Target rule '{to_rule}' not found in config")
@@ -238,14 +241,14 @@ def move_series_in_config(series_id, from_rule, to_rule):
             logger.warning(f"Series {series_id} not found in rule '{actual_from_rule}'")
             return False
         
-        # Get series data
+        # Get the series data (preserve activity info)
         series_data = source_series[series_id_str]
         
-        # Remove from source
+        # Remove from source rule
         del source_series[series_id_str]
         logger.info(f"Removed series {series_id} from rule '{actual_from_rule}'")
         
-        # Add to target
+        # Add to target rule
         target_series = config['rules'][actual_to_rule].setdefault('series', {})
         target_series[series_id_str] = series_data
         logger.info(f"Added series {series_id} to rule '{actual_to_rule}' (preserving activity data)")
@@ -253,14 +256,14 @@ def move_series_in_config(series_id, from_rule, to_rule):
         # Save config
         save_config(config)
         
-        # Sync tag in Sonarr to ensure consistency (use actual rule name)
+        # Sync tag in Sonarr to ensure consistency (remove any duplicates)
         from episeerr_utils import sync_rule_tag_to_sonarr
         sync_rule_tag_to_sonarr(series_id, actual_to_rule)
         
         return True
         
     except Exception as e:
-        logger.error(f"Error moving series {series_id} from '{from_rule}' to '{to_rule}': {str(e)}")
+        logger.error(f"Error moving series {series_id}: {str(e)}")
         return False
     
 def get_episode_details_by_id(episode_id):
