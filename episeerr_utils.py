@@ -335,8 +335,25 @@ def get_episeerr_delay_profile_id():
         return None
 
 
-def update_delay_with_all_episeerr_tags(config=None):
-    logger.info("=== Starting delay profile tag sync ===")
+
+# ============================================================================
+# NEW TAG SYSTEM: Control tags only in delay profile
+# ============================================================================
+
+def update_delay_profile_with_control_tags():
+    """
+    Update delay profile to ONLY include the three control tags:
+    - episeerr_default
+    - episeerr_select  
+    - episeerr_delay
+    
+    Rule tags (episeerr_one_at_a_time, episeerr_get1keepseason, etc.) are 
+    NOT included to allow immediate downloads after processing.
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    logger.info("=== Updating delay profile with control tags only ===")
     
     try:
         profile_id = get_episeerr_delay_profile_id()
@@ -346,36 +363,43 @@ def update_delay_with_all_episeerr_tags(config=None):
         
         headers = get_sonarr_headers()
         
-        # Get current profile tags
+        # Get current profile
         get_resp = requests.get(f"{SONARR_URL}/api/v3/delayprofile/{profile_id}", headers=headers)
         if not get_resp.ok:
+            logger.error(f"Failed to get delay profile: {get_resp.status_code}")
             return False
         
         profile = get_resp.json()
-        current_tags = set(profile.get('tags', []))
         
-        # ALWAYS force-add default and select
-        default_id = create_episeerr_default_tag()   # creates if missing
-        select_id = create_episeerr_select_tag()     # creates if missing
+        # Build set of ONLY the three control tags
+        control_tags = set()
         
+        # 1. episeerr_default
+        default_id = create_episeerr_default_tag()
         if default_id:
-            current_tags.add(default_id)
+            control_tags.add(default_id)
+            logger.debug(f"Added episeerr_default (ID: {default_id})")
+        else:
+            logger.warning("Could not create/find episeerr_default tag")
+        
+        # 2. episeerr_select
+        select_id = create_episeerr_select_tag()
         if select_id:
-            current_tags.add(select_id)
+            control_tags.add(select_id)
+            logger.debug(f"Added episeerr_select (ID: {select_id})")
+        else:
+            logger.warning("Could not create/find episeerr_select tag")
         
-        # Add rule tags (only if config provided)
-        if config is None:
-            config = load_config()
+        # 3. episeerr_delay (NEW)
+        delay_id = get_or_create_rule_tag_id('delay')
+        if delay_id:
+            control_tags.add(delay_id)
+            logger.debug(f"Added episeerr_delay (ID: {delay_id})")
+        else:
+            logger.warning("Could not create/find episeerr_delay tag")
         
-        for rule_name in config.get('rules', {}):
-            if rule_name in ['default', 'select']:
-                continue  # already added
-            tag_id = get_or_create_rule_tag_id(rule_name)
-            if tag_id:
-                current_tags.add(tag_id)
-        
-        # Update profile
-        profile['tags'] = list(current_tags)
+        # Update profile with ONLY these three tags
+        profile['tags'] = list(control_tags)
         put_resp = requests.put(
             f"{SONARR_URL}/api/v3/delayprofile/{profile_id}",
             headers=headers,
@@ -383,15 +407,29 @@ def update_delay_with_all_episeerr_tags(config=None):
         )
         
         if put_resp.ok:
-            logger.info(f"✓ Synced {len(current_tags)} tags (including default/select) to delay profile")
+            logger.info(f"✓ Updated delay profile with {len(control_tags)} control tags (default, select, delay)")
+            logger.info(f"  Control tag IDs: {sorted(control_tags)}")
             return True
         else:
-            logger.error(f"Failed to update profile: {put_resp.text}")
+            logger.error(f"Failed to update delay profile: {put_resp.text}")
             return False
             
     except Exception as e:
-        logger.error(f"Delay sync failed: {str(e)}")
+        logger.error(f"Delay profile control tag update failed: {str(e)}")
         return False
+
+
+def update_delay_with_all_episeerr_tags(config=None):
+    """
+    DEPRECATED - Use update_delay_profile_with_control_tags() instead.
+    
+    This function maintained for backward compatibility. The new system only adds
+    control tags (default, select, delay) to the delay profile instead of all 
+    rule tags, allowing immediate downloads after processing.
+    """
+    logger.info("Note: update_delay_with_all_episeerr_tags() now uses control tags only")
+    return update_delay_profile_with_control_tags()
+
 
 
 def remove_rule_tag_from_delay_profile(rule_name):
@@ -450,7 +488,7 @@ def get_series_from_sonarr(series_id):
         series_id: Sonarr series ID
         
     Returns:
-        dict: Series data or None if failed
+        dict: Series data or None if failed/not found
     """
     try:
         headers = get_sonarr_headers()
@@ -462,6 +500,10 @@ def get_series_from_sonarr(series_id):
         
         if response.ok:
             return response.json()
+        elif response.status_code == 404:
+            # Series doesn't exist - this is normal when series are deleted
+            logger.debug(f"Series {series_id} not found in Sonarr (404)")
+            return None
         else:
             logger.error(f"Failed to get series {series_id}: {response.status_code}")
             return None
@@ -520,7 +562,7 @@ def sync_rule_tag_to_sonarr(series_id, new_rule_name):
         # Get current series data
         series = get_series_from_sonarr(series_id)
         if not series:
-            logger.error(f"Could not fetch series {series_id} for tag sync")
+            logger.debug(f"Series {series_id} not found for tag sync (likely deleted)")
             return False
         
         # Get tag mapping
@@ -1280,7 +1322,7 @@ def check_and_cancel_unmonitored_downloads():
                     else:
                         logger.warning(f"Could not get episode info for ID {item['episodeId']}")
                 else:
-                    logger.info(f"Series {series.get('title')} does not have episeerr tags - skipping")
+                    logger.debug(f"Series {series.get('title')} already processed (no control tags) - skipping download queue check")
         
         # Log summary
         logger.info(f"Cancellation check complete. Cancelled {cancelled_count} unmonitored downloads for episeerr series")

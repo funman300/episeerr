@@ -230,6 +230,13 @@ Current limitations and bugs we're working on.
 **[See detailed flow diagram](assets/flow.svg)**
 
 ---
+## Recent Updates (v2.9.8)
+
+- Auto-cleanup of deleted series from config
+- Smart Jellyfin mode detection (no manual disable)
+- Webhook string/integer tag handling
+- 404 errors logged as DEBUG
+- Delay profile simplified to 3 tags
 
 ## 📝 Documentation Status
 

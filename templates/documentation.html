@@ -16,32 +16,33 @@
         <div class="card-body">
             <h5><i class="fas fa-compass me-2"></i>Quick Navigation</h5>
             <div class="row">
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <a href="#overview" class="btn btn-outline-primary btn-sm w-100 mb-2">Overview</a>
                     <a href="#getting-started" class="btn btn-outline-success btn-sm w-100 mb-2">Getting Started</a>
                     <a href="#rules" class="btn btn-outline-primary btn-sm w-100 mb-2">Rules System</a>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <a href="#grace-periods" class="btn btn-outline-primary btn-sm w-100 mb-2">Grace Periods</a>
                     <a href="#pending-deletions" class="btn btn-outline-warning btn-sm w-100 mb-2">Pending Deletions</a>
                     <a href="#workflows" class="btn btn-outline-primary btn-sm w-100 mb-2">Workflows</a>
+                </div>
+                <div class="col-md-4">
                     <a href="#tag-management" class="btn btn-outline-success btn-sm w-100 mb-2">Tag Management</a>
-                    
-                </div>
-                <div class="col-md-3">
-                    <a href="#integration" class="btn btn-outline-primary btn-sm w-100 mb-2">Webhooks</a>
                     <a href="#auto-assign" class="btn btn-outline-info btn-sm w-100 mb-2">Auto-Assign</a>
-                    <a href="#delay-profiles" class="btn btn-outline-warning btn-sm w-100 mb-2">Delay Profiles</a>
-                </div>
-                <div class="col-md-3">
-                    <a href="#examples" class="btn btn-outline-primary btn-sm w-100 mb-2">Examples</a>
-                    <a href="#faq" class="btn btn-outline-primary btn-sm w-100 mb-2">FAQ</a>
                     <a href="#troubleshooting" class="btn btn-outline-primary btn-sm w-100 mb-2">Troubleshooting</a>
                 </div>
             </div>
         </div>
     </div>
-
+        <div class="alert alert-info mb-3">
+        <h5>📚 Detailed Documentation Available</h5>
+        <p class="mb-2">For deep dives and step-by-step guides:</p>
+        <ul class="mb-0">
+            <li><a href="https://github.com/Vansmak/episeerr/blob/main/docs/README.md" target="_blank">Documentation Hub</a></li>
+            <li><a href="https://github.com/Vansmak/episeerr/blob/main/docs/core-concepts/deletion-system.md" target="_blank">Deletion System Guide</a> ⭐</li>
+            <li><a href="https://github.com/Vansmak/episeerr/blob/main/docs/configuration/webhook-setup.md" target="_blank">Jellyfin Setup (3 modes)</a></li>
+        </ul>
+    </div>
     <!-- Overview -->
     <div class="card mb-3" id="overview">
         <div class="card-header bg-primary text-white">
@@ -328,6 +329,106 @@
                     <li><strong>Get 1 season, Keep 1 season:</strong> Season-based - entire seasons at a time</li>
                     <li><strong>Get All, Keep All:</strong> Hoarder mode - download everything, keep forever</li>
                 </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Examples -->
+    <div class="card mb-3" id="examples">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Example Scenarios</h4>
+        </div>
+        <div class="card-body">
+            <div class="accordion" id="examplesAccordion">
+                <!-- Example 1 -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="example1">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse1">
+                            <strong>Scenario 1: Weekly Show (The Office)</strong>
+                        </button>
+                    </h2>
+                    <div id="collapse1" class="accordion-collapse collapse show" data-bs-parent="#examplesAccordion">
+                        <div class="accordion-body">
+                            <strong>Goal:</strong> Always have next episode ready, delete after watching<br>
+                            <strong>Rule Settings:</strong>
+                            <ul>
+                                <li>Get: 1 episode</li>
+                                <li>Keep: 0 episodes</li>
+                                <li>Grace Unwatched: 7 days</li>
+                            </ul>
+                            <strong>Behavior:</strong> Watch S1E1 → Get S1E2 → Delete S1E1 immediately
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Example 2 -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="example2">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse2">
+                            <strong>Scenario 2: Binge Watching (Stranger Things)</strong>
+                        </button>
+                    </h2>
+                    <div id="collapse2" class="accordion-collapse collapse" data-bs-parent="#examplesAccordion">
+                        <div class="accordion-body">
+                            <strong>Goal:</strong> Get 3 episodes ahead, keep last watched<br>
+                            <strong>Rule Settings:</strong>
+                            <ul>
+                                <li>Get: 3 episodes</li>
+                                <li>Keep: 1 episode</li>
+                                <li>Grace Watched: 14 days</li>
+                            </ul>
+                            <strong>Behavior:</strong> Always have 3 unwatched + 1 watched episode available
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Example 3 -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="example3">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse3">
+                            <strong>Scenario 3: Family Show (Landman - Multi-Viewer)</strong>
+                        </button>
+                    </h2>
+                    <div id="collapse3" class="accordion-collapse collapse" data-bs-parent="#examplesAccordion">
+                        <div class="accordion-body">
+                            <strong>Goal:</strong> Wife watches S2, son watches S1 - keep both protected<br>
+                            <strong>Rule Settings:</strong>
+                            <ul>
+                                <li>Get: 1 episode</li>
+                                <li>Keep: 1 season</li>
+                                <li>Grace Watched: 14 days</li>
+                                <li><strong>Grace Scope: Per Season</strong></li>
+                            </ul>
+                            <strong>Behavior:</strong> S1 and S2 have independent grace timers - son watching S1 doesn't reset S2's timer
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Example 4 -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="example4">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse4">
+                            <strong>Scenario 4: Limited Storage (Budget Seedbox)</strong>
+                        </button>
+                    </h2>
+                    <div id="collapse4" class="accordion-collapse collapse" data-bs-parent="#examplesAccordion">
+                        <div class="accordion-body">
+                            <strong>Goal:</strong> Aggressive cleanup, only keep what's needed<br>
+                            <strong>Rule Settings:</strong>
+                            <ul>
+                                <li>Get: 1 episode</li>
+                                <li>Keep: 0 episodes</li>
+                                <li>Grace Unwatched: 3 days</li>
+                                <li>Dormant: 30 days</li>
+                            </ul>
+                            <strong>Global Settings:</strong>
+                            <ul>
+                                <li>Storage Threshold: 20 GB</li>
+                            </ul>
+                            <strong>Behavior:</strong> Only cleans up when storage drops below 20GB, aggressive deletion
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -838,34 +939,41 @@
             <h5>Supported Services:</h5>
             <div class="row">
                 <div class="col-md-4">
-                    <h6><i class="fas fa-chart-bar text-primary me-2"></i>Tautulli</h6>
-                    <p>Tracks viewing activity in Plex</p>
-                    <pre class="bg-dark text-light p-2"><code>Webhook URL:
-http://your-server:5002/webhook
+                <h6><i class="fas fa-chart-bar text-primary me-2"></i>Tautulli</h6>
+                <p>Tracks viewing activity in Plex</p>
+                <pre class="bg-dark text-light p-2"><code>Webhook URL:
+            http://your-server:5002/webhook
 
-Trigger:
-Playback Stop</code></pre>
-                </div>
-                
-                <div class="col-md-4">
-                    <h6><i class="fas fa-film text-success me-2"></i>Jellyfin</h6>
-                    <p>Tracks viewing activity in Jellyfin</p>
-                    <pre class="bg-dark text-light p-2"><code>Webhook URL:
-http://your-server:5002/jellyfin-webhook
+            Trigger:
+            Playback Stop</code></pre>
+            </div>
 
-Trigger:
-Playback Stop</code></pre>
-                </div>
-                
-                <div class="col-md-4">
-                    <h6><i class="fas fa-tv text-warning me-2"></i>Sonarr</h6>
-                    <p>Detects new series additions</p>
-                    <pre class="bg-dark text-light p-2"><code>Webhook URL:
-http://your-server:5002/sonarr-webhook
+            <div class="col-md-4">
+                <h6><i class="fas fa-film text-success me-2"></i>Jellyfin (3 Modes)</h6>
+                <p class="small mb-1"><strong>Mode 1:</strong> PlaybackProgress (real-time)</p>
+                <p class="small mb-1"><strong>Mode 2:</strong> Session Start/Stop (polling)</p>
+                <p class="small mb-2"><strong>Mode 3:</strong> Playback Stop (on-stop)</p>
+                <pre class="bg-dark text-light p-2"><code>Webhook URL:
+            http://your-server:5002/jellyfin-webhook
 
-Trigger:
-On Series Add</code></pre>
-                </div>
+            Trigger: (depends on mode)
+            See full guide below</code></pre>
+                <p class="small mb-0">
+                    <a href="https://github.com/Vansmak/episeerr/blob/main/docs/configuration/webhook-setup.md" target="_blank" class="text-decoration-none">
+                        📖 Full Jellyfin Setup Guide →
+                    </a>
+                </p>
+            </div>
+
+            <div class="col-md-4">
+                <h6><i class="fas fa-tv text-warning me-2"></i>Sonarr</h6>
+                <p>Detects new series additions</p>
+                <pre class="bg-dark text-light p-2"><code>Webhook URL:
+            http://your-server:5002/sonarr-webhook
+
+            Trigger:
+            On Series Add</code></pre>
+            </div>
             </div>
         </div>
     </div>
@@ -1104,105 +1212,6 @@ Order: 1 (higher priority)</code></pre>
         </div>
     </div>
 
-    <!-- Examples -->
-    <div class="card mb-3" id="examples">
-        <div class="card-header bg-primary text-white">
-            <h4 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Example Scenarios</h4>
-        </div>
-        <div class="card-body">
-            <div class="accordion" id="examplesAccordion">
-                <!-- Example 1 -->
-                <div class="accordion-item">
-                    <h2 class="accordion-header" id="example1">
-                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse1">
-                            <strong>Scenario 1: Weekly Show (The Office)</strong>
-                        </button>
-                    </h2>
-                    <div id="collapse1" class="accordion-collapse collapse show" data-bs-parent="#examplesAccordion">
-                        <div class="accordion-body">
-                            <strong>Goal:</strong> Always have next episode ready, delete after watching<br>
-                            <strong>Rule Settings:</strong>
-                            <ul>
-                                <li>Get: 1 episode</li>
-                                <li>Keep: 0 episodes</li>
-                                <li>Grace Unwatched: 7 days</li>
-                            </ul>
-                            <strong>Behavior:</strong> Watch S1E1 → Get S1E2 → Delete S1E1 immediately
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Example 2 -->
-                <div class="accordion-item">
-                    <h2 class="accordion-header" id="example2">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse2">
-                            <strong>Scenario 2: Binge Watching (Stranger Things)</strong>
-                        </button>
-                    </h2>
-                    <div id="collapse2" class="accordion-collapse collapse" data-bs-parent="#examplesAccordion">
-                        <div class="accordion-body">
-                            <strong>Goal:</strong> Get 3 episodes ahead, keep last watched<br>
-                            <strong>Rule Settings:</strong>
-                            <ul>
-                                <li>Get: 3 episodes</li>
-                                <li>Keep: 1 episode</li>
-                                <li>Grace Watched: 14 days</li>
-                            </ul>
-                            <strong>Behavior:</strong> Always have 3 unwatched + 1 watched episode available
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Example 3 -->
-                <div class="accordion-item">
-                    <h2 class="accordion-header" id="example3">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse3">
-                            <strong>Scenario 3: Family Show (Landman - Multi-Viewer)</strong>
-                        </button>
-                    </h2>
-                    <div id="collapse3" class="accordion-collapse collapse" data-bs-parent="#examplesAccordion">
-                        <div class="accordion-body">
-                            <strong>Goal:</strong> Wife watches S2, son watches S1 - keep both protected<br>
-                            <strong>Rule Settings:</strong>
-                            <ul>
-                                <li>Get: 1 episode</li>
-                                <li>Keep: 1 season</li>
-                                <li>Grace Watched: 14 days</li>
-                                <li><strong>Grace Scope: Per Season</strong></li>
-                            </ul>
-                            <strong>Behavior:</strong> S1 and S2 have independent grace timers - son watching S1 doesn't reset S2's timer
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Example 4 -->
-                <div class="accordion-item">
-                    <h2 class="accordion-header" id="example4">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse4">
-                            <strong>Scenario 4: Limited Storage (Budget Seedbox)</strong>
-                        </button>
-                    </h2>
-                    <div id="collapse4" class="accordion-collapse collapse" data-bs-parent="#examplesAccordion">
-                        <div class="accordion-body">
-                            <strong>Goal:</strong> Aggressive cleanup, only keep what's needed<br>
-                            <strong>Rule Settings:</strong>
-                            <ul>
-                                <li>Get: 1 episode</li>
-                                <li>Keep: 0 episodes</li>
-                                <li>Grace Unwatched: 3 days</li>
-                                <li>Dormant: 30 days</li>
-                            </ul>
-                            <strong>Global Settings:</strong>
-                            <ul>
-                                <li>Storage Threshold: 20 GB</li>
-                            </ul>
-                            <strong>Behavior:</strong> Only cleans up when storage drops below 20GB, aggressive deletion
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Troubleshooting -->
 <div class="card mb-3" id="troubleshooting">
@@ -1368,9 +1377,16 @@ Order: 1 (higher priority)</code></pre>
 
                 <dt>Q: Can different family members watch different seasons?</dt>
                 <dd>A: Yes! Use "Grace Scope: Per Season" in your rule settings.</dd>
+
+                <dt>Q: Why is polling running when I use PlaybackProgress?</dt>
+                <dd>A: (Fixed v2.9.8) System now auto-detects mode. If you have TRIGGER_MIN/MAX but no POLL_INTERVAL, polling is disabled automatically.</dd>
+
+                <dt>Q: Why 404 errors for deleted series?</dt>
+                <dd>A: (Fixed v2.9.8) Series auto-removed from config on startup. 404s logged as DEBUG, not ERROR.</dd>
             </dl>
         </div>
     </div>
+
 
     <!-- Support -->
     <div class="card mb-3">
@@ -1406,20 +1422,178 @@ Order: 1 (higher priority)</code></pre>
 </div>
 
 <style>
-/* Smooth scrolling for anchor links */
+/* ==================== ROOT VARIABLES ==================== */
+:root {
+  /* Light mode (default) */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-card: #ffffff;
+  --text-primary: #212529;
+  --text-secondary: #6c757d;
+  --text-muted: #6c757d;
+  --border-color: #dee2e6;
+  --code-bg: #f8f9fa;
+  --code-text: #212529;
+  --pre-bg: #212529;
+  --pre-text: #f8f9fa;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --bg-card: #252525;
+    --text-primary: #e0e0e0;
+    --text-secondary: #b0b0b0;
+    --text-muted: #888888;
+    --border-color: #404040;
+    --code-bg: #2d2d2d;
+    --code-text: #e0e0e0;
+    --pre-bg: #1a1a1a;
+    --pre-text: #e0e0e0;
+  }
+  
+  /* Override Bootstrap colors for dark mode */
+  body {
+    background-color: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  .card {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  .card-body {
+    color: var(--text-primary) !important;
+  }
+  
+  .text-muted {
+    color: var(--text-muted) !important;
+  }
+  
+  /* Tables */
+  .table {
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+  }
+  
+  .table thead th {
+    background-color: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+  }
+  
+  .table tbody tr {
+    border-color: var(--border-color) !important;
+  }
+  
+  .table-bordered {
+    border-color: var(--border-color) !important;
+  }
+  
+  /* Code blocks */
+  code {
+    background-color: var(--code-bg) !important;
+    color: var(--code-text) !important;
+  }
+  
+  pre {
+    background-color: var(--pre-bg) !important;
+    color: var(--pre-text) !important;
+  }
+  
+  /* Alerts */
+  .alert {
+    border-color: var(--border-color) !important;
+  }
+  
+  .alert-info {
+    background-color: #1a3a4a !important;
+    color: #9dd9f3 !important;
+  }
+  
+  .alert-warning {
+    background-color: #4a3a1a !important;
+    color: #f3d99d !important;
+  }
+  
+  .alert-danger {
+    background-color: #4a1a1a !important;
+    color: #f39d9d !important;
+  }
+  
+  .alert-success {
+    background-color: #1a4a2a !important;
+    color: #9df3b0 !important;
+  }
+  
+  /* Light backgrounds in dark mode */
+  .bg-light {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  /* Accordion */
+  .accordion-button {
+    background-color: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  .accordion-button:not(.collapsed) {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  .accordion-body {
+    background-color: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  /* Links */
+  a {
+    color: #4da6ff !important;
+  }
+  
+  a:hover {
+    color: #80c0ff !important;
+  }
+  
+  /* Buttons */
+  .btn-outline-primary {
+    color: #4da6ff !important;
+    border-color: #4da6ff !important;
+  }
+  
+  .btn-outline-primary:hover {
+    background-color: #4da6ff !important;
+    color: #ffffff !important;
+  }
+}
+
+/* ==================== GENERAL STYLES ==================== */
 html {
-    scroll-behavior: smooth;
+  scroll-behavior: smooth;
 }
 
-/* Style for code blocks */
 pre {
-    border-radius: 5px;
-    font-size: 0.85em;
+  border-radius: 5px;
+  font-size: 0.85em;
+  background-color: var(--pre-bg);
+  color: var(--pre-text);
+  padding: 1rem;
 }
 
-/* Ensure cards have consistent height in rows */
+code {
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+}
+
 .row .card {
-    height: 100%;
+  height: 100%;
 }
 </style>
 

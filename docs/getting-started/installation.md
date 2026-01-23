@@ -31,25 +31,24 @@ services:
       - SONARR_API_KEY=your_sonarr_api_key
       - TMDB_API_KEY=your_tmdb_read_access_token
       
-      # Optional - Add as needed for features you want
-      - TAUTULLI_URL=http://your-tautulli:8181
-      - TAUTULLI_API_KEY=your_tautulli_key
-      - JELLYSEERR_URL=http://your-jellyseerr:5055
-      - JELLYSEERR_API_KEY=your_jellyseerr_key
-      # Optional - For Jellyfin users (choose your mode)
+      # Optional - Jellyfin (auto-detects mode from env vars)
       - JELLYFIN_URL=http://your-jellyfin:8096
       - JELLYFIN_API_KEY=your_api_key
-      - JELLYFIN_USER_ID=your_username  # REQUIRED
+      - JELLYFIN_USER_ID=your_username  # Required
 
-      # Real-time mode (recommended)
+      # Mode 1: Real-time (recommended)
       - JELLYFIN_TRIGGER_MIN=50.0
       - JELLYFIN_TRIGGER_MAX=55.0
 
-      # Polling mode (legacy)
-      - JELLYFIN_TRIGGER_PERCENTAGE=50.0
-      - JELLYFIN_POLL_INTERVAL=900
+      # Mode 2: Polling (comment out Mode 1, use these)
+      # - JELLYFIN_TRIGGER_PERCENTAGE=50.0
+      # - JELLYFIN_POLL_INTERVAL=900
 
-      # On-stop mode uses JELLYFIN_TRIGGER_PERCENTAGE
+      # Mode 3: On-stop (comment out Mode 1, use this)
+      # - JELLYFIN_TRIGGER_PERCENTAGE=50.0
+
+      ## On-stop mode uses JELLYFIN_TRIGGER_PERCENTAGE
+      **Note:** System auto-detects which mode based on env vars. No manual disable needed.
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs

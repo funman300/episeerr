@@ -2916,7 +2916,7 @@ def jellyfin_polling_loop():
     logger.info("🛑 Jellyfin polling stopped")
 
 def start_jellyfin_active_polling():
-    """Start the active Jellyfin polling system."""
+    """Start the active Jellyfin polling system - auto-detects mode from env vars."""
     global jellyfin_polling_thread, jellyfin_polling_running
     
     # Check if Jellyfin is configured
@@ -2924,23 +2924,55 @@ def start_jellyfin_active_polling():
     jellyfin_api_key = os.getenv('JELLYFIN_API_KEY')
     
     if not jellyfin_url or not jellyfin_api_key:
-        logger.info("⏭️ Jellyfin not configured - active polling disabled")
+        logger.info("⏭️  Jellyfin not configured - active polling disabled")
         return False
     
-    if jellyfin_polling_running:
-        logger.info("⏭️ Jellyfin active polling already running")
+    # Auto-detect which Jellyfin mode is configured
+    using_trigger_window = os.getenv('JELLYFIN_TRIGGER_MIN') and os.getenv('JELLYFIN_TRIGGER_MAX')
+    using_poll_interval = os.getenv('JELLYFIN_POLL_INTERVAL')
+    
+    # Option 1: Real-time with PlaybackProgress webhooks
+    # Has TRIGGER_MIN/MAX but NO POLL_INTERVAL
+    if using_trigger_window and not using_poll_interval:
+        logger.info("⏭️  Jellyfin Option 1 detected (TRIGGER_MIN/MAX set)")
+        logger.info("⏭️  Using PlaybackProgress webhooks - active polling not needed")
+        return False
+    
+    # Option 3: On-Stop only
+    # Has neither TRIGGER_MIN/MAX nor POLL_INTERVAL
+    if not using_trigger_window and not using_poll_interval:
+        logger.info("⏭️  Jellyfin Option 3 detected (Playback Stop only)")
+        logger.info("⏭️  No polling interval configured - active polling disabled")
+        return False
+    
+    # Option 2: Polling mode
+    # Has POLL_INTERVAL set (may or may not have TRIGGER_PERCENTAGE)
+    if using_poll_interval:
+        if jellyfin_polling_running:
+            logger.info("⏭️  Jellyfin active polling already running")
+            return True
+        
+        try:
+            interval_minutes = int(using_poll_interval) // 60
+            logger.info(f"✅ Jellyfin Option 2 detected (POLL_INTERVAL={using_poll_interval})")
+            logger.info(f"✅ Active polling enabled: checking every {interval_minutes} minutes")
+        except:
+            logger.info(f"✅ Jellyfin Option 2 detected (POLL_INTERVAL={using_poll_interval})")
+        
+        jellyfin_polling_running = True
+        jellyfin_polling_thread = threading.Thread(
+            target=jellyfin_polling_loop, 
+            daemon=True, 
+            name="JellyfinActivePolling"
+        )
+        jellyfin_polling_thread.start()
+        
+        logger.info("✅ Jellyfin active polling system started")
         return True
     
-    jellyfin_polling_running = True
-    jellyfin_polling_thread = threading.Thread(
-        target=jellyfin_polling_loop, 
-        daemon=True, 
-        name="JellyfinActivePolling"
-    )
-    jellyfin_polling_thread.start()
-    
-    logger.info("✅ Jellyfin active polling system started")
-    return True
+    # Fallback: shouldn't reach here, but disable polling to be safe
+    logger.warning("⚠️  Jellyfin configuration unclear - disabling active polling")
+    return False
 
 def stop_jellyfin_active_polling():
     """Stop the active Jellyfin polling system."""

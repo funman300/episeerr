@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Released]
 
+## [2.9.8] - 2026-01-23
+
+### Added
+- **Auto-cleanup of deleted series**: Series removed from Sonarr are automatically cleaned from config during startup/drift detection
+- **Smart Jellyfin mode detection**: Auto-detects Option 1/2/3 from environment variables - no manual `JELLYFIN_DISABLE_ACTIVE_POLLING` needed
+- **Webhook string/integer tag handling**: SeriesAdd webhooks now handle both tag labels (strings) and IDs (integers) via reverse mapping
+- **Enhanced documentation**: Dark mode support, reorganized sections (Examples under Rules, FAQ under Troubleshooting), improved navigation
+
+### Changed
+- **Delay profile simplification**: Now contains only 3 control tags (default, select, delay) - rule tags no longer added
+- **404 error handling**: Series not found (404) logged as DEBUG instead of ERROR - reduces log noise
+- **Log clarity improvements**: "already processed (no control tags)" replaces "no episeerr tags" for clearer messaging
+- **Grace cleanup loop**: Series marked as `grace_cleaned` only re-enters loop after watch activity
+
+### Fixed
+- **Tag removal in webhooks**: Now correctly converts tag labels to IDs before API calls - prevents "tag not found" errors
+- **Series safety check**: Always fetches full series object before updates to prevent race conditions
+- **Jellyfin polling in Option 1**: Systems with TRIGGER_MIN/MAX and no POLL_INTERVAL no longer run unnecessary polling
+
+### Technical Details
+- Tag mapping: Maintains bidirectional label↔ID mapping for webhook compatibility
+- Cleanup flags: `grace_cleaned` flag prevents redundant daily checks until next watch event
+- 404 handling: Graceful removal from config with summary count in reconciliation logs
+- Jellyfin detection: Inspects env vars to determine mode without manual override
+
+### Migration Notes
+- **Automatic**: No user action required
+- **Sonarr delay profile**: May show extra rule tags briefly - these will be cleaned on next startup
+- **Jellyfin Option 1 users**: Polling auto-disables after container restart
+- **Documentation updates**: Restart container to see updated UI documentation
+
 [2.9.7] - 2026-01-21
 Added
 
