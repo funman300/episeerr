@@ -3,7 +3,7 @@
 {% block title %}Episeerr - Pending Items{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container-fluid mt-4">
     <!-- Instructions Section -->
     <div class="row mb-4">
         <div class="col-12">
@@ -65,7 +65,7 @@
                         
                         <div id="requests-table-container" style="display: none;">
                             <div class="table-responsive">
-                                <table class="table table-dark table-hover">
+                                <table class="table table-hover">
                                     <thead>
                                         <tr>
                                             <th>Series</th>
@@ -124,11 +124,10 @@
         </div>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
 <script>
-$(document).ready(function() {
+// Load pending requests on page load
+document.addEventListener('DOMContentLoaded', function() {
     loadPendingRequests();
 });
 
@@ -138,129 +137,123 @@ function refreshRequests() {
 
 function loadPendingRequests() {
     // Show loading state
-    $('#loading-indicator').show();
-    $('#no-requests').hide();
-    $('#requests-table-container').hide();
-    $('#error-message').hide();
+    document.getElementById('loading-indicator').style.display = 'block';
+    document.getElementById('no-requests').style.display = 'none';
+    document.getElementById('requests-table-container').style.display = 'none';
+    document.getElementById('error-message').style.display = 'none';
     
-    $.ajax({
-        url: '/api/pending-requests',
-        method: 'GET',
-        timeout: 10000,
-        success: function(data) {
-            $('#loading-indicator').hide();
-            
-            if (data.success) {
-                if (data.requests.length === 0) {
-                    $('#no-requests').show();
-                    // Update banner if available
-                    if (window.ocdarrBanner && typeof window.ocdarrBanner.checkPendingRequests === 'function') {
-                        window.ocdarrBanner.checkPendingRequests();
-                    }
-                } else {
-                    $('#requests-table-container').show();
-                    const tbody = $('#pending-requests-table');
-                    tbody.empty();
+    fetch('/api/pending-requests', {
+        method: 'GET'
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loading-indicator').style.display = 'none';
+        
+        if (data.success) {
+            if (data.requests.length === 0) {
+                document.getElementById('no-requests').style.display = 'block';
+            } else {
+                document.getElementById('requests-table-container').style.display = 'block';
+                const tbody = document.getElementById('pending-requests-table');
+                tbody.innerHTML = '';
+                
+                data.requests.forEach(req => {
+                    const createdAt = new Date(req.created_at * 1000).toLocaleString();
                     
-                    data.requests.forEach(req => {
-                        const createdAt = new Date(req.created_at * 1000).toLocaleString();
-                        
-                        // Determine which button to show based on request state
-                        let actionButton = '';
-                        if (req.needs_season_selection) {
-                            // Show "Select Seasons" button for new requests
-                            actionButton = `<a href="/select-seasons/${req.tmdb_id}" class="btn btn-primary btn-sm">
-                                            <i class="fas fa-calendar me-1"></i>Select Seasons
-                                        </a>`;
-                        } else {
-                            // Show "Select Episodes" button for requests that already have seasons
-                            actionButton = `<a href="/select-episodes/${req.series_id}" class="btn btn-primary btn-sm">
-                                            <i class="fas fa-play me-1"></i>Select Episodes
-                                        </a>`;
-                        }
-                        
-                        const row = `
-                            <tr data-request-id="${req.id}">
-                                <td>
-                                    <div class="fw-bold">${req.title}</div>
-                                    <small class="text-muted">
-                                        ${req.tmdb_id ? `TMDB ID: ${req.tmdb_id}` : `Series ID: ${req.series_id}`}
-                                    </small>
-                                </td>
-                                <td>
-                                    <div>${createdAt}</div>
-                                    <small class="text-muted">${getTimeAgo(req.created_at)}</small>
-                                </td>
-                                <td class="text-center">
-                                    <div class="btn-group" role="group">
-                                        ${actionButton}
-                                        <button class="btn btn-danger btn-sm delete-request" data-request-id="${req.id}">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        `;
-                        tbody.append(row);
-                    });
-                }
+                    // Determine which button to show based on request state
+                    let actionButton = '';
+                    if (req.needs_season_selection) {
+                        actionButton = `<a href="/select-seasons/${req.tmdb_id}" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-calendar me-1"></i>Select Seasons
+                                    </a>`;
+                    } else {
+                        actionButton = `<a href="/select-episodes/${req.series_id}" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-play me-1"></i>Select Episodes
+                                    </a>`;
+                    }
+                    
+                    const row = document.createElement('tr');
+                    row.setAttribute('data-request-id', req.id);
+                    row.innerHTML = `
+                        <td>
+                            <div class="fw-bold">${req.title}</div>
+                            <small class="text-muted">
+                                ${req.tmdb_id ? `TMDB ID: ${req.tmdb_id}` : `Series ID: ${req.series_id}`}
+                            </small>
+                        </td>
+                        <td>
+                            <div>${createdAt}</div>
+                            <small class="text-muted">${getTimeAgo(req.created_at)}</small>
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group" role="group">
+                                ${actionButton}
+                                <button class="btn btn-danger btn-sm delete-request" data-request-id="${req.id}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
                 
                 // Bind delete button events
-                $('.delete-request').off('click').on('click', function() {
-                    const requestId = $(this).data('request-id');
-                    const seriesTitle = $(this).closest('tr').find('.fw-bold').text();
-                    
-                    if (confirm(`Are you sure you want to delete the request for "${seriesTitle}"?`)) {
-                        $(this).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+                document.querySelectorAll('.delete-request').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const requestId = this.getAttribute('data-request-id');
+                        const seriesTitle = this.closest('tr').querySelector('.fw-bold').textContent;
                         
-                        $.ajax({
-                            url: `/api/delete-request/${requestId}`,
-                            method: 'POST',
-                            success: function(response) {
+                        if (confirm(`Are you sure you want to delete the request for "${seriesTitle}"?`)) {
+                            this.disabled = true;
+                            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                            
+                            fetch(`/api/delete-request/${requestId}`, {
+                                method: 'POST'
+                            })
+                            .then(response => response.json())
+                            .then(response => {
                                 if (response.status === 'success') {
-                                    $(`tr[data-request-id="${requestId}"]`).fadeOut(300, function() {
-                                        $(this).remove();
+                                    const row = document.querySelector(`tr[data-request-id="${requestId}"]`);
+                                    row.style.transition = 'opacity 0.3s';
+                                    row.style.opacity = '0';
+                                    setTimeout(() => {
+                                        row.remove();
                                         // Check if table is now empty
-                                        if ($('#pending-requests-table tr').length === 0) {
-                                            $('#requests-table-container').hide();
-                                            $('#no-requests').show();
+                                        if (document.querySelectorAll('#pending-requests-table tr').length === 0) {
+                                            document.getElementById('requests-table-container').style.display = 'none';
+                                            document.getElementById('no-requests').style.display = 'block';
                                         }
-                                    });
-                                    
-                                    // Update banner if available
-                                    if (window.ocdarrBanner && typeof window.ocdarrBanner.checkPendingRequests === 'function') {
-                                        window.ocdarrBanner.checkPendingRequests();
-                                    }
-                                    if (window.ocdarrBanner && typeof window.ocdarrBanner.show === 'function') {
-                                        window.ocdarrBanner.show('Request deleted successfully!', 'success');
-                                    }
+                                    }, 300);
                                 } else {
                                     showError('Error deleting request: ' + response.message);
+                                    this.disabled = false;
+                                    this.innerHTML = '<i class="fas fa-trash"></i>';
                                 }
-                            },
-                            error: function(xhr, status, error) {
-                                console.error('Delete request failed:', xhr.responseText);
+                            })
+                            .catch(error => {
+                                console.error('Delete request failed:', error);
                                 showError('Error deleting request. Please try again.');
-                                $(this).prop('disabled', false).html('<i class="fas fa-trash"></i>');
-                            }
-                        });
-                    }
+                                this.disabled = false;
+                                this.innerHTML = '<i class="fas fa-trash"></i>';
+                            });
+                        }
+                    });
                 });
-            } else {
-                showError(data.error || 'Unknown error occurred');
             }
-        },
-        error: function(xhr, status, error) {
-            $('#loading-indicator').hide();
-            console.error('Failed to load pending requests:', xhr.responseText);
-            showError('Failed to load pending requests. Please check your connection.');
+        } else {
+            showError(data.error || 'Unknown error occurred');
         }
+    })
+    .catch(error => {
+        document.getElementById('loading-indicator').style.display = 'none';
+        console.error('Failed to load pending requests:', error);
+        showError('Failed to load pending requests. Please check your connection.');
     });
 }
 
 function showError(message) {
-    $('#error-text').text(message);
-    $('#error-message').show();
+    document.getElementById('error-text').textContent = message;
+    document.getElementById('error-message').style.display = 'block';
 }
 
 function getTimeAgo(timestamp) {

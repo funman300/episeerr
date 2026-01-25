@@ -1,0 +1,544 @@
+/**
+ * Episeerr Sidebar Styles
+ * Sonarr-inspired sidebar navigation with theme support
+ */
+
+/* ============================================
+   Theme Variables
+   ============================================ */
+
+:root {
+    /* Default Dark Theme */
+    --sidebar-bg: #1a1d29;
+    --sidebar-header-bg: #151823;
+    --main-bg: #0f1419;
+    --topbar-bg: #1a1d29;
+    --card-bg: #1a1d29;
+    --border-color: #2d3142;
+    
+    --nav-text: #9ca3af;
+    --nav-hover-bg: #232736;
+    --nav-hover-text: #fff;
+    --nav-active-bg: #2d3142;
+    --nav-active-text: #6366f1;
+    
+    --submenu-bg: #151823;
+    
+    --text-primary: #fff;
+    --text-muted: #9ca3af;
+    
+    --brand-color: #6366f1;
+    --primary-color: #6366f1;
+    --success-bg: #10b981;
+    --danger-bg: #ef4444;
+    --danger-color: #ef4444;
+    --warning-bg: #f59e0b;
+    --warning-color: #f59e0b;
+    --warning-text: #000;
+    
+    --badge-bg: #374151;
+    --badge-text: #d1d5db;
+    
+    --btn-bg: #374151;
+    --btn-text: #d1d5db;
+    --btn-hover-bg: #4b5563;
+    --btn-hover-text: #fff;
+    
+    --poster-bg: #0f1419;
+    
+    --secondary-bg: #6b7280;
+}
+
+/* Night Owl Theme */
+[data-theme="night-owl"] {
+    --sidebar-bg: #011627;
+    --sidebar-header-bg: #01111d;
+    --main-bg: #011627;
+    --topbar-bg: #011627;
+    --card-bg: #011627;
+    --border-color: #1d3b53;
+    
+    --nav-text: #7fdbca;
+    --nav-hover-bg: #0b2942;
+    --nav-hover-text: #82aaff;
+    --nav-active-bg: #1d3b53;
+    --nav-active-text: #82aaff;
+    
+    --submenu-bg: #01111d;
+    
+    --brand-color: #82aaff;
+    --primary-color: #82aaff;
+}
+
+/* Nord Theme */
+[data-theme="nord"] {
+    --sidebar-bg: #2e3440;
+    --sidebar-header-bg: #242933;
+    --main-bg: #2e3440;
+    --topbar-bg: #2e3440;
+    --card-bg: #3b4252;
+    --border-color: #434c5e;
+    
+    --nav-text: #d8dee9;
+    --nav-hover-bg: #434c5e;
+    --nav-hover-text: #eceff4;
+    --nav-active-bg: #4c566a;
+    --nav-active-text: #88c0d0;
+    
+    --submenu-bg: #242933;
+    
+    --brand-color: #88c0d0;
+    --primary-color: #88c0d0;
+    --success-bg: #a3be8c;
+    --danger-bg: #bf616a;
+    --warning-bg: #ebcb8b;
+}
+
+/* Light Breeze Theme */
+[data-theme="light-breeze"] {
+    --sidebar-bg: #f8fafc;
+    --sidebar-header-bg: #e2e8f0;
+    --main-bg: #ffffff;
+    --topbar-bg: #f8fafc;
+    --card-bg: #ffffff;
+    --border-color: #cbd5e1;
+    
+    --nav-text: #475569;
+    --nav-hover-bg: #e2e8f0;
+    --nav-hover-text: #1e293b;
+    --nav-active-bg: #dbeafe;
+    --nav-active-text: #3b82f6;
+    
+    --submenu-bg: #f1f5f9;
+    
+    --text-primary: #1e293b;
+    --text-muted: #64748b;
+    
+    --brand-color: #3b82f6;
+    --primary-color: #3b82f6;
+    --success-bg: #22c55e;
+    --danger-bg: #ef4444;
+    --warning-bg: #f59e0b;
+    
+    --badge-bg: #e2e8f0;
+    --badge-text: #475569;
+    
+    --btn-bg: #e2e8f0;
+    --btn-text: #475569;
+    --btn-hover-bg: #cbd5e1;
+    --btn-hover-text: #1e293b;
+    
+    --poster-bg: #f8fafc;
+}
+
+/* ============================================
+   Scrollbar Styling
+   ============================================ */
+
+.episeerr-sidebar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.episeerr-sidebar::-webkit-scrollbar-track {
+    background: var(--sidebar-bg);
+}
+
+.episeerr-sidebar::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.episeerr-sidebar::-webkit-scrollbar-thumb:hover {
+    background: var(--nav-hover-bg);
+}
+
+/* ============================================
+   Card Styles
+   ============================================ */
+
+.card {
+    background: var(--card-bg);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.card-header {
+    background: var(--sidebar-header-bg);
+    border-bottom-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.card-body {
+    background: var(--card-bg);
+}
+
+/* ============================================
+   Form Controls
+   ============================================ */
+
+.form-control,
+.form-select {
+    background: var(--sidebar-bg);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.form-control:focus,
+.form-select:focus {
+    background: var(--sidebar-bg);
+    border-color: var(--brand-color);
+    color: var(--text-primary);
+    box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
+}
+
+.input-group-text {
+    background: var(--sidebar-header-bg);
+    border-color: var(--border-color);
+    color: var(--text-muted);
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+
+.btn-primary {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--brand-color);
+    border-color: var(--brand-color);
+    opacity: 0.9;
+}
+
+.btn-outline-primary {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+.btn-outline-danger {
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+}
+
+.btn-outline-danger:hover {
+    background: var(--danger-color);
+    border-color: var(--danger-color);
+    color: white;
+}
+
+/* ============================================
+   Table Styles
+   ============================================ */
+
+.table {
+    color: var(--text-primary);
+}
+
+.table-hover tbody tr:hover {
+    background: var(--nav-hover-bg);
+}
+
+.table thead th {
+    background: var(--sidebar-header-bg);
+    border-bottom-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.table td,
+.table th {
+    border-bottom-color: var(--border-color);
+}
+
+/* ============================================
+   Activity Cards
+   ============================================ */
+
+.stats-card {
+    background: var(--card-bg);
+    border-color: var(--border-color);
+}
+
+.activity-card {
+    transition: all 0.2s ease;
+}
+
+.activity-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.clickable-card {
+    cursor: pointer;
+}
+
+.activity-poster-container {
+    width: 60px;
+    height: 90px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--poster-bg);
+    flex-shrink: 0;
+}
+
+.activity-poster {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.activity-content {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.activity-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.activity-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.activity-time {
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
+/* ============================================
+   Collapse Icons
+   ============================================ */
+
+.collapse-icon {
+    transition: transform 0.3s ease;
+}
+
+.collapsed .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+/* ============================================
+   Status Indicators
+   ============================================ */
+
+.status-continuing {
+    color: var(--success-bg);
+}
+
+.status-ended {
+    color: var(--danger-bg);
+}
+
+.status-upcoming {
+    color: var(--warning-bg);
+}
+
+.status-unknown {
+    color: var(--text-muted);
+}
+
+/* ============================================
+   Badges
+   ============================================ */
+
+.badge {
+    font-weight: 500;
+}
+
+.badge.bg-primary {
+    background: var(--primary-color) !important;
+}
+
+.badge.bg-secondary {
+    background: var(--secondary-bg) !important;
+}
+
+.badge.bg-success {
+    background: var(--success-bg) !important;
+}
+
+.badge.bg-danger {
+    background: var(--danger-bg) !important;
+}
+
+.badge.bg-warning {
+    background: var(--warning-bg) !important;
+    color: var(--warning-text) !important;
+}
+
+/* ============================================
+   Responsive Utilities
+   ============================================ */
+
+@media (max-width: 767px) {
+    .desktop-only {
+        display: none !important;
+    }
+}
+
+@media (min-width: 768px) {
+    .mobile-only {
+        display: none !important;
+    }
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes slideInLeft {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.episeerr-sidebar.show {
+    animation: slideInLeft 0.3s ease-out;
+}
+
+.sidebar-backdrop.show {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* ============================================
+   Accessibility
+   ============================================ */
+
+.sidebar-nav-item:focus,
+.sidebar-section-header:focus,
+.sidebar-rule-item:focus {
+    outline: 2px solid var(--brand-color);
+    outline-offset: 2px;
+}
+
+/* Skip to content link for screen readers */
+.skip-to-content {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: var(--primary-color);
+    color: white;
+    padding: 8px;
+    text-decoration: none;
+    z-index: 9999;
+}
+
+.skip-to-content:focus {
+    top: 0;
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+
+@media print {
+    .episeerr-sidebar,
+    .mobile-navbar,
+    .top-action-bar,
+    .sidebar-backdrop {
+        display: none !important;
+    }
+    
+    .episeerr-main {
+        margin-left: 0 !important;
+    }
+}
+
+/* ============================================
+   Loading States
+   ============================================ */
+
+.loading-skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--sidebar-bg) 0%,
+        var(--nav-hover-bg) 50%,
+        var(--sidebar-bg) 100%
+    );
+    background-size: 200% 100%;
+    animation: loading 1.5s ease-in-out infinite;
+}
+
+@keyframes loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* ============================================
+   Custom Checkbox Styling
+   ============================================ */
+
+input[type="checkbox"] {
+    accent-color: var(--brand-color);
+}
+
+/* ============================================
+   Link Colors
+   ============================================ */
+
+a {
+    color: var(--primary-color);
+}
+
+a:hover {
+    color: var(--brand-color);
+}
+
+.text-muted {
+    color: var(--text-muted) !important;
+}
+
+.text-light {
+    color: var(--text-primary) !important;
+}
+
+/* ============================================
+   Grid Card Enhancements
+   ============================================ */
+
+.series-grid-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light-breeze"] .series-grid-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.series-grid-card:hover {
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+}
+
+[data-theme="light-breeze"] .series-grid-card:hover {
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+}

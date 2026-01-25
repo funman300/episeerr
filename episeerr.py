@@ -1,4 +1,4 @@
-__version__ = "2.9.8"
+__version__ = "3.0"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -375,6 +375,210 @@ def setup_cleanup_logging():
 
 cleanup_logger = setup_cleanup_logging()
 # import pending_deletions
+
+"""
+Flask API Endpoints for Episeerr Sidebar
+
+Add these routes to your Flask application to support the sidebar navigation.
+"""
+
+from flask import jsonify, request
+
+# Add this route to provide rules list for the sidebar
+@app.route('/api/rules-list')
+def api_rules_list():
+    """Return formatted rules data for sidebar display"""
+    try:
+        config_data = load_config()
+        default_rule = config_data.get('default_rule')
+        rules = config_data.get('rules', {})
+        
+        rules_list = []
+        
+        # Process each rule
+        for rule_name, rule_details in sorted(rules.items()):
+            is_default = (rule_name == default_rule)
+            series_count = len(rule_details.get('series', []))
+            
+            # Create display name (title case with spaces)
+            display_name = rule_name.replace('_', ' ').title()
+            
+            rules_list.append({
+                'name': rule_name,
+                'display_name': display_name,
+                'description': rule_details.get('description', ''),
+                'series_count': series_count,
+                'is_default': is_default
+            })
+        
+        # Sort: default first, then alphabetically
+        rules_list.sort(key=lambda x: (not x['is_default'], x['display_name']))
+        
+        return jsonify({
+            'success': True,
+            'rules': rules_list,
+            'total_count': len(rules_list)
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'rules': []
+        }), 500
+
+
+# You may also want to update your existing /api/series-data endpoint
+# to include poster image URLs from Sonarr
+@app.route('/api/series-data-enhanced')
+def api_series_data_enhanced():
+    """Enhanced series data with poster images"""
+    try:
+        # Get series from Sonarr
+        sonarr_url = os.environ.get('SONARR_URL')
+        sonarr_api_key = os.environ.get('SONARR_API_KEY')
+        
+        headers = {'X-Api-Key': sonarr_api_key}
+        response = requests.get(f'{sonarr_url}/api/v3/series', headers=headers)
+        
+        if response.status_code != 200:
+            return jsonify({'success': False, 'error': 'Failed to fetch from Sonarr'}), 500
+        
+        series_data = response.json()
+        config_data = load_config()
+        
+        # Enhance each series with rule assignment and poster URL
+        for series in series_data:
+            series_id = series.get('id')
+            
+            # Find assigned rule
+            assigned_rule = None
+            for rule_name, rule_details in config_data.get('rules', {}).items():
+                if series_id in rule_details.get('series', []):
+                    assigned_rule = rule_name
+                    break
+            
+            series['assigned_rule'] = assigned_rule
+            
+            # Add poster URL - Sonarr provides this in images array
+            # but we'll construct the direct URL for easier access
+            series['poster_url'] = f"{sonarr_url}/api/v3/mediacover/{series_id}/poster.jpg?apikey={sonarr_api_key}"
+        
+        return jsonify({
+            'success': True,
+            'series': series_data,
+            'total_count': len(series_data)
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'series': []
+        }), 500
+
+
+# Optional: Endpoint to set default rule
+@app.route('/api/set-default-rule', methods=['POST'])
+def api_set_default_rule():
+    """Set a rule as the default"""
+    try:
+        data = request.get_json()
+        rule_name = data.get('rule_name')
+        
+        if not rule_name:
+            return jsonify({'success': False, 'error': 'Rule name required'}), 400
+        
+        config_data = load_config()
+        
+        # Verify rule exists
+        if rule_name not in config_data.get('rules', {}):
+            return jsonify({'success': False, 'error': 'Rule not found'}), 404
+        
+        # Update default rule
+        config_data['default_rule'] = rule_name
+        save_config(config_data)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Default rule set to {rule_name}',
+            'default_rule': rule_name
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# Optional: Quick stats for sidebar
+@app.route('/api/sidebar-stats')
+def api_sidebar_stats():
+    """Return quick stats for sidebar badges"""
+    try:
+        config_data = load_config()
+        
+        stats = {
+            'total_rules': len(config_data.get('rules', {})),
+            'default_rule': config_data.get('default_rule'),
+            'rules': {}
+        }
+        
+        # Count series per rule
+        for rule_name, rule_details in config_data.get('rules', {}).items():
+            stats['rules'][rule_name] = {
+                'series_count': len(rule_details.get('series', [])),
+                'is_default': (rule_name == config_data.get('default_rule'))
+            }
+        
+        return jsonify(stats)
+    
+    except Exception as e:
+        return jsonify({
+            'error': str(e)
+        }), 500
+
+def api_rules_list():
+    """Return formatted rules data for sidebar display"""
+    try:
+        config_data = load_config()
+        default_rule = config_data.get('default_rule')
+        rules = config_data.get('rules', {})
+        
+        rules_list = []
+        
+        # Process each rule
+        for rule_name, rule_details in sorted(rules.items()):
+            is_default = (rule_name == default_rule)
+            series_count = len(rule_details.get('series', []))
+            
+            # Create display name (title case with spaces)
+            display_name = rule_name.replace('_', ' ').title()
+            
+            rules_list.append({
+                'name': rule_name,
+                'display_name': display_name,
+                'description': rule_details.get('description', ''),
+                'series_count': series_count,
+                'is_default': is_default
+            })
+        
+        # Sort: default first, then alphabetically
+        rules_list.sort(key=lambda x: (not x['is_default'], x['display_name']))
+        
+        return jsonify({
+            'success': True,
+            'rules': rules_list,
+            'total_count': len(rules_list)
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'rules': []
+        }), 500
 
 @app.route('/pending-deletions')
 def view_pending_deletions():

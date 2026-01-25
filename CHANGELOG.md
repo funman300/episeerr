@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [Released]
+## [3.0.0] - 2026-01-25
+
+### Major UI Redesign
+- **Sonarr-style sidebar navigation** - Persistent on desktop, slide-in on mobile
+- **Poster grid view** - 2-8 responsive columns with lazy loading
+- **Grid/Table toggle** - Switch between poster and table views
+- **4 theme options** - Default Dark, Night Owl, Nord, Light Breeze
+- **Mobile improvements** - Logo as hamburger button, better responsive layout
+- **Rules in sidebar** - Quick access with series counts and default indicator
+- **System links** - Collapsible section for Sonarr, Jellyseerr, Jellyfin, etc.
+
+### Technical
+- Client-side filtering and sorting
+- State persistence (view preference, theme, collapse states)
+- Converted jQuery to vanilla JavaScript
+- No breaking changes to Flask routes or data structure
+
+### Files Changed
+- `templates/base.html` - New sidebar layout
+- `templates/rules_index.html` - Grid/table series view
+- `templates/episeerr_index.html` - Vanilla JS conversion
+- `static/sidebar.css` - Complete theme system
+- `episeerr.py` - Added `/api/rules-list` endpoint
+
+---
 
 ## [2.9.8] - 2026-01-23
 

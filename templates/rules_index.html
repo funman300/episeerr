@@ -1,982 +1,546 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row g-3 mb-4">
-    <!-- Last Requested -->
-    <div class="col-lg-4 col-md-4 col-12">
-        <a href="{{ JELLYSEERR_URL }}" target="_blank" class="text-decoration-none">
-            <div class="card stats-card activity-card text-white clickable-card" id="lastRequestCard">
-                <div class="card-body">
-                    <h5><i class="fas fa-plus-circle me-2"></i>Last Requested <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
-                    <div class="activity-content">
-                        <div class="activity-poster-container">
-                            <img class="activity-poster" src="/static/placeholder.png" alt="">
-                        </div>
-                        <div class="activity-info">
-                            <div class="activity-title">No recent requests</div>
-                            <small class="activity-time text-muted"></small>
-                        </div>
-                    </div>
-                </div>
+<!-- Series Management - Main View -->
+<div class="series-header mb-3">
+    <div class="row g-3 align-items-center">
+        <!-- View Toggle -->
+        <div class="col-auto">
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-primary active" id="gridViewBtn" onclick="setView('grid')">
+                    <i class="fas fa-th"></i> Grid
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="tableViewBtn" onclick="setView('table')">
+                    <i class="fas fa-list"></i> Table
+                </button>
             </div>
-        </a>
-    </div>
-    
-    <!-- Last Searched -->
-    <div class="col-lg-4 col-md-4 col-12">
-        <a href="{{ SONARR_URL }}/activity/queue" target="_blank" class="text-decoration-none">
-            <div class="card stats-card activity-card text-white clickable-card" id="lastSearchCard">
-                <div class="card-body">
-                    <h5><i class="fas fa-search me-2"></i>Last Searched <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
-                    <div class="activity-content">
-                        <div class="activity-poster-container">
-                            <img class="activity-poster" src="/static/placeholder.png" alt="">
-                        </div>
-                        <div class="activity-info">
-                            <div class="activity-title">No recent searches</div>
-                            <small class="activity-time text-muted"></small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-    
-    <!-- Last Watched -->
-    <div class="col-lg-4 col-md-4 col-12">
-        <a href="{{ JELLYFIN_URL or TAUTULLI_URL or PLEX_URL }}" target="_blank" class="text-decoration-none">
-            <div class="card stats-card activity-card text-white clickable-card" id="lastWatchCard">
-                <div class="card-body">
-                    <h5><i class="fas fa-eye me-2"></i>Last Watched <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7em; opacity: 0.7;"></i></h5>
-                    <div class="activity-content">
-                        <div class="activity-poster-container">
-                            <img class="activity-poster" src="/static/placeholder.png" alt="">
-                        </div>
-                        <div class="activity-info">
-                            <div class="activity-title">No recent activity</div>
-                            <small class="activity-time text-muted"></small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-</div>
+        </div>
 
-<!-- Rules Management -->
-<div class="row">
-    <div class="col-md-4">
-        <div class="card">
-            <!-- Desktop Header -->
-            <div class="card-header desktop-only">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h5><i class="fas fa-list me-2"></i>Rules</h5>
-                    <div>
-                        <a href="{{ url_for('cleanup') }}" class="btn btn-outline-light btn-sm me-2" title="Clean up orphaned series from rules">
-                            <i class="fas fa-broom me-1"></i>Clean Config
-                        </a>
-                        <a href="{{ url_for('create_rule') }}" class="btn btn-primary btn-sm">
-                            <i class="fas fa-plus me-1"></i> New Rule
-                        </a>
-                    </div>
-                </div>
+        <!-- Search -->
+        <div class="col-md-3">
+            <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control" id="seriesSearchInput" placeholder="Search series...">
             </div>
-            
-            <!-- Mobile Header -->
-            <div class="card-header mobile-only">
-                <h5><i class="fas fa-list me-2"></i>Rules</h5>
-                <div class="mobile-header-buttons">
-                    <a href="{{ url_for('cleanup') }}" class="btn btn-outline-light">
-                        <i class="fas fa-broom me-1"></i>Clean Config
-                    </a>
-                    <a href="{{ url_for('create_rule') }}" class="btn btn-primary">
-                        <i class="fas fa-plus me-1"></i>New Rule
-                    </a>
-                </div>
-            </div>
-            
-            <div class="card-body">
-                {% set sorted_rules = [] %}
-                {% set default_rule_name = config.get('default_rule') %}
-                
-                {# First, add the default rule if it exists #}
-                {% if default_rule_name and default_rule_name in config.rules %}
-                    {% set _ = sorted_rules.append((default_rule_name, config.rules[default_rule_name])) %}
-                {% endif %}
-                
-                {# Then add all other rules alphabetically #}
-                {% for rule_name, rule_details in config.rules.items()|sort %}
-                    {% if rule_name != default_rule_name %}
-                        {% set _ = sorted_rules.append((rule_name, rule_details)) %}
-                    {% endif %}
+        </div>
+
+        <!-- Rule Filter -->
+        <div class="col-md-2">
+            <select class="form-select" id="ruleFilterSelect">
+                <option value="">All Rules</option>
+                <option value="Unassigned">Unassigned</option>
+                {% for rule_name in config.rules.keys() %}
+                <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
                 {% endfor %}
-                
-                <!-- Desktop Rules List -->
-                <div class="desktop-only">
-                    {% for rule_name, rule_details in sorted_rules %}
-                    <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded {% if rule_name == default_rule_name %}border-warning bg-warning bg-opacity-10{% endif %}">
-                        <div>
-                            <div class="d-flex align-items-center">
-                                <strong 
-                                    {% if rule_details.get('description') %}
-                                    data-bs-toggle="tooltip" 
-                                    data-bs-placement="top" 
-                                    title="{{ rule_details.description }}"
-                                    style="cursor: help;"
-                                    {% endif %}
-                                >
-                                    {{ rule_name.replace('_', ' ').title() }}
-                                </strong>
-                                {% if rule_name == default_rule_name %}
-                                <span class="badge bg-warning text-dark ms-2">
-                                    <i class="fas fa-star me-1"></i>Default
-                                </span>
-                                {% endif %}
-                            </div>
-                            <small class="text-muted">{{ rule_details.series|length }} series</small>
-                        </div>
-                        <div class="btn-group btn-group-sm">
-                            <a href="{{ url_for('edit_rule', rule_name=rule_name) }}" class="btn btn-outline-primary btn-sm">
-                                <i class="fas fa-edit"></i>
-                            </a>
-                            {% if rule_name != default_rule_name %}
-                            <form method="POST" action="{{ url_for('delete_rule', rule_name=rule_name) }}" style="display: inline;">
-                                <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this rule?')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </form>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                
-                <!-- Mobile Rules List -->
-                <div class="mobile-only">
-                    {% for rule_name, rule_details in sorted_rules %}
-                    <div class="rule-item-mobile {% if rule_name == default_rule_name %}default{% endif %}">
-                        <div class="rule-info-mobile">
-                            <div class="d-flex align-items-center">
-                                <strong 
-                                    {% if rule_details.get('description') %}
-                                    data-bs-toggle="tooltip" 
-                                    data-bs-placement="top" 
-                                    title="{{ rule_details.description }}"
-                                    style="cursor: help;"
-                                    {% endif %}
-                                >
-                                    {{ rule_name.replace('_', ' ').title() }}
-                                </strong>
-                                {% if rule_name == default_rule_name %}
-                                <span class="badge bg-warning text-dark ms-2">
-                                    <i class="fas fa-star me-1"></i>Default
-                                </span>
-                                {% endif %}
-                            </div>
-                            <small class="text-muted">{{ rule_details.series|length }} series</small>
-                        </div>
-                        <div class="rule-actions-mobile">
-                            <a href="{{ url_for('edit_rule', rule_name=rule_name) }}" class="btn btn-outline-primary btn-touch">
-                                <i class="fas fa-edit me-1"></i>Edit
-                            </a>
-                            {% if rule_name != default_rule_name %}
-                            <form method="POST" action="{{ url_for('delete_rule', rule_name=rule_name) }}" style="display: inline; flex: 1;">
-                                <button type="submit" class="btn btn-outline-danger btn-touch w-100" onclick="return confirm('Delete this rule?')">
-                                    <i class="fas fa-trash me-1"></i>Delete
-                                </button>
-                            </form>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
+            </select>
         </div>
-    </div>
 
-    <div class="col-md-8">
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5><i class="fas fa-tv me-2"></i>Series Management</h5>
+        <!-- Status Filter -->
+        <div class="col-md-2">
+            <select class="form-select" id="statusFilterSelect">
+                <option value="">All Status</option>
+                <option value="continuing">Continuing</option>
+                <option value="ended">Ended</option>
+                <option value="upcoming">Upcoming</option>
+            </select>
         </div>
-        <div class="card-body">
-            <!-- Rule Assignment Form -->
-            <form method="POST" action="{{ url_for('assign_rules') }}" id="assignment-form">
-                <div class="row mb-3">
-                    <div class="col-md-3">
-                        <select name="rule_name" class="form-select" required>
-                            <option value="">Select Rule to Assign</option>
-                            {% for rule_name in config.rules.keys() %}
-                            <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-9">
-                        <div class="btn-group w-100">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-link me-1"></i>Assign Selected
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary" onclick="selectAll()">
-                                Select All
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary" onclick="selectNone()">
-                                Select None
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <!-- ADD THIS FILTER SECTION HERE -->
-            <div class="row mb-3 mt-3 g-2">
-                <div class="col-md-4">
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-dark border-secondary">
-                            <i class="fas fa-search text-muted"></i>
-                        </span>
-                        <input 
-                            type="text" 
-                            id="seriesSearchInput" 
-                            class="form-control form-control-sm bg-dark text-light border-secondary" 
-                            placeholder="Search series..."
-                            autocomplete="off"
-                        />
-                    </div>
-                </div>
-                
-                <div class="col-md-3">
-                    <select id="ruleFilterSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
-                        <option value="all">All Rules</option>
-                        {% for rule_name in config.rules.keys() | sort %}
-                        <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
-                        {% endfor %}
-                        <option value="unassigned">Unassigned</option>
-                    </select>
-                </div>
-                
-                <div class="col-md-3">
-                    <select id="statusFilterSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
-                        <option value="all">All Status</option>
-                        <option value="continuing">Continuing</option>
-                        <option value="ended">Ended</option>
-                        <option value="upcoming">Upcoming</option>
-                    </select>
-                </div>
-                
-                <div class="col-md-2">
-                    <button onclick="clearAllFilters()" class="btn btn-sm btn-outline-secondary w-100">
-                        <i class="fas fa-times me-1"></i>Clear
-                    </button>
-                </div>
-            </div>
-            
-            <div class="mb-2">
-                <small class="text-muted">
-                    <i class="fas fa-info-circle me-1"></i>
-                    <span id="filterResultCount">Loading series...</span>
-                </small>
-            </div>
-                <!-- Enhanced Series Table with Sorting -->
-                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
-                    <table class="table table-dark table-striped table-sm" id="seriesTable">
-                        <thead class="sticky-top">
-                            <tr>
-                                <th width="50">
-                                    <input type="checkbox" id="select-all-checkbox" onchange="toggleAll()">
-                                </th>
-                                <th class="sortable" data-column="title">
-                                    Series <i class="fas fa-sort sort-icon"></i>
-                                </th>
-                                <th class="sortable" data-column="rule">
-                                    Current Rule <i class="fas fa-sort sort-icon"></i>
-                                </th>
-                                <th class="sortable" data-column="status">
-                                    Status <i class="fas fa-sort sort-icon"></i>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody id="seriesTableBody">
-                            <!-- Series rows will be populated by JavaScript -->
-                        </tbody>
-                    </table>
-                </div>
-            </form>
-           
-            <!-- Unassign Button -->
-            <form method="POST" action="{{ url_for('unassign_series') }}" class="mt-3" onsubmit="return copySelectedSeries(this)">
-                <div class="d-flex justify-content-between align-items-center">
-                    <button type="submit" class="btn btn-warning">
-                        <i class="fas fa-unlink me-1"></i>Unassign Selected Series
-                    </button>
-                </div>
-            </form>
+
+        <!-- Selected Count -->
+        <div class="col-md-auto ms-auto">
+            <span class="text-muted" id="selectedCount">0 selected</span>
         </div>
     </div>
 </div>
+
+<!-- Bulk Actions Bar -->
+<div class="bulk-actions-bar mb-3" id="bulkActionsBar" style="display: none;">
+    <div class="row g-2 align-items-center">
+        <div class="col-auto">
+            <strong><span id="bulkSelectedCount">0</span> series selected</strong>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select form-select-sm" id="bulkRuleSelect">
+                <option value="">Assign to Rule...</option>
+                {% for rule_name in config.rules.keys() %}
+                <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary btn-sm" onclick="assignSelectedSeries()">
+                <i class="fas fa-check me-1"></i> Assign
+            </button>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-danger btn-sm" onclick="unassignSelectedSeries()">
+                <i class="fas fa-times me-1"></i> Unassign
+            </button>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-secondary btn-sm" onclick="clearSelection()">
+                <i class="fas fa-ban me-1"></i> Clear Selection
+            </button>
+        </div>
+    </div>
 </div>
+
+<!-- Grid View -->
+<div id="seriesGridView" style="display: none;">
+    <div class="row g-3" id="seriesGrid">
+        <div class="col-12 text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading series...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Table View -->
+<div id="seriesTableView" class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th style="width: 40px;">
+                    <input type="checkbox" id="select-all-checkbox">
+                </th>
+                <th class="sortable" data-sort="title" style="cursor: pointer;">
+                    Series <i class="fas fa-sort ms-1"></i>
+                </th>
+                <th class="sortable" data-sort="rule" style="cursor: pointer;">
+                    Rule <i class="fas fa-sort ms-1"></i>
+                </th>
+                <th class="sortable" data-sort="status" style="cursor: pointer;">
+                    Status <i class="fas fa-sort ms-1"></i>
+                </th>
+            </tr>
+        </thead>
+        <tbody id="series-table-body">
+            <tr>
+                <td colspan="4" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading series...</p>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
 <style>
-/* 3 Activity Cards - Clean & Simple */
-.activity-card {
-    min-height: 160px;
-}
-
-.activity-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.activity-poster-container {
-    width: 100%;
-    height: 140px;
-    overflow: hidden;
+/* Series Header Bar */
+.series-header {
+    background: var(--card-bg, #1a1d29);
+    padding: 16px 20px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color, #2d3142);
 }
 
-.activity-poster {
+/* Bulk Actions Bar */
+.bulk-actions-bar {
+    background: var(--sidebar-header-bg, #151823);
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--brand-color, #6366f1);
+}
+
+/* Grid View Styles */
+.series-grid-card {
+    background: var(--card-bg, #1a1d29);
+    border: 1px solid var(--border-color, #2d3142);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    position: relative;
+}
+
+.series-grid-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    border-color: var(--brand-color, #6366f1);
+}
+
+.series-poster-container {
+    position: relative;
+    width: 100%;
+    padding-top: 150%; /* 2:3 aspect ratio */
+    background: var(--poster-bg, #0f1419);
+    overflow: hidden;
+}
+
+.series-poster {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center center; /* Center it instead of top */
-    transform: scale(0.8); /* Zoom out a bit */
-    transition: transform 0.3s ease;
 }
 
-.clickable-card:hover .activity-poster {
-    transform: scale(0.85); /* Zoom out slightly more on hover */
-}
-.activity-info {
-    width: 100%;
-    text-align: center;
+.series-poster-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.activity-title {
+.series-grid-card:hover .series-poster-overlay {
+    opacity: 1;
+}
+
+.series-checkbox-container {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 10;
+}
+
+.series-checkbox-container input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.series-info {
+    padding: 12px;
+}
+
+.series-title {
+    font-size: 0.95rem;
     font-weight: 600;
-    font-size: 0.9rem;
-    margin-bottom: 0.15rem;
+    color: var(--text-primary, #fff);
+    margin-bottom: 6px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 2.8em;
 }
 
-.activity-time {
-    font-size: 0.8rem;
-    opacity: 0.8;
+.series-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
 }
 
+.series-badge {
+    font-size: 0.75rem;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: var(--badge-bg, #374151);
+    color: var(--badge-text, #d1d5db);
+}
 
-/* Mobile: Horizontal banner layout */
-@media (max-width: 991px) {
-    .activity-card {
-        min-height: 120px;
-    }
-    
-    .activity-content {
-        flex-direction: row;
-        gap: 0.75rem;
-    }
-    
-    .activity-poster-container {
-        width: 80px;
-        height: 100px;
-        flex-shrink: 0;
-    }
-    
-    .activity-info {
-        flex: 1;
-        text-align: left;
-    }
-    
-    .activity-title {
-        font-size: 0.95rem;
-    }
+.series-badge.rule {
+    background: var(--primary-color, #6366f1);
+    color: white;
+}
+
+.series-badge.unassigned {
+    background: var(--secondary-bg, #6b7280);
+}
+
+.series-badge.continuing {
+    background: var(--success-bg, #10b981);
+    color: white;
+}
+
+.series-badge.ended {
+    background: var(--danger-bg, #ef4444);
+    color: white;
+}
+
+/* Responsive Grid */
+@media (min-width: 1600px) {
+    .series-grid-col { flex: 0 0 12.5%; max-width: 12.5%; }
+}
+@media (min-width: 1400px) and (max-width: 1599px) {
+    .series-grid-col { flex: 0 0 14.285%; max-width: 14.285%; }
+}
+@media (min-width: 1200px) and (max-width: 1399px) {
+    .series-grid-col { flex: 0 0 16.666667%; max-width: 16.666667%; }
+}
+@media (min-width: 992px) and (max-width: 1199px) {
+    .series-grid-col { flex: 0 0 20%; max-width: 20%; }
+}
+@media (min-width: 768px) and (max-width: 991px) {
+    .series-grid-col { flex: 0 0 25%; max-width: 25%; }
+}
+@media (min-width: 576px) and (max-width: 767px) {
+    .series-grid-col { flex: 0 0 33.333333%; max-width: 33.333333%; }
+}
+@media (max-width: 575px) {
+    .series-grid-col { flex: 0 0 50%; max-width: 50%; }
 }
 </style>
-<!-- Add services data for Quick Links dropdown -->
+
 <script>
-// Make services available for the Quick Links dropdown
-window.servicesData = {{ services|tojson|safe }};
-</script>
-{% endblock %}
+// Store services data for sidebar (only if they exist)
+window.servicesData = {};
 
-{% block scripts %}
-<script>
-
-// Activity card functions
-async function updateActivityCards() {
-    try {
-        const response = await fetch('/api/recent-activity-cards');
-        if (!response.ok) throw new Error('Failed to fetch activity');
-        
-        const data = await response.json();
-        
-        // Update all 3 cards (they'll hide themselves if empty)
-        updateCard('lastRequestCard', data.last_request, 'overseerr');
-        updateCard('lastSearchCard', data.last_search, 'sonarr');
-        updateCard('lastWatchCard', data.last_watch, 'jellyfin');
-        
-        // Adjust column widths based on visible cards
-        adjustCardLayout();
-    } catch (error) {
-        console.error('Error updating activity cards:', error);
-    }
-}
-
-function updateCard(cardId, data, type) {
-    const card = document.getElementById(cardId);
-    const cardWrapper = card.closest('.col-lg-4');
-    const posterImg = card.querySelector('.activity-poster');
-    const titleDiv = card.querySelector('.activity-title');
-    const timeDiv = card.querySelector('.activity-time');
-    
-    if (!data) {
-        // Hide the entire column if no data
-        cardWrapper.style.display = 'none';
-        return;
-    }
-    
-    // Show the column
-    cardWrapper.style.display = 'block';
-    
-    // Use backdrop URL from backend
-    const backdropUrl = getBackdropUrl(data, type);
-    posterImg.src = backdropUrl;
-    posterImg.style.display = 'block';
-    posterImg.onerror = function() {
-        this.style.display = 'none';
-    };
-    
-    const episodeText = data.episode ? ` ${data.episode}` : '';
-    titleDiv.textContent = data.title + episodeText;
-    timeDiv.textContent = data.display || '';
-}
-
-function adjustCardLayout() {
-    // Count visible cards
-    const visibleCards = document.querySelectorAll('.activity-card:not([style*="display: none"])').length;
-    const cardWrappers = document.querySelectorAll('.activity-card').map(card => card.closest('.col-lg-4'));
-    
-    // Adjust column classes based on number of visible cards
-    cardWrappers.forEach(wrapper => {
-        if (wrapper.style.display !== 'none') {
-            // Remove existing responsive classes
-            wrapper.classList.remove('col-lg-4', 'col-lg-6');
-            
-            if (visibleCards === 3) {
-                wrapper.classList.add('col-lg-4'); // 33% width
-            } else if (visibleCards === 2) {
-                wrapper.classList.add('col-lg-6'); // 50% width
-            } else if (visibleCards === 1) {
-                wrapper.classList.add('col-lg-12'); // 100% width
-            }
-        }
-    });
-}
-
-function getBackdropUrl(data, type) {
-    // Backend now provides backdrop_url directly
-    if (data.backdrop_url) {
-        console.log(`Using backdrop URL: ${data.backdrop_url}`);
-        return data.backdrop_url;
-    }
-    
-    // Fallback to poster if no backdrop available
-    if (type === 'overseerr' && data.tmdb_id) {
-        console.warn(`No backdrop for ${data.title}, falling back to poster`);
-        return `https://image.tmdb.org/t/p/w780${data.tmdb_id}`;
-    } else if (type === 'sonarr' && data.series_id) {
-        console.warn(`No backdrop for ${data.title}, falling back to Sonarr poster`);
-        return `{{ SONARR_URL }}/api/v3/mediacover/${data.series_id}/poster.jpg?apikey={{ SONARR_API_KEY }}`;
-    } else if (type === 'jellyfin' && data.series_id) {
-        console.warn(`No backdrop for ${data.title}, falling back to Sonarr poster`);
-        return `{{ SONARR_URL }}/api/v3/mediacover/${data.series_id}/poster.jpg?apikey={{ SONARR_API_KEY }}`;
-    }
-    
-    return '/static/placeholder.png';
-}
-
-function getNoDataMessage(type) {
-    const messages = {
-        'overseerr': 'No recent requests',
-        'sonarr': 'No recent searches',
-        'jellyfin': 'No recent activity'
-    };
-    return messages[type] || 'No data';
-}
-function updateSonarrStats() {
-    fetch('/api/sonarr-stats')
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success' && data.stats) {
-                const stats = data.stats;
-                
-                // Update disk usage
-                if (stats.disk_stats) {
-                    document.getElementById('disk-usage').textContent = `${stats.disk_stats.used_gb}GB`;
-                    const diskSubtext = document.querySelector('#disk-usage').parentElement.querySelector('.text-muted');
-                    diskSubtext.textContent = `${stats.disk_stats.free_gb}GB free (${stats.disk_stats.usage_percent}%)`;
-                }
-                
-                // Update download queue
-                if (stats.queue_stats) {
-                    document.getElementById('download-queue').textContent = stats.queue_stats.downloading;
-                    const queueSubtext = document.querySelector('#download-queue').parentElement.querySelector('.text-muted');
-                    queueSubtext.textContent = `${stats.queue_stats.queued} queued, ${stats.queue_stats.total} total`;
-                }
-                
-                // Update missing episodes
-                if (stats.missing_stats) {
-                    document.getElementById('missing-episodes').textContent = stats.missing_stats.count;
-                }
-                
-                // Update recent activity
-                if (stats.recent_stats) {
-                    document.getElementById('recent-activity').textContent = stats.recent_stats.imported_today;
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error updating Sonarr stats:', error);
-        });
-}
-
-function selectAll() {
-    document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = true);
-    document.getElementById('select-all-checkbox').checked = true;
-}
-
-function selectNone() {
-    document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = false);
-    document.getElementById('select-all-checkbox').checked = false;
-}
-
-function toggleAll() {
-    const selectAllCb = document.getElementById('select-all-checkbox');
-    document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = selectAllCb.checked);
-}
-
-function copySelectedSeries(form) {
-    const selectedSeries = document.querySelectorAll('.series-checkbox:checked');
-    if (selectedSeries.length === 0) {
-        alert('Please select at least one series to unassign.');
-        return false;
-    }
-    
-    // Copy selected series IDs to the unassign form
-    selectedSeries.forEach(checkbox => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'series_ids';
-        input.value = checkbox.value;
-        form.appendChild(input);
-    });
-    
-    return confirm(`Unassign ${selectedSeries.length} selected series from all rules?`);
-}
-
-function toggleAutoAssign() {
-    const checkbox = document.getElementById('auto_assign_toggle');
-    const enabled = checkbox.checked;
-    
-    // Show loading state
-    checkbox.disabled = true;
-    
-    // Get current global settings and update
-    fetch('/api/global-settings')
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                const settings = data.settings;
-                settings.auto_assign_new_series = enabled;
-                
-                // Update the setting
-                return fetch('/api/global-settings', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(settings)
-                });
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                console.log('Auto-assign setting updated:', enabled);
-                
-                // Show brief success feedback
-                const label = document.querySelector('label[for="auto_assign_toggle"]');
-                const originalText = label.textContent;
-                label.innerHTML = `<i class="fas fa-check text-success me-1"></i>${originalText}`;
-                setTimeout(() => {
-                    label.textContent = originalText;
-                }, 2000);
-            } else {
-                console.error('Failed to update setting:', data.message);
-                checkbox.checked = !enabled; // Revert on error
-            }
-        })
-        .catch(error => {
-            console.error('Error updating auto-assign setting:', error);
-            checkbox.checked = !enabled; // Revert on error
-        })
-        .finally(() => {
-            checkbox.disabled = false;
-        });
-}
-
-// FIXED: Auto-refresh with proper change detection
-class RulesPageAutoRefresh {
-    constructor() {
-        this.lastSeriesData = new Map(); // Store actual series data with assignments
-        this.checkInterval = 45000; // 45 seconds
-        this.init();
-    }
-
-    init() {
-        // Only run on rules page
-        if (!window.location.pathname.match(/^\/(index)?$/)) {
-            return;
-        }
-
-        // Wait for initial data load
-        setTimeout(() => {
-            this.captureCurrentState();
-            this.startChecking();
-        }, 2000);
-    }
-
-    captureCurrentState() {
-        // Capture the actual series data from the enhanced table
-        if (seriesData && seriesData.length > 0) {
-            this.lastSeriesData.clear();
-            seriesData.forEach(series => {
-                this.lastSeriesData.set(series.id.toString(), {
-                    title: series.title,
-                    assigned_rule: series.assigned_rule || 'None',
-                    status: series.status
-                });
-            });
-            console.log(`Captured ${this.lastSeriesData.size} series with assignments`);
-        }
-    }
-
-    startChecking() {
-        setInterval(() => {
-            this.checkForChanges();
-        }, this.checkInterval);
-    }
-
-    async checkForChanges() {
-        try {
-            // Get fresh data from the API
-            const response = await fetch('/api/series-with-status');
-            if (!response.ok) return;
-            
-            const data = await response.json();
-            if (!data.success || !data.series) return;
-            
-            const currentSeriesData = new Map();
-            data.series.forEach(series => {
-                currentSeriesData.set(series.id.toString(), {
-                    title: series.title,
-                    assigned_rule: series.assigned_rule || 'None',
-                    status: series.status
-                });
-            });
-
-            // Check for changes
-            let hasChanges = false;
-            let changeType = '';
-
-            // Check for new or removed series
-            if (currentSeriesData.size !== this.lastSeriesData.size) {
-                hasChanges = true;
-                changeType = currentSeriesData.size > this.lastSeriesData.size ? 'New series detected' : 'Series removed';
-            }
-
-            // Check for assignment changes
-            if (!hasChanges) {
-                for (const [seriesId, currentData] of currentSeriesData) {
-                    const lastData = this.lastSeriesData.get(seriesId);
-                    if (!lastData || lastData.assigned_rule !== currentData.assigned_rule) {
-                        hasChanges = true;
-                        changeType = 'Rule assignments updated';
-                        break;
-                    }
-                }
-            }
-
-            if (hasChanges) {
-                console.log(`Detected changes: ${changeType}`);
-                this.refreshPage(changeType);
-            }
-
-        } catch (error) {
-            console.error('Error checking for changes:', error);
-        }
-    }
-
-    refreshPage(reason) {
-        console.log(`Auto-refreshing page: ${reason}`);
-        
-        this.showRefreshNotification(reason);
-        
-        setTimeout(() => {
-            window.location.reload();
-        }, 1500);
-    }
-
-    showRefreshNotification(reason) {
-        const notification = document.createElement('div');
-        notification.innerHTML = `
-            <div class="alert alert-info alert-dismissible fade show position-fixed" 
-                 style="top: 20px; right: 20px; z-index: 1050; min-width: 300px;">
-                <i class="fas fa-sync-alt me-2"></i>
-                <strong>Auto-updating:</strong> ${reason}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 3000);
-    }
-}
-// Enhanced Series Table with Sorting
-let seriesData = [];
-let currentSort = {
-    column: localStorage.getItem('episeerr-sort-column') || null,
-    direction: localStorage.getItem('episeerr-sort-direction') || 'asc'
+{% if SONARR_URL %}
+window.servicesData['sonarr'] = {
+    'name': 'Sonarr',
+    'url': '{{ SONARR_URL }}',
+    'icon': 'fas fa-video'
 };
+{% endif %}
 
-// Load enhanced series data with status information
-function loadEnhancedSeriesData() {
-    fetch('/api/series-with-status')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                seriesData = data.series;
-                
-                // Apply saved sort if exists
-                if (currentSort.column) {
-                    applySavedSort();
-                } else {
-                    renderTable();
-                }
-            } else {
-                console.error('Failed to load enhanced series data:', data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Error loading enhanced series data:', error);
-        });
-}
+{% if JELLYSEERR_URL %}
+window.servicesData['jellyseerr'] = {
+    'name': 'Jellyseerr',
+    'url': '{{ JELLYSEERR_URL }}',
+    'icon': 'fas fa-film'
+};
+{% endif %}
 
-// Apply saved sort without changing indicators
-function applySavedSort() {
-    if (currentSort.column) {
-        // Sort the data
-        sortDataByColumn(currentSort.column);
-        
-        // Update visual indicator
-        const header = document.querySelector(`[data-column="${currentSort.column}"]`);
-        if (header) {
-            header.classList.add(`sort-${currentSort.direction}`);
-        }
+{% if OVERSEERR_URL %}
+window.servicesData['overseerr'] = {
+    'name': 'Overseerr',
+    'url': '{{ OVERSEERR_URL }}',
+    'icon': 'fas fa-film'
+};
+{% endif %}
+
+{% if JELLYFIN_URL %}
+window.servicesData['jellyfin'] = {
+    'name': 'Jellyfin',
+    'url': '{{ JELLYFIN_URL }}',
+    'icon': 'fas fa-play-circle'
+};
+{% endif %}
+
+{% if PLEX_URL %}
+window.servicesData['plex'] = {
+    'name': 'Plex',
+    'url': '{{ PLEX_URL }}',
+    'icon': 'fas fa-server'
+};
+{% endif %}
+
+{% if TAUTULLI_URL %}
+window.servicesData['tautulli'] = {
+    'name': 'Tautulli',
+    'url': '{{ TAUTULLI_URL }}',
+    'icon': 'fas fa-chart-bar'
+};
+{% endif %}
+
+// Global state
+const allSeriesData = {{ all_series|tojson|safe }};
+let currentView = localStorage.getItem('episeerr-series-view') || 'grid';
+let currentSort = { column: 'title', direction: 'asc' };
+const SONARR_URL = '{{ SONARR_URL }}';
+
+console.log('Episeerr loaded:', allSeriesData.length, 'series');
+console.log('System Links:', Object.keys(window.servicesData).length, 'services');
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    setView(currentView, false);
+    renderView();
+    setupEventListeners();
+});
+
+function setView(view, save = true) {
+    currentView = view;
+    const gridView = document.getElementById('seriesGridView');
+    const tableView = document.getElementById('seriesTableView');
+    const gridBtn = document.getElementById('gridViewBtn');
+    const tableBtn = document.getElementById('tableViewBtn');
+    
+    if (view === 'grid') {
+        gridView.style.display = 'block';
+        tableView.style.display = 'none';
+        gridBtn.classList.add('active');
+        tableBtn.classList.remove('active');
+    } else {
+        gridView.style.display = 'none';
+        tableView.style.display = 'block';
+        gridBtn.classList.remove('active');
+        tableBtn.classList.add('active');
     }
     
-    renderTable();
+    if (save) localStorage.setItem('episeerr-series-view', view);
+    renderView();
 }
 
-// Setup sorting handlers
-function setupSortHandlers() {
+function setupEventListeners() {
+    document.getElementById('seriesSearchInput')?.addEventListener('input', renderView);
+    document.getElementById('ruleFilterSelect')?.addEventListener('change', renderView);
+    document.getElementById('statusFilterSelect')?.addEventListener('change', renderView);
+    
+    document.getElementById('select-all-checkbox')?.addEventListener('change', function() {
+        document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = this.checked);
+        updateSelectedCount();
+    });
+    
     document.querySelectorAll('.sortable').forEach(header => {
         header.addEventListener('click', function() {
-            const column = this.dataset.column;
-            sortTable(column);
+            const sortColumn = this.dataset.sort;
+            if (currentSort.column === sortColumn) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = sortColumn;
+                currentSort.direction = 'asc';
+            }
+            renderView();
         });
     });
 }
 
-// Sort table by column
-function sortTable(column) {
-    // Reset all sort indicators
-    document.querySelectorAll('.sortable').forEach(header => {
-        header.classList.remove('sort-asc', 'sort-desc');
-    });
+function getFilteredAndSortedSeries() {
+    let filtered = [...allSeriesData];
     
-    // Determine sort direction
-    if (currentSort.column === column) {
-        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-        currentSort.direction = 'asc';
+    const searchTerm = document.getElementById('seriesSearchInput')?.value.toLowerCase() || '';
+    if (searchTerm) {
+        filtered = filtered.filter(s => s.title.toLowerCase().includes(searchTerm));
     }
-    currentSort.column = column;
     
-    // Save sort preferences
-    localStorage.setItem('episeerr-sort-column', currentSort.column);
-    localStorage.setItem('episeerr-sort-direction', currentSort.direction);
+    const ruleValue = document.getElementById('ruleFilterSelect')?.value || '';
+    if (ruleValue) {
+        if (ruleValue === 'Unassigned') {
+            filtered = filtered.filter(s => !s.assigned_rule || s.assigned_rule === 'None');
+        } else {
+            filtered = filtered.filter(s => s.assigned_rule === ruleValue);
+        }
+    }
     
-    // Update sort indicator
-    const header = document.querySelector(`[data-column="${column}"]`);
-    header.classList.add(`sort-${currentSort.direction}`);
+    const statusValue = document.getElementById('statusFilterSelect')?.value || '';
+    if (statusValue) {
+        filtered = filtered.filter(s => s.status === statusValue);
+    }
     
-    // Sort and render
-    sortDataByColumn(column);
-    renderTable();
-}
-
-// Separate function to sort data by column
-function sortDataByColumn(column) {
-    seriesData.sort((a, b) => {
-        let valueA, valueB;
-        
-        switch(column) {
+    filtered.sort((a, b) => {
+        let aVal, bVal;
+        switch(currentSort.column) {
             case 'title':
-                valueA = a.title.toLowerCase();
-                valueB = b.title.toLowerCase();
+                aVal = a.title.toLowerCase();
+                bVal = b.title.toLowerCase();
                 break;
             case 'rule':
-                valueA = (a.assigned_rule === 'None' ? 'zzz_unassigned' : a.assigned_rule.toLowerCase());
-                valueB = (b.assigned_rule === 'None' ? 'zzz_unassigned' : b.assigned_rule.toLowerCase());
+                aVal = a.assigned_rule || 'zzz';
+                bVal = b.assigned_rule || 'zzz';
                 break;
             case 'status':
-                const statusPriority = {
-                    'continuing': 1,
-                    'upcoming': 2,
-                    'ended': 3,
-                    'unknown': 4
-                };
-                valueA = statusPriority[a.status] || 4;
-                valueB = statusPriority[b.status] || 4;
+                aVal = a.status || '';
+                bVal = b.status || '';
                 break;
             default:
                 return 0;
         }
         
-        let result;
-        if (typeof valueA === 'string') {
-            result = valueA.localeCompare(valueB);
-        } else {
-            result = valueA - valueB;
-        }
-        
-        return currentSort.direction === 'desc' ? -result : result;
+        if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
+        return 0;
     });
+    
+    return filtered;
 }
 
-// Render the table with current data (with filtering)
-function renderTable() {
-    const tbody = document.getElementById('seriesTableBody');
-    if (!tbody) return;
-    
-    tbody.innerHTML = '';
-    
-    // Apply filters
-    const filteredData = applyFilters(seriesData);
-    
-    filteredData.forEach(series => {
-        const row = createSeriesRow(series);
-        tbody.appendChild(row);
-    });
-    
-    updateCheckboxStates();
-    updateFilterCount(filteredData.length, seriesData.length);
-}
-// NEW: Apply all active filters
-function applyFilters(data) {
-    const searchTerm = document.getElementById('seriesSearchInput')?.value.toLowerCase().trim() || '';
-    const ruleFilter = document.getElementById('ruleFilterSelect')?.value || 'all';
-    const statusFilter = document.getElementById('statusFilterSelect')?.value || 'all';
-    
-    return data.filter(series => {
-        // Search filter
-        if (searchTerm && !series.title.toLowerCase().includes(searchTerm)) {
-            return false;
-        }
-        
-        // Rule filter
-        if (ruleFilter !== 'all') {
-            if (ruleFilter === 'unassigned' && series.assigned_rule && series.assigned_rule !== 'None') {
-                return false;
-            } else if (ruleFilter !== 'unassigned' && series.assigned_rule !== ruleFilter) {
-                return false;
-            }
-        }
-        
-        // Status filter
-        if (statusFilter !== 'all' && series.status !== statusFilter) {
-            return false;
-        }
-        
-        return true;
-    });
-}
-
-// NEW: Update filter result count
-function updateFilterCount(filtered, total) {
-    const countElement = document.getElementById('filterResultCount');
-    if (countElement) {
-        if (filtered === total) {
-            countElement.textContent = `Showing all ${total} series`;
-        } else {
-            countElement.textContent = `Showing ${filtered} of ${total} series`;
-            countElement.classList.add('text-warning');
-        }
+function renderView() {
+    const series = getFilteredAndSortedSeries();
+    if (currentView === 'grid') {
+        renderGridView(series);
+    } else {
+        renderTableView(series);
     }
 }
 
-// NEW: Clear all filters
-function clearAllFilters() {
-    const searchInput = document.getElementById('seriesSearchInput');
-    const ruleFilter = document.getElementById('ruleFilterSelect');
-    const statusFilter = document.getElementById('statusFilterSelect');
+function renderGridView(series) {
+    const grid = document.getElementById('seriesGrid');
+    if (!grid) return;
     
-    if (searchInput) searchInput.value = '';
-    if (ruleFilter) ruleFilter.value = 'all';
-    if (statusFilter) statusFilter.value = 'all';
+    if (series.length === 0) {
+        grid.innerHTML = '<div class="col-12 text-center py-5 text-muted">No series found</div>';
+        return;
+    }
     
-    renderTable();
-}
-// Create a series table row
-function createSeriesRow(series) {
-    const row = document.createElement('tr');
-    
-    const statusClass = `status-${series.status || 'unknown'}`;
-    const statusText = getStatusText(series);
-    
-    const ruleText = series.assigned_rule && series.assigned_rule !== 'None' 
-        ? series.assigned_rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-        : 'Unassigned';
-    
-    const ruleBadgeClass = series.assigned_rule && series.assigned_rule !== 'None' 
-        ? 'bg-primary' : 'bg-secondary';
-    
-    row.innerHTML = `
-        <td>
-            <input type="checkbox" name="series_ids" value="${series.id}" class="series-checkbox">
-        </td>
-        <td>
-            <a href="{{ SONARR_URL }}/series/${series.titleSlug || series.title.toLowerCase().replace(/\\s+/g, '-')}" target="_blank" class="text-decoration-none text-light">
-                <strong>${series.title}</strong>
-                <i class="fas fa-external-link-alt ms-1 text-muted" style="font-size: 0.8em;"></i>
-            </a>
-        </td>
-        <td>
-            <span class="badge ${ruleBadgeClass}">${ruleText}</span>
-        </td>
-        <td>
-            <span class="${statusClass}">${statusText}</span>
-            <br><small class="text-muted">${getStatusDetails(series)}</small>
-        </td>
-    `;
-    
-    return row;
+    grid.innerHTML = series.map(s => {
+        const posterUrl = s.images?.find(img => img.coverType === 'poster')?.remoteUrl || '/static/placeholder.png';
+        const ruleDisplay = s.assigned_rule && s.assigned_rule !== 'None' 
+            ? s.assigned_rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            : 'Unassigned';
+        const statusDisplay = getStatusText(s);
+        
+        return `
+            <div class="col series-grid-col">
+                <div class="series-grid-card">
+                    <div class="series-checkbox-container">
+                        <input type="checkbox" class="series-checkbox" value="${s.id}" onchange="updateSelectedCount()">
+                    </div>
+                    <div class="series-poster-container">
+                        <img class="series-poster" src="${posterUrl}" alt="${s.title}" loading="lazy" onerror="this.src='/static/placeholder.png'">
+                        <div class="series-poster-overlay">
+                            <a href="${SONARR_URL}/series/${s.titleSlug || ''}" target="_blank" class="btn btn-sm btn-primary">
+                                <i class="fas fa-external-link-alt"></i> Sonarr
+                            </a>
+                        </div>
+                    </div>
+                    <div class="series-info">
+                        <div class="series-title">${s.title}</div>
+                        <div class="series-metadata">
+                            <span class="series-badge ${s.assigned_rule && s.assigned_rule !== 'None' ? 'rule' : 'unassigned'}">
+                                ${ruleDisplay}
+                            </span>
+                            <span class="series-badge ${s.status || 'unknown'}">
+                                ${statusDisplay}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
-// Get formatted status text
+function renderTableView(series) {
+    const tbody = document.getElementById('series-table-body');
+    if (!tbody) return;
+    
+    if (series.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">No series found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = series.map(s => {
+        const ruleText = s.assigned_rule && s.assigned_rule !== 'None' 
+            ? s.assigned_rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            : 'Unassigned';
+        const ruleBadgeClass = s.assigned_rule && s.assigned_rule !== 'None' ? 'bg-primary' : 'bg-secondary';
+        const statusText = getStatusText(s);
+        const statusClass = `status-${s.status || 'unknown'}`;
+        
+        return `
+            <tr>
+                <td><input type="checkbox" class="series-checkbox" value="${s.id}" onchange="updateSelectedCount()"></td>
+                <td>
+                    <a href="${SONARR_URL}/series/${s.titleSlug || ''}" target="_blank" class="text-decoration-none text-light">
+                        <strong>${s.title}</strong>
+                        <i class="fas fa-external-link-alt ms-1 text-muted" style="font-size: 0.8em;"></i>
+                    </a>
+                </td>
+                <td><span class="badge ${ruleBadgeClass}">${ruleText}</span></td>
+                <td>
+                    <span class="${statusClass}">${statusText}</span>
+                    <br><small class="text-muted">${getStatusDetails(s)}</small>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
 function getStatusText(series) {
     switch(series.status) {
         case 'continuing': return '📺 Continuing';
@@ -986,86 +550,63 @@ function getStatusText(series) {
     }
 }
 
-// Get status details
 function getStatusDetails(series) {
     if (series.lastEpisode) {
         const lastDate = new Date(series.lastEpisode);
-        const year = lastDate.getFullYear();
-        const monthDay = lastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        return `Last: ${monthDay}, ${year}`;
-    } else if (series.year) {
-        return `Year: ${series.year}`;
+        return `Last: ${lastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
     }
-    return 'No date info';
+    return series.year ? `Year: ${series.year}` : 'No date info';
 }
 
-// Update checkbox states after re-rendering
-function updateCheckboxStates() {
-    const selectAllCheckbox = document.getElementById('select-all-checkbox');
-    const seriesCheckboxes = document.querySelectorAll('.series-checkbox');
-    
-    if (selectAllCheckbox && seriesCheckboxes.length > 0) {
-        const allChecked = Array.from(seriesCheckboxes).every(cb => cb.checked);
-        const someChecked = Array.from(seriesCheckboxes).some(cb => cb.checked);
-        
-        selectAllCheckbox.checked = allChecked;
-        selectAllCheckbox.indeterminate = someChecked && !allChecked;
-    }
+function updateSelectedCount() {
+    const count = document.querySelectorAll('.series-checkbox:checked').length;
+    document.getElementById('selectedCount').textContent = `${count} selected`;
+    document.getElementById('bulkSelectedCount').textContent = count;
+    document.getElementById('bulkActionsBar').style.display = count > 0 ? 'block' : 'none';
 }
-document.addEventListener('DOMContentLoaded', function() {
-    // Update Sonarr stats immediately
-    updateSonarrStats();
+
+function clearSelection() {
+    document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = false);
+    document.getElementById('select-all-checkbox').checked = false;
+    updateSelectedCount();
+}
+
+function assignSelectedSeries() {
+    const ruleName = document.getElementById('bulkRuleSelect')?.value;
+    if (!ruleName) return alert('Please select a rule first');
     
-    // Auto-refresh Sonarr stats every 30 seconds
-    setInterval(updateSonarrStats, 30000);
-    // Update activity cards
-    updateActivityCards();
-    setInterval(updateActivityCards, 60000);
-    // Load auto-assign setting
-    fetch('/api/global-settings')
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                const autoAssign = data.settings.auto_assign_new_series || false;
-                const toggle = document.getElementById('auto_assign_toggle');
-                if (toggle) {
-                    toggle.checked = autoAssign;
-                }
-            }
-        })
-        .catch(error => console.error('Error loading auto-assign setting:', error));
+    const selectedIds = Array.from(document.querySelectorAll('.series-checkbox:checked')).map(cb => cb.value);
+    if (selectedIds.length === 0) return alert('Please select at least one series');
     
-    // Initialize enhanced sortable series table
-    loadEnhancedSeriesData();
-    setupSortHandlers();
+    fetch('/assign-to-rule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rule_name: ruleName, series_ids: selectedIds })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') window.location.reload();
+        else alert('Error: ' + (data.message || 'Unknown error'));
+    })
+    .catch(e => alert('Error assigning series'));
+}
+
+function unassignSelectedSeries() {
+    const selectedIds = Array.from(document.querySelectorAll('.series-checkbox:checked')).map(cb => cb.value);
+    if (selectedIds.length === 0) return alert('Please select at least one series');
+    if (!confirm(`Unassign ${selectedIds.length} series?`)) return;
     
-    // ADD THESE NEW EVENT LISTENERS FOR FILTERS
-    const searchInput = document.getElementById('seriesSearchInput');
-    const ruleFilter = document.getElementById('ruleFilterSelect');
-    const statusFilter = document.getElementById('statusFilterSelect');
-    
-    if (searchInput) {
-        searchInput.addEventListener('input', renderTable);
-        // Keyboard shortcut: Ctrl/Cmd + F focuses search
-        document.addEventListener('keydown', function(e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-                e.preventDefault();
-                searchInput.focus();
-            }
-        });
-    }
-    
-    if (ruleFilter) {
-        ruleFilter.addEventListener('change', renderTable);
-    }
-    
-    if (statusFilter) {
-        statusFilter.addEventListener('change', renderTable);
-    }
-    // END NEW EVENT LISTENERS
-    
-    // Initialize auto-refresh with better change detection
-    new RulesPageAutoRefresh();
-});
+    fetch('/unassign-series', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ series_ids: selectedIds })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') window.location.reload();
+        else alert('Error: ' + (data.message || 'Unknown error'));
+    })
+    .catch(e => alert('Error unassigning series'));
+}
 </script>
 {% endblock %}
