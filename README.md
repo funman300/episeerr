@@ -177,8 +177,7 @@ Dormant: 30 days
 ---
 
 ## Screenshots
-
-<img width="1856" height="1301" alt="Episeerr Interface" src="https://github.com/user-attachments/assets/ddad6213-ea53-4af9-9997-2a1f605b827c" />
+<img width="1869" height="1040" alt="image" src="https://github.com/user-attachments/assets/b03ad3a3-c5eb-4805-a3ec-929a69469d82" />
 
 ---
 
