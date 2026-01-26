@@ -179,6 +179,11 @@ Dormant: 30 days
 ## Screenshots
 <img width="1869" height="1040" alt="image" src="https://github.com/user-attachments/assets/b03ad3a3-c5eb-4805-a3ec-929a69469d82" />
 
+<img width="1008" height="2244" alt="Screenshot_20260126-105953" src="https://github.com/user-attachments/assets/b20cd6e6-13c4-4cfc-973b-b1669b018c9f" />
+<img width="1008" height="2244" alt="Screenshot_20260126-105945" src="https://github.com/user-attachments/assets/3f9b989f-660b-475e-ba45-29ea7857ef24" />
+<img width="1008" height="2244" alt="Screenshot_20260126-105936" src="https://github.com/user-attachments/assets/6f616767-7b68-49c3-9dbc-f79606b0cf8e" />
+
+
 ---
 
 ## Support
