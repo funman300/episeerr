@@ -1,0 +1,663 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Episeerr{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Stats Row -->
+    <div class="row mb-3 d-none d-md-flex">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon sonarr">
+                            <i class="fas fa-tv"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0 text-muted">Sonarr</h6>
+                            <h3 class="mb-0" id="sonarr-series">--</h3>
+                            <small class="text-muted" id="sonarr-size">-- GB</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon download">
+                            <i class="fas fa-download"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0 text-muted">Queue</h6>
+                            <h3 class="mb-0" id="queue-count">--</h3>
+                            <small class="text-muted" id="queue-speed">-- B/s</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon episeerr">
+                            <i class="fas fa-cog"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0 text-muted">Episeerr Rules</h6>
+                            <h3 class="mb-0" id="rules-count">--</h3>
+                            <small class="text-muted" id="rules-series">-- series</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon episodes">
+                            <i class="fas fa-film"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0 text-muted">Episodes</h6>
+                            <h3 class="mb-0" id="episodes-count">--</h3>
+                            <small class="text-muted">Total library</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Stats - 2x2 Grid -->
+    <div class="row d-md-none mb-3">
+        <div class="col-6 mb-2">
+            <div class="mobile-stat-card">
+                <div class="stat-icon sonarr">
+                    <i class="fas fa-tv"></i>
+                </div>
+                <div class="mobile-stat-content">
+                    <div class="mobile-stat-label">Sonarr</div>
+                    <div class="mobile-stat-value" id="sonarr-series-mobile">--</div>
+                    <div class="mobile-stat-detail" id="sonarr-size-mobile">--</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-6 mb-2">
+            <div class="mobile-stat-card">
+                <div class="stat-icon download">
+                    <i class="fas fa-download"></i>
+                </div>
+                <div class="mobile-stat-content">
+                    <div class="mobile-stat-label">Queue</div>
+                    <div class="mobile-stat-value" id="queue-count-mobile">--</div>
+                    <div class="mobile-stat-detail" id="queue-speed-mobile">--</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-6 mb-2">
+            <div class="mobile-stat-card">
+                <div class="stat-icon episeerr">
+                    <i class="fas fa-cog"></i>
+                </div>
+                <div class="mobile-stat-content">
+                    <div class="mobile-stat-label">Rules</div>
+                    <div class="mobile-stat-value" id="rules-count-mobile">--</div>
+                    <div class="mobile-stat-detail" id="rules-series-mobile">--</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-6 mb-2">
+            <div class="mobile-stat-card">
+                <div class="stat-icon episodes">
+                    <i class="fas fa-film"></i>
+                </div>
+                <div class="mobile-stat-content">
+                    <div class="mobile-stat-label">Episodes</div>
+                    <div class="mobile-stat-value" id="episodes-count-mobile">--</div>
+                    <div class="mobile-stat-detail">Library</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Calendar Widget -->
+        <div class="col-12 col-lg-8 mb-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-calendar-week me-2"></i>This Week's Episodes)</h5>
+                    <button class="btn btn-sm btn-outline-light" onclick="refreshCalendar()">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="legend mb-3">
+                        <span class="legend-item">
+                            <span class="legend-dot green"></span> Has Episeerr Rule
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-dot yellow"></span> No Rule Assigned
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-dot blue"></span> Aired But Not Grabbed
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-dot gray"></span> Downloaded
+                        </span>
+                    </div>
+                    
+                    <div id="calendar-loading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    
+                    <div id="calendar-container" style="display: none;">
+                        <!-- Calendar events will be populated here -->
+                    </div>
+                    
+                    <div id="calendar-empty" style="display: none;" class="text-center py-4 text-muted">
+                        <i class="fas fa-calendar-times fa-3x mb-3"></i>
+                        <p>No episodes airing this week</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Feed -->
+        <div class="col-12 col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-stream me-2"></i>Recent Activity</h5>
+                    <button class="btn btn-sm btn-outline-light" onclick="refreshActivity()">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div class="card-body activity-feed">
+                    <div id="activity-loading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    
+                    <div id="activity-container" style="display: none;">
+                        <!-- Activity items will be populated here -->
+                    </div>
+                    
+                    <div id="activity-empty" style="display: none;" class="text-center py-4 text-muted">
+                        <i class="fas fa-inbox fa-2x mb-2"></i>
+                        <p class="small">No recent activity</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Mobile Stats - 2x2 Grid */
+.mobile-stat-card {
+    background: var(--card-bg, #1a1d29);
+    border: 1px solid var(--border-color, #2d3142);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    height: 100%;
+}
+
+.mobile-stat-card .stat-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+}
+
+.mobile-stat-content {
+    width: 100%;
+}
+
+.mobile-stat-label {
+    font-size: 0.7rem;
+    color: var(--text-muted, #9ca3af);
+    margin-bottom: 4px;
+}
+
+.mobile-stat-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 2px;
+}
+
+.mobile-stat-detail {
+    font-size: 0.65rem;
+    color: var(--text-muted, #9ca3af);
+}
+
+.stat-card {
+    background: var(--card-bg, #1a1d29);
+    border: 1px solid var(--border-color, #2d3142);
+    border-radius: 8px;
+    transition: transform 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+}
+
+.stat-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.stat-icon.sonarr {
+    background: rgba(99, 102, 241, 0.2);
+    color: #6366f1;
+}
+
+.stat-icon.download {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.stat-icon.episeerr {
+    background: rgba(139, 92, 246, 0.2);
+    color: #8b5cf6;
+}
+
+.stat-icon.episodes {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 12px;
+    background: var(--sidebar-header-bg, #151823);
+    border-radius: 6px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.legend-dot.green { background: #10b981; }
+.legend-dot.blue { background: #3b82f6; }
+.legend-dot.yellow { background: #f59e0b; }
+.legend-dot.gray { background: #6b7280; }
+
+.calendar-event {
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    border-left: 4px solid;
+    background: var(--card-bg, #1a1d29);
+    transition: all 0.2s;
+}
+
+.calendar-event:hover {
+    transform: translateX(4px);
+    background: var(--sidebar-header-bg, #151823);
+}
+
+.calendar-event.green { border-left-color: #10b981; }
+.calendar-event.blue { border-left-color: #3b82f6; }
+.calendar-event.yellow { border-left-color: #f59e0b; }
+.calendar-event.gray { border-left-color: #6b7280; }
+
+.calendar-event-date {
+    font-size: 0.75rem;
+    color: var(--text-muted, #9ca3af);
+    margin-bottom: 4px;
+}
+
+.calendar-event-title {
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.calendar-event-episode {
+    font-size: 0.875rem;
+    color: var(--text-secondary, #d1d5db);
+}
+
+.calendar-event-rule {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--badge-bg, #374151);
+    display: inline-block;
+    margin-top: 4px;
+}
+
+.activity-feed {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.service-card {
+    padding: 16px;
+    background: var(--card-bg, #1a1d29);
+    border: 1px solid var(--border-color, #2d3142);
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.service-card:hover {
+    background: var(--sidebar-header-bg, #151823);
+    border-color: var(--brand-color, #6366f1);
+}
+
+.service-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.2rem;
+}
+
+.service-icon.primary { background: rgba(99, 102, 241, 0.2); color: #6366f1; }
+.service-icon.success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+.service-icon.info { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+.service-icon.warning { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+.service-icon.purple { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+
+.service-action {
+    font-size: 0.875rem;
+    color: var(--text-secondary, #d1d5db);
+    padding-left: 52px;
+}
+
+.activity-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color, #2d3142);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.activity-icon.primary { background: rgba(99, 102, 241, 0.2); color: #6366f1; }
+.activity-icon.success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+.activity-icon.danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.activity-icon.info { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+
+.activity-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.activity-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.activity-details {
+    font-size: 0.75rem;
+    color: var(--text-muted, #9ca3af);
+}
+
+.activity-time {
+    font-size: 0.7rem;
+    color: var(--text-muted, #9ca3af);
+    white-space: nowrap;
+}
+</style>
+
+<script>
+// Auto-refresh intervals
+let statsInterval, activityInterval;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboardStats();
+    loadCalendar();
+    loadActivity();
+    
+    // Auto-refresh every 30 seconds
+    statsInterval = setInterval(loadDashboardStats, 30000);
+    activityInterval = setInterval(loadActivity, 60000);
+});
+
+function loadDashboardStats() {
+    fetch('/api/dashboard/stats')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const stats = data.stats;
+                
+                // Sonarr stats (desktop + mobile)
+                if (stats.sonarr) {
+                    document.getElementById('sonarr-series').textContent = stats.sonarr.series_count + ' series';
+                    document.getElementById('sonarr-size').textContent = stats.sonarr.size_gb + ' GB';
+                    document.getElementById('episodes-count').textContent = stats.sonarr.episode_count;
+                    
+                    // Mobile
+                    document.getElementById('sonarr-series-mobile').textContent = stats.sonarr.series_count;
+                    document.getElementById('sonarr-size-mobile').textContent = stats.sonarr.size_gb + ' GB';
+                    document.getElementById('episodes-count-mobile').textContent = stats.sonarr.episode_count;
+                }
+                
+                // Queue stats (desktop + mobile)
+                if (stats.sabnzbd) {
+                    document.getElementById('queue-count').textContent = stats.sabnzbd.queue_count + ' items';
+                    document.getElementById('queue-speed').textContent = stats.sabnzbd.speed;
+                    
+                    // Mobile
+                    document.getElementById('queue-count-mobile').textContent = stats.sabnzbd.queue_count;
+                    document.getElementById('queue-speed-mobile').textContent = stats.sabnzbd.speed;
+                } else if (stats.sonarr) {
+                    document.getElementById('queue-count').textContent = stats.sonarr.queue_count + ' items';
+                    document.getElementById('queue-speed').textContent = 'Sonarr Queue';
+                    
+                    // Mobile
+                    document.getElementById('queue-count-mobile').textContent = stats.sonarr.queue_count;
+                    document.getElementById('queue-speed-mobile').textContent = 'Sonarr';
+                }
+                
+                // Episeerr stats (desktop + mobile)
+                if (stats.episeerr) {
+                    document.getElementById('rules-count').textContent = stats.episeerr.rule_count;
+                    document.getElementById('rules-series').textContent = stats.episeerr.series_managed + ' series';
+                    
+                    // Mobile
+                    document.getElementById('rules-count-mobile').textContent = stats.episeerr.rule_count;
+                    document.getElementById('rules-series-mobile').textContent = stats.episeerr.series_managed + ' series';
+                }
+            }
+        })
+        .catch(err => console.error('Error loading stats:', err));
+}
+
+function loadCalendar() {
+    document.getElementById('calendar-loading').style.display = 'block';
+    document.getElementById('calendar-container').style.display = 'none';
+    document.getElementById('calendar-empty').style.display = 'none';
+    
+    fetch('/api/dashboard/calendar')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('calendar-loading').style.display = 'none';
+            
+            if (data.success && data.events.length > 0) {
+                document.getElementById('calendar-container').style.display = 'block';
+                renderCalendar(data.events);
+            } else {
+                document.getElementById('calendar-empty').style.display = 'block';
+            }
+        })
+        .catch(err => {
+            console.error('Error loading calendar:', err);
+            document.getElementById('calendar-loading').style.display = 'none';
+            document.getElementById('calendar-empty').style.display = 'block';
+        });
+}
+
+function renderCalendar(events) {
+    const container = document.getElementById('calendar-container');
+    
+    // Group by day
+    const grouped = {};
+    events.forEach(event => {
+        const date = new Date(event.air_date);
+        const dateKey = date.toDateString();
+        if (!grouped[dateKey]) grouped[dateKey] = [];
+        grouped[dateKey].push(event);
+    });
+    
+    let html = '';
+    Object.keys(grouped).sort((a, b) => new Date(a) - new Date(b)).forEach(dateKey => {
+        const dayEvents = grouped[dateKey];
+        const date = new Date(dateKey);
+        const today = new Date();
+        const isToday = date.toDateString() === today.toDateString();
+        const isTomorrow = date.toDateString() === new Date(today.getTime() + 86400000).toDateString();
+        
+        let dateLabel = date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+        if (isToday) dateLabel = '🔴 Today - ' + dateLabel;
+        else if (isTomorrow) dateLabel = '🟡 Tomorrow - ' + dateLabel;
+        
+        html += `<h6 class="mt-3 mb-2">${dateLabel}</h6>`;
+        
+        dayEvents.forEach(event => {
+            const time = new Date(event.air_date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            html += `
+                <div class="calendar-event ${event.color}">
+                    <div class="calendar-event-date">${time}</div>
+                    <div class="calendar-event-title">${event.series_title}</div>
+                    <div class="calendar-event-episode">S${event.season}E${event.episode}${event.episode_title !== 'TBA' ? ' - ' + event.episode_title : ''}</div>
+                    ${event.recently_grabbed ? '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Ready</span>' : ''}
+                    ${event.has_rule ? `<span class="calendar-event-rule"><i class="fas fa-cog me-1"></i>${event.rule_name}</span>` : ''}
+                    ${!event.has_rule && event.monitored ? '<span class="calendar-event-rule text-warning"><i class="fas fa-exclamation-triangle me-1"></i>No Rule</span>' : ''}
+                </div>
+            `;
+        });
+    });
+    
+    container.innerHTML = html;
+}
+
+function loadActivity() {
+    document.getElementById('activity-loading').style.display = 'block';
+    document.getElementById('activity-container').style.display = 'none';
+    document.getElementById('activity-empty').style.display = 'none';
+    
+    fetch('/api/dashboard/activity')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('activity-loading').style.display = 'none';
+            
+            if (data.success && data.services.length > 0) {
+                document.getElementById('activity-container').style.display = 'block';
+                renderActivity(data.services);
+            } else {
+                document.getElementById('activity-empty').style.display = 'block';
+            }
+        })
+        .catch(err => {
+            console.error('Error loading activity:', err);
+            document.getElementById('activity-loading').style.display = 'none';
+            document.getElementById('activity-empty').style.display = 'block';
+        });
+}
+
+function renderActivity(services) {
+    const container = document.getElementById('activity-container');
+    
+    if (services.length === 0) {
+        container.innerHTML = '<div class="text-center py-4 text-muted"><p class="small">No recent activity from any services</p></div>';
+        return;
+    }
+    
+    let html = '';
+    services.forEach(service => {
+        const time = getTimeAgo(new Date(service.timestamp));
+        
+        html += `
+            <div class="service-card mb-3">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="service-icon ${service.color}">
+                        <i class="fas ${service.icon}"></i>
+                    </div>
+                    <div class="ms-3 flex-grow-1">
+                        <h6 class="mb-0">${service.service}</h6>
+                        <small class="text-muted">${time}</small>
+                    </div>
+                </div>
+                <div class="service-action">
+                    <i class="fas ${service.action_icon} me-2 text-${service.color}"></i>
+                    <strong>${service.action}:</strong> ${service.details}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function getTimeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+    if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+    return Math.floor(seconds / 86400) + 'd ago';
+}
+
+function refreshCalendar() {
+    loadCalendar();
+}
+
+function refreshActivity() {
+    loadActivity();
+}
+</script>
+{% endblock %}

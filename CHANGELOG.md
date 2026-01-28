@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [Released]
+
+Episeerr v3.1 - Dashboard, Rules & UI Fixes
+New Features
+Dashboard Page: New comprehensive dashboard with activity feed, stats cards, and 7-day episode calendar showing upcoming + recently downloaded episodes
+Rules Management Page: Dedicated rules page with list view (mobile-responsive card layout)
+Download Tracking: Recently grabbed episodes now display with green "Ready" badge on dashboard calendar (7-day rolling window)
+UI Improvements
+Series Management: Redesigned with Grid/Manage views - Grid for browsing, Manage (table) for bulk operations
+Sidebar Navigation: Streamlined with collapsible sections, removed individual rule listings
+Mobile Responsive: Rules page adapts to mobile with card layout instead of table
+Bug Fixes
+Scheduler Admin Page: Fixed template block issues preventing page load
+Edit Rule: Corrected routing - now properly loads edit form instead of dashboard
+Rules CRUD: Fixed all redirect issues - create/edit/delete operations now stay within rules workflow
+Orphaned Routes: Removed duplicate/orphaned route decorators causing conflicts
+Technical
+data/recent_downloads.json: Download tracking database with auto-cleanup
+Enhanced grab webhook handler with unified logging
+Calendar API merges Sonarr upcoming + recent recent_downloads
+
 ## [3.0.0] - 2026-01-25
 
 ### Major UI Redesign

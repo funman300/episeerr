@@ -1,292 +1,249 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- Series Management - Main View -->
-<div class="series-header mb-3">
+<div class="container-fluid">
+
+  <!-- Filters + View Toggle + Selected Count -->
+  <div class="series-header mb-3 p-3 bg-dark border border-secondary rounded">
+    <div class="row g-3 align-items-end">
+
+      <!-- View Toggle -->
+      <div class="col-auto">
+        <div class="btn-group" role="group">
+          <button type="button" class="btn btn-outline-primary active" id="gridViewBtn" onclick="setView('grid')">
+            <i class="fas fa-th"></i> Grid
+          </button>
+          <button type="button" class="btn btn-outline-primary" id="tableViewBtn" onclick="setView('table')">
+            <i class="fas fa-tasks"></i> Manage
+          </button>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="col-md-3">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-dark border-secondary"><i class="fas fa-search text-muted"></i></span>
+          <input type="text" id="seriesSearchInput" class="form-control bg-dark text-light border-secondary" placeholder="Search series...">
+        </div>
+      </div>
+
+      <!-- Rule Filter -->
+      <div class="col-md-3">
+        <select id="ruleFilterSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
+          <option value="">All Rules</option>
+          <option value="Unassigned">Unassigned</option>
+          {% for rule_name in config.rules.keys() | sort %}
+          <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Status Filter -->
+      <div class="col-md-3">
+        <select id="statusFilterSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
+          <option value="">All Status</option>
+          <option value="continuing">Continuing</option>
+          <option value="ended">Ended</option>
+          <option value="upcoming">Upcoming</option>
+        </select>
+      </div>
+
+      <!-- Selected Count -->
+      <div class="col-auto ms-auto">
+        <span class="text-muted small fw-bold" id="selectedCount">0 selected</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Bulk Actions Bar (appears in table/manage view) -->
+  <div class="bulk-actions-bar mb-4 p-3 bg-dark border border-primary rounded" id="bulkActionsBar" style="display: none;">
     <div class="row g-3 align-items-center">
-        <!-- View Toggle -->
-        <div class="col-auto">
-            <div class="btn-group" role="group">
-                <button type="button" class="btn btn-outline-primary active" id="gridViewBtn" onclick="setView('grid')">
-                    <i class="fas fa-th"></i> Grid
-                </button>
-                <button type="button" class="btn btn-outline-primary" id="tableViewBtn" onclick="setView('table')">
-                    <i class="fas fa-list"></i> Table
-                </button>
-            </div>
-        </div>
-
-        <!-- Search -->
-        <div class="col-md-3">
-            <div class="input-group">
-                <span class="input-group-text"><i class="fas fa-search"></i></span>
-                <input type="text" class="form-control" id="seriesSearchInput" placeholder="Search series...">
-            </div>
-        </div>
-
-        <!-- Rule Filter -->
-        <div class="col-md-2">
-            <select class="form-select" id="ruleFilterSelect">
-                <option value="">All Rules</option>
-                <option value="Unassigned">Unassigned</option>
-                {% for rule_name in config.rules.keys() %}
-                <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <!-- Status Filter -->
-        <div class="col-md-2">
-            <select class="form-select" id="statusFilterSelect">
-                <option value="">All Status</option>
-                <option value="continuing">Continuing</option>
-                <option value="ended">Ended</option>
-                <option value="upcoming">Upcoming</option>
-            </select>
-        </div>
-
-        <!-- Selected Count -->
-        <div class="col-md-auto ms-auto">
-            <span class="text-muted" id="selectedCount">0 selected</span>
-        </div>
+      <div class="col-auto">
+        <strong><span id="bulkSelectedCount">0</span> selected</strong>
+      </div>
+      <div class="col-md-3">
+        <select id="bulkRuleSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
+          <option value="">Assign to Rule...</option>
+          {% for rule_name in config.rules.keys() | sort %}
+          <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-primary" onclick="assignSelected()">
+          <i class="fas fa-check me-1"></i> Assign
+        </button>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-outline-danger" onclick="unassignSelected()">
+          <i class="fas fa-unlink me-1"></i> Unassign
+        </button>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-outline-secondary" onclick="clearSelection()">
+          <i class="fas fa-ban me-1"></i> Clear
+        </button>
+      </div>
     </div>
-</div>
+  </div>
 
-<!-- Bulk Actions Bar -->
-<div class="bulk-actions-bar mb-3" id="bulkActionsBar" style="display: none;">
-    <div class="row g-2 align-items-center">
-        <div class="col-auto">
-            <strong><span id="bulkSelectedCount">0</span> series selected</strong>
-        </div>
-        <div class="col-md-3">
-            <select class="form-select form-select-sm" id="bulkRuleSelect">
-                <option value="">Assign to Rule...</option>
-                {% for rule_name in config.rules.keys() %}
-                <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-auto">
-            <button class="btn btn-primary btn-sm" onclick="assignSelectedSeries()">
-                <i class="fas fa-check me-1"></i> Assign
-            </button>
-        </div>
-        <div class="col-auto">
-            <button class="btn btn-outline-danger btn-sm" onclick="unassignSelectedSeries()">
-                <i class="fas fa-times me-1"></i> Unassign
-            </button>
-        </div>
-        <div class="col-auto">
-            <button class="btn btn-outline-secondary btn-sm" onclick="clearSelection()">
-                <i class="fas fa-ban me-1"></i> Clear Selection
-            </button>
-        </div>
-    </div>
-</div>
+  <!-- Grid View -->
+  <div id="seriesGridView">
+    <div class="row g-3" id="seriesGrid"></div>
+  </div>
 
-<!-- Grid View -->
-<div id="seriesGridView" style="display: none;">
-    <div class="row g-3" id="seriesGrid">
-        <div class="col-12 text-center py-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2 text-muted">Loading series...</p>
-        </div>
-    </div>
-</div>
-
-<!-- Table View -->
-<div id="seriesTableView" class="table-responsive">
-    <table class="table table-hover">
-        <thead>
-            <tr>
-                <th style="width: 40px;">
-                    <input type="checkbox" id="select-all-checkbox">
-                </th>
-                <th class="sortable" data-sort="title" style="cursor: pointer;">
-                    Series <i class="fas fa-sort ms-1"></i>
-                </th>
-                <th class="sortable" data-sort="rule" style="cursor: pointer;">
-                    Rule <i class="fas fa-sort ms-1"></i>
-                </th>
-                <th class="sortable" data-sort="status" style="cursor: pointer;">
-                    Status <i class="fas fa-sort ms-1"></i>
-                </th>
-            </tr>
-        </thead>
-        <tbody id="series-table-body">
-            <tr>
-                <td colspan="4" class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2 text-muted">Loading series...</p>
-                </td>
-            </tr>
-        </tbody>
+  <!-- Table View -->
+  <div id="seriesTableView" class="table-responsive" style="display: none;">
+    <table class="table table-dark table-hover table-sm">
+      <thead class="sticky-top bg-dark">
+        <tr>
+          <th width="50" class="text-center">
+            <input type="checkbox" id="select-all-checkbox" onchange="toggleAll()">
+          </th>
+          <th class="sortable" data-sort="title" style="cursor: pointer;">
+            Series <i class="fas fa-sort ms-1"></i>
+          </th>
+          <th class="sortable" data-sort="rule" style="cursor: pointer;">
+            Current Rule <i class="fas fa-sort ms-1"></i>
+          </th>
+          <th class="sortable" data-sort="status" style="cursor: pointer;">
+            Status <i class="fas fa-sort ms-1"></i>
+          </th>
+        </tr>
+      </thead>
+      <tbody id="series-table-body"></tbody>
     </table>
+  </div>
+
+  <!-- Hidden form for submissions -->
+  <form method="POST" action="{{ url_for('assign_rules') }}" id="assignment-form" style="display: none;">
+    <input type="hidden" name="rule_name" id="hidden-rule-name">
+  </form>
+
 </div>
 
 <style>
-/* Series Header Bar */
-.series-header {
-    background: var(--card-bg, #1a1d29);
-    padding: 16px 20px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color, #2d3142);
+/* Series Grid Styles */
+.series-grid-col {
+  flex: 0 0 auto;
 }
 
-/* Bulk Actions Bar */
-.bulk-actions-bar {
-    background: var(--sidebar-header-bg, #151823);
-    padding: 12px 20px;
-    border-radius: 8px;
-    border: 1px solid var(--brand-color, #6366f1);
-}
+@media (min-width: 1600px) { .series-grid-col { width: 12.5%; } }
+@media (min-width: 1400px) and (max-width: 1599px) { .series-grid-col { width: 14.285%; } }
+@media (min-width: 1200px) and (max-width: 1399px) { .series-grid-col { width: 16.666667%; } }
+@media (min-width: 992px) and (max-width: 1199px) { .series-grid-col { width: 20%; } }
+@media (min-width: 768px) and (max-width: 991px) { .series-grid-col { width: 25%; } }
+@media (min-width: 576px) and (max-width: 767px) { .series-grid-col { width: 33.333333%; } }
+@media (max-width: 575px) { .series-grid-col { width: 50%; } }
 
-/* Grid View Styles */
 .series-grid-card {
-    background: var(--card-bg, #1a1d29);
-    border: 1px solid var(--border-color, #2d3142);
-    border-radius: 8px;
-    overflow: hidden;
-    transition: all 0.2s ease;
-    cursor: pointer;
-    position: relative;
+  background: var(--card-bg, #1a1d29);
+  border: 1px solid var(--border-color, #2d3142);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  height: 100%;
 }
 
 .series-grid-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    border-color: var(--brand-color, #6366f1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: var(--brand-color, #6366f1);
 }
 
 .series-poster-container {
-    position: relative;
-    width: 100%;
-    padding-top: 150%; /* 2:3 aspect ratio */
-    background: var(--poster-bg, #0f1419);
-    overflow: hidden;
+  position: relative;
+  width: 100%;
+  padding-top: 150%;
+  background: var(--poster-bg, #0f1419);
+  overflow: hidden;
 }
 
 .series-poster {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.series-poster-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.series-checkbox-overlay {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
 }
 
-.series-grid-card:hover .series-poster-overlay {
-    opacity: 1;
-}
-
-.series-checkbox-container {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    z-index: 10;
-}
-
-.series-checkbox-container input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
+.series-checkbox-overlay input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
 }
 
 .series-info {
-    padding: 12px;
+  padding: 12px;
 }
 
 .series-title {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--text-primary, #fff);
-    margin-bottom: 6px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-height: 2.8em;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 2.8em;
 }
 
-.series-metadata {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
+.series-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .series-badge {
-    font-size: 0.75rem;
-    padding: 3px 8px;
-    border-radius: 12px;
-    background: var(--badge-bg, #374151);
-    color: var(--badge-text, #d1d5db);
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 12px;
 }
 
-.series-badge.rule {
-    background: var(--primary-color, #6366f1);
-    color: white;
+.badge-rule {
+  background: var(--primary-color, #6366f1);
+  color: white;
 }
 
-.series-badge.unassigned {
-    background: var(--secondary-bg, #6b7280);
+.badge-unassigned {
+  background: var(--secondary-bg, #6b7280);
+  color: white;
 }
 
-.series-badge.continuing {
-    background: var(--success-bg, #10b981);
-    color: white;
+.badge-continuing {
+  background: var(--success-bg, #10b981);
+  color: white;
 }
 
-.series-badge.ended {
-    background: var(--danger-bg, #ef4444);
-    color: white;
+.badge-ended {
+  background: var(--danger-bg, #ef4444);
+  color: white;
 }
 
-/* Responsive Grid */
-@media (min-width: 1600px) {
-    .series-grid-col { flex: 0 0 12.5%; max-width: 12.5%; }
+.badge-upcoming {
+  background: var(--info-bg, #3b82f6);
+  color: white;
 }
-@media (min-width: 1400px) and (max-width: 1599px) {
-    .series-grid-col { flex: 0 0 14.285%; max-width: 14.285%; }
-}
-@media (min-width: 1200px) and (max-width: 1399px) {
-    .series-grid-col { flex: 0 0 16.666667%; max-width: 16.666667%; }
-}
-@media (min-width: 992px) and (max-width: 1199px) {
-    .series-grid-col { flex: 0 0 20%; max-width: 20%; }
-}
-@media (min-width: 768px) and (max-width: 991px) {
-    .series-grid-col { flex: 0 0 25%; max-width: 25%; }
-}
-@media (min-width: 576px) and (max-width: 767px) {
-    .series-grid-col { flex: 0 0 33.333333%; max-width: 33.333333%; }
-}
-@media (max-width: 575px) {
-    .series-grid-col { flex: 0 0 50%; max-width: 50%; }
-}
+
+.status-continuing { color: #10b981; }
+.status-ended { color: #ef4444; }
+.status-upcoming { color: #3b82f6; }
 </style>
+{% endblock %}
 
+{% block extra_js %}
 <script>
-// Store services data for sidebar (only if they exist)
+// Store services data for sidebar
 window.servicesData = {};
 
 {% if SONARR_URL %}
@@ -337,276 +294,293 @@ window.servicesData['tautulli'] = {
 };
 {% endif %}
 
-// Global state
-const allSeriesData = {{ all_series|tojson|safe }};
+// ────────────────────────────────────────────────
+// Globals
+// ────────────────────────────────────────────────
+const allSeriesData = {{ all_series|tojson|safe }} || [];
 let currentView = localStorage.getItem('episeerr-series-view') || 'grid';
 let currentSort = { column: 'title', direction: 'asc' };
 const SONARR_URL = '{{ SONARR_URL }}';
 
 console.log('Episeerr loaded:', allSeriesData.length, 'series');
-console.log('System Links:', Object.keys(window.servicesData).length, 'services');
 
-// Initialize
-document.addEventListener('DOMContentLoaded', function() {
-    setView(currentView, false);
-    renderView();
-    setupEventListeners();
+// ────────────────────────────────────────────────
+// Initialize on page load
+// ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  setView(currentView, false);
+  renderView();
+  setupEventListeners();
+  updateSelectedCount();
 });
 
+// ────────────────────────────────────────────────
+// View Toggle (Grid / Table)
+// ────────────────────────────────────────────────
 function setView(view, save = true) {
-    currentView = view;
-    const gridView = document.getElementById('seriesGridView');
-    const tableView = document.getElementById('seriesTableView');
-    const gridBtn = document.getElementById('gridViewBtn');
-    const tableBtn = document.getElementById('tableViewBtn');
-    
-    if (view === 'grid') {
-        gridView.style.display = 'block';
-        tableView.style.display = 'none';
-        gridBtn.classList.add('active');
-        tableBtn.classList.remove('active');
-    } else {
-        gridView.style.display = 'none';
-        tableView.style.display = 'block';
-        gridBtn.classList.remove('active');
-        tableBtn.classList.add('active');
-    }
-    
-    if (save) localStorage.setItem('episeerr-series-view', view);
-    renderView();
+  currentView = view;
+
+  document.getElementById('seriesGridView').style.display = view === 'grid' ? 'block' : 'none';
+  document.getElementById('seriesTableView').style.display = view === 'table' ? 'block' : 'none';
+  document.getElementById('bulkActionsBar').style.display = view === 'table' ? 'block' : 'none';
+
+  document.getElementById('gridViewBtn').classList.toggle('active', view === 'grid');
+  document.getElementById('tableViewBtn').classList.toggle('active', view === 'table');
+
+  if (save) localStorage.setItem('episeerr-series-view', view);
+
+  renderView();
 }
 
-function setupEventListeners() {
-    document.getElementById('seriesSearchInput')?.addEventListener('input', renderView);
-    document.getElementById('ruleFilterSelect')?.addEventListener('change', renderView);
-    document.getElementById('statusFilterSelect')?.addEventListener('change', renderView);
-    
-    document.getElementById('select-all-checkbox')?.addEventListener('change', function() {
-        document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = this.checked);
-        updateSelectedCount();
-    });
-    
-    document.querySelectorAll('.sortable').forEach(header => {
-        header.addEventListener('click', function() {
-            const sortColumn = this.dataset.sort;
-            if (currentSort.column === sortColumn) {
-                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-            } else {
-                currentSort.column = sortColumn;
-                currentSort.direction = 'asc';
-            }
-            renderView();
-        });
-    });
-}
-
-function getFilteredAndSortedSeries() {
-    let filtered = [...allSeriesData];
-    
-    const searchTerm = document.getElementById('seriesSearchInput')?.value.toLowerCase() || '';
-    if (searchTerm) {
-        filtered = filtered.filter(s => s.title.toLowerCase().includes(searchTerm));
-    }
-    
-    const ruleValue = document.getElementById('ruleFilterSelect')?.value || '';
-    if (ruleValue) {
-        if (ruleValue === 'Unassigned') {
-            filtered = filtered.filter(s => !s.assigned_rule || s.assigned_rule === 'None');
-        } else {
-            filtered = filtered.filter(s => s.assigned_rule === ruleValue);
-        }
-    }
-    
-    const statusValue = document.getElementById('statusFilterSelect')?.value || '';
-    if (statusValue) {
-        filtered = filtered.filter(s => s.status === statusValue);
-    }
-    
-    filtered.sort((a, b) => {
-        let aVal, bVal;
-        switch(currentSort.column) {
-            case 'title':
-                aVal = a.title.toLowerCase();
-                bVal = b.title.toLowerCase();
-                break;
-            case 'rule':
-                aVal = a.assigned_rule || 'zzz';
-                bVal = b.assigned_rule || 'zzz';
-                break;
-            case 'status':
-                aVal = a.status || '';
-                bVal = b.status || '';
-                break;
-            default:
-                return 0;
-        }
-        
-        if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
-        return 0;
-    });
-    
-    return filtered;
-}
-
+// ────────────────────────────────────────────────
+// Render current view (grid or table)
+// ────────────────────────────────────────────────
 function renderView() {
-    const series = getFilteredAndSortedSeries();
-    if (currentView === 'grid') {
-        renderGridView(series);
+  const filtered = getFilteredAndSortedSeries();
+
+  if (currentView === 'grid') {
+    renderGridView(filtered);
+  } else {
+    renderTableView(filtered);
+  }
+
+  updateSelectedCount();
+}
+
+// ────────────────────────────────────────────────
+// Filter + Sort Logic
+// ────────────────────────────────────────────────
+function getFilteredAndSortedSeries() {
+  let data = [...allSeriesData];
+
+  // Search
+  const search = (document.getElementById('seriesSearchInput')?.value || '').toLowerCase().trim();
+  if (search) {
+    data = data.filter(s => s.title.toLowerCase().includes(search));
+  }
+
+  // Rule filter
+  const ruleVal = document.getElementById('ruleFilterSelect')?.value;
+  if (ruleVal) {
+    if (ruleVal === 'Unassigned') {
+      data = data.filter(s => !s.assigned_rule || s.assigned_rule === 'None');
     } else {
-        renderTableView(series);
+      data = data.filter(s => s.assigned_rule === ruleVal);
     }
+  }
+
+  // Status filter
+  const statusVal = document.getElementById('statusFilterSelect')?.value;
+  if (statusVal) {
+    data = data.filter(s => s.status === statusVal);
+  }
+
+  // Sort
+  data.sort((a, b) => {
+    let va, vb;
+    switch (currentSort.column) {
+      case 'title':
+        va = a.title.toLowerCase();
+        vb = b.title.toLowerCase();
+        break;
+      case 'rule':
+        va = (a.assigned_rule || 'zzz').toLowerCase();
+        vb = (b.assigned_rule || 'zzz').toLowerCase();
+        break;
+      case 'status':
+        const prio = { continuing: 1, upcoming: 2, ended: 3 };
+        va = prio[a.status] || 4;
+        vb = prio[b.status] || 4;
+        break;
+      default: return 0;
+    }
+    if (typeof va === 'string') {
+      return currentSort.direction === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    return currentSort.direction === 'asc' ? va - vb : vb - va;
+  });
+
+  return data;
 }
 
+// ────────────────────────────────────────────────
+// Grid Rendering
+// ────────────────────────────────────────────────
 function renderGridView(series) {
-    const grid = document.getElementById('seriesGrid');
-    if (!grid) return;
-    
-    if (series.length === 0) {
-        grid.innerHTML = '<div class="col-12 text-center py-5 text-muted">No series found</div>';
-        return;
-    }
-    
-    grid.innerHTML = series.map(s => {
-        const posterUrl = s.images?.find(img => img.coverType === 'poster')?.remoteUrl || '/static/placeholder.png';
-        const ruleDisplay = s.assigned_rule && s.assigned_rule !== 'None' 
-            ? s.assigned_rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-            : 'Unassigned';
-        const statusDisplay = getStatusText(s);
-        
-        return `
-            <div class="col series-grid-col">
-                <div class="series-grid-card">
-                    <div class="series-checkbox-container">
-                        <input type="checkbox" class="series-checkbox" value="${s.id}" onchange="updateSelectedCount()">
-                    </div>
-                    <div class="series-poster-container">
-                        <img class="series-poster" src="${posterUrl}" alt="${s.title}" loading="lazy" onerror="this.src='/static/placeholder.png'">
-                        <div class="series-poster-overlay">
-                            <a href="${SONARR_URL}/series/${s.titleSlug || ''}" target="_blank" class="btn btn-sm btn-primary">
-                                <i class="fas fa-external-link-alt"></i> Sonarr
-                            </a>
-                        </div>
-                    </div>
-                    <div class="series-info">
-                        <div class="series-title">${s.title}</div>
-                        <div class="series-metadata">
-                            <span class="series-badge ${s.assigned_rule && s.assigned_rule !== 'None' ? 'rule' : 'unassigned'}">
-                                ${ruleDisplay}
-                            </span>
-                            <span class="series-badge ${s.status || 'unknown'}">
-                                ${statusDisplay}
-                            </span>
-                        </div>
-                    </div>
-                </div>
+  const container = document.getElementById('seriesGrid');
+  if (!container) return;
+
+  if (!series.length) {
+    container.innerHTML = '<div class="col-12 text-center py-5 text-muted">No series match your filters</div>';
+    return;
+  }
+
+  container.innerHTML = series.map(s => {
+    const poster = s.images?.find(i => i.coverType === 'poster')?.remoteUrl || '/static/placeholder.png';
+    const rule = s.assigned_rule && s.assigned_rule !== 'None'
+      ? s.assigned_rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      : 'Unassigned';
+    const ruleCls = rule === 'Unassigned' ? 'badge-unassigned' : 'badge-rule';
+
+    return `
+      <div class="col series-grid-col">
+        <div class="card series-grid-card">
+          <div class="series-poster-container">
+            <img src="${poster}" class="series-poster" alt="${s.title}" loading="lazy" onerror="this.src='/static/placeholder.png'">
+            <div class="series-checkbox-overlay">
+              <input type="checkbox" class="series-checkbox form-check-input bg-dark" value="${s.id}" onchange="updateSelectedCount()">
             </div>
-        `;
-    }).join('');
+          </div>
+          <div class="series-info">
+            <div class="series-title">${s.title}</div>
+            <div class="series-badges">
+              <span class="badge series-badge ${ruleCls}">${rule}</span>
+              <span class="badge series-badge badge-${s.status || 'unknown'}">${getStatusText(s)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
+// ────────────────────────────────────────────────
+// Table Rendering
+// ────────────────────────────────────────────────
 function renderTableView(series) {
-    const tbody = document.getElementById('series-table-body');
-    if (!tbody) return;
-    
-    if (series.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">No series found</td></tr>';
-        return;
-    }
-    
-    tbody.innerHTML = series.map(s => {
-        const ruleText = s.assigned_rule && s.assigned_rule !== 'None' 
-            ? s.assigned_rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-            : 'Unassigned';
-        const ruleBadgeClass = s.assigned_rule && s.assigned_rule !== 'None' ? 'bg-primary' : 'bg-secondary';
-        const statusText = getStatusText(s);
-        const statusClass = `status-${s.status || 'unknown'}`;
-        
-        return `
-            <tr>
-                <td><input type="checkbox" class="series-checkbox" value="${s.id}" onchange="updateSelectedCount()"></td>
-                <td>
-                    <a href="${SONARR_URL}/series/${s.titleSlug || ''}" target="_blank" class="text-decoration-none text-light">
-                        <strong>${s.title}</strong>
-                        <i class="fas fa-external-link-alt ms-1 text-muted" style="font-size: 0.8em;"></i>
-                    </a>
-                </td>
-                <td><span class="badge ${ruleBadgeClass}">${ruleText}</span></td>
-                <td>
-                    <span class="${statusClass}">${statusText}</span>
-                    <br><small class="text-muted">${getStatusDetails(s)}</small>
-                </td>
-            </tr>
-        `;
-    }).join('');
+  const tbody = document.getElementById('series-table-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+
+  if (!series.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No series match your filters</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = series.map(s => {
+    const rule = s.assigned_rule && s.assigned_rule !== 'None'
+      ? s.assigned_rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      : 'Unassigned';
+    const ruleCls = rule === 'Unassigned' ? 'bg-secondary' : 'bg-primary';
+
+    return `
+      <tr>
+        <td class="text-center">
+          <input type="checkbox" class="series-checkbox" value="${s.id}" onchange="updateSelectedCount()">
+        </td>
+        <td>
+          <a href="${SONARR_URL}/series/${s.titleSlug || encodeURIComponent(s.title)}" target="_blank" class="text-light text-decoration-none">
+            ${s.title}
+          </a>
+        </td>
+        <td><span class="badge ${ruleCls}">${rule}</span></td>
+        <td><span class="status-${s.status || 'unknown'}">${getStatusText(s)}</span></td>
+      </tr>
+    `;
+  }).join('');
 }
 
-function getStatusText(series) {
-    switch(series.status) {
-        case 'continuing': return '📺 Continuing';
-        case 'ended': return '🏁 Ended';
-        case 'upcoming': return '🔜 Upcoming';
-        default: return '❓ Unknown';
-    }
+// ────────────────────────────────────────────────
+// Status Helper
+// ────────────────────────────────────────────────
+function getStatusText(s) {
+  const map = {
+    continuing: '📺 Continuing',
+    ended: '🏁 Ended',
+    upcoming: '🔜 Upcoming'
+  };
+  return map[s.status] || '❓ Unknown';
 }
 
-function getStatusDetails(series) {
-    if (series.lastEpisode) {
-        const lastDate = new Date(series.lastEpisode);
-        return `Last: ${lastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-    }
-    return series.year ? `Year: ${series.year}` : 'No date info';
-}
-
+// ────────────────────────────────────────────────
+// Selection & Bulk Actions
+// ────────────────────────────────────────────────
 function updateSelectedCount() {
-    const count = document.querySelectorAll('.series-checkbox:checked').length;
-    document.getElementById('selectedCount').textContent = `${count} selected`;
-    document.getElementById('bulkSelectedCount').textContent = count;
-    document.getElementById('bulkActionsBar').style.display = count > 0 ? 'block' : 'none';
+  const count = document.querySelectorAll('.series-checkbox:checked').length;
+  document.getElementById('selectedCount').textContent = `${count} selected`;
+  document.getElementById('bulkSelectedCount').textContent = count;
+  // Bar visibility is controlled by view mode, not selection count
+}
+
+function toggleAll() {
+  const checked = document.getElementById('select-all-checkbox').checked;
+  document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = checked);
+  updateSelectedCount();
 }
 
 function clearSelection() {
-    document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = false);
-    document.getElementById('select-all-checkbox').checked = false;
-    updateSelectedCount();
+  document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = false);
+  document.getElementById('select-all-checkbox').checked = false;
+  updateSelectedCount();
 }
 
-function assignSelectedSeries() {
-    const ruleName = document.getElementById('bulkRuleSelect')?.value;
-    if (!ruleName) return alert('Please select a rule first');
-    
-    const selectedIds = Array.from(document.querySelectorAll('.series-checkbox:checked')).map(cb => cb.value);
-    if (selectedIds.length === 0) return alert('Please select at least one series');
-    
-    fetch('/assign-to-rule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rule_name: ruleName, series_ids: selectedIds })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.status === 'success') window.location.reload();
-        else alert('Error: ' + (data.message || 'Unknown error'));
-    })
-    .catch(e => alert('Error assigning series'));
+function assignSelected() {
+  const rule = document.getElementById('bulkRuleSelect')?.value;
+  if (!rule) return alert('Please select a rule to assign to.');
+
+  const ids = Array.from(document.querySelectorAll('.series-checkbox:checked')).map(cb => cb.value);
+  if (!ids.length) return alert('No series selected.');
+
+  const form = document.getElementById('assignment-form');
+  form.querySelector('[name="rule_name"]').value = rule;
+
+  ids.forEach(id => {
+    const inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'series_ids';
+    inp.value = id;
+    form.appendChild(inp);
+  });
+
+  form.submit();
 }
 
-function unassignSelectedSeries() {
-    const selectedIds = Array.from(document.querySelectorAll('.series-checkbox:checked')).map(cb => cb.value);
-    if (selectedIds.length === 0) return alert('Please select at least one series');
-    if (!confirm(`Unassign ${selectedIds.length} series?`)) return;
-    
-    fetch('/unassign-series', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ series_ids: selectedIds })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.status === 'success') window.location.reload();
-        else alert('Error: ' + (data.message || 'Unknown error'));
-    })
-    .catch(e => alert('Error unassigning series'));
+function unassignSelected() {
+  const ids = Array.from(document.querySelectorAll('.series-checkbox:checked')).map(cb => cb.value);
+  if (!ids.length) return alert('No series selected.');
+  if (!confirm(`Unassign ${ids.length} series from all rules?`)) return;
+
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '{{ url_for("unassign_series") }}';
+
+  ids.forEach(id => {
+    const inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'series_ids';
+    inp.value = id;
+    form.appendChild(inp);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+}
+
+// ────────────────────────────────────────────────
+// Event Listeners
+// ────────────────────────────────────────────────
+function setupEventListeners() {
+  ['seriesSearchInput', 'ruleFilterSelect', 'statusFilterSelect'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (el.tagName === 'INPUT') el.addEventListener('input', renderView);
+      else el.addEventListener('change', renderView);
+    }
+  });
+
+  document.querySelectorAll('.sortable').forEach(h => {
+    h.addEventListener('click', () => {
+      const col = h.dataset.sort;
+      if (currentSort.column === col) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.column = col;
+        currentSort.direction = 'asc';
+      }
+      renderView();
+    });
+  });
 }
 </script>
 {% endblock %}

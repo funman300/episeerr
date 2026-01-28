@@ -1,4 +1,4 @@
-__version__ = "3.0"
+__version__ = "3.1.0"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -21,10 +21,13 @@ import requests
 import episeerr_utils
 from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID, normalize_url
 import pending_deletions
+from dashboard import dashboard_bp
+import media_processor
 
 app = Flask(__name__)
 # Run initialization immediately on module load (Gunicorn workers)
-
+# Register dashboard blueprint
+app.register_blueprint(dashboard_bp)
 # Load environment variables
 load_dotenv()
 BASE_DIR = os.getcwd()
@@ -382,8 +385,11 @@ Flask API Endpoints for Episeerr Sidebar
 Add these routes to your Flask application to support the sidebar navigation.
 """
 
-from flask import jsonify, request
 
+@app.route('/rules')
+def rules_page():
+    config = load_config()
+    return render_template('rules.html', config=config)
 # Add this route to provide rules list for the sidebar
 @app.route('/api/rules-list')
 def api_rules_list():
@@ -398,17 +404,29 @@ def api_rules_list():
         # Process each rule
         for rule_name, rule_details in sorted(rules.items()):
             is_default = (rule_name == default_rule)
-            series_count = len(rule_details.get('series', []))
+            series_dict = rule_details.get('series', {})
+            series_count = len(series_dict)
             
             # Create display name (title case with spaces)
             display_name = rule_name.replace('_', ' ').title()
+            
+            # Get rule configuration
+            get_type = rule_details.get('get_type', 'episodes')
+            get_count = rule_details.get('get_count')
+            keep_type = rule_details.get('keep_type', 'episodes')
+            keep_count = rule_details.get('keep_count')
+            grace_watched = rule_details.get('grace_watched')
+            grace_unwatched = rule_details.get('grace_unwatched')
             
             rules_list.append({
                 'name': rule_name,
                 'display_name': display_name,
                 'description': rule_details.get('description', ''),
                 'series_count': series_count,
-                'is_default': is_default
+                'is_default': is_default,
+                'keep_last_n_episodes': keep_count if keep_type == 'episodes' else None,
+                'keep_first_n_unwatched': get_count if get_type == 'episodes' else None,
+                'grace_period_days': grace_watched or grace_unwatched
             })
         
         # Sort: default first, then alphabetically
@@ -1119,8 +1137,9 @@ def create_rule():
         message = f"Rule '{rule_name}' created successfully"
         if 'set_as_default' in request.form:
             message += " and set as default"
-        
-        return redirect(url_for('index', message=message))
+
+        # Always redirect to rules page after creating a rule
+        return redirect(url_for('rules_page'))
     return render_template('create_rule.html')
 
 
@@ -1128,6 +1147,8 @@ def create_rule():
 def edit_rule(rule_name):
     """Edit an existing rule."""
     config = load_config()
+    app.logger.info(f"Edit rule request for: '{rule_name}'")
+    app.logger.info(f"Available rules: {list(config['rules'].keys())}")
     if rule_name not in config['rules']:
         return redirect(url_for('index', message=f"Rule '{rule_name}' not found"))
     
@@ -1193,31 +1214,11 @@ def edit_rule(rule_name):
         if 'set_as_default' in request.form and config.get('default_rule') == rule_name:
             message += " and set as default"
         
-        return redirect(url_for('index', message=message))
+        return redirect(url_for('rules_page'))
     
     rule = config['rules'][rule_name]
     return render_template('edit_rule.html', rule_name=rule_name, rule=rule, config=config)
-
-@app.template_filter('sonarr_url')
-def sonarr_series_url(series):
-    """Generate Sonarr series URL from series object."""
-    # Use titleSlug if available, otherwise fallback to ID
-    if isinstance(series, dict):
-        if 'titleSlug' in series:
-            return f"{SONARR_URL}/series/{series['titleSlug']}"
-        else:
-            return f"{SONARR_URL}/series/{series.get('id', '')}"
-    else:
-        # If it's just an ID passed directly
-        return f"{SONARR_URL}/series/{series}"
-
-# Alternative: If you prefer a simple ID-based approach
-@app.template_filter('sonarr_url_simple')
-def sonarr_series_url_simple(series_id):
-    """Generate Sonarr series URL from series ID."""
-    return f"{SONARR_URL}/series/{series_id}"
 @app.route('/delete-rule/<rule_name>', methods=['POST'])
-
 def delete_rule(rule_name):
     """Delete a rule and clean up its tag from Sonarr and delay profile."""
     config = load_config()
@@ -1321,7 +1322,7 @@ def delete_rule(rule_name):
     if tag_removed:
         message += " (tag cleaned up from Sonarr)"
     
-    return redirect(url_for('index', message=message))
+    return redirect(url_for('rules_page'))
 
 @app.route('/assign-rules', methods=['POST'])
 def assign_rules():
@@ -1330,6 +1331,9 @@ def assign_rules():
     rule_name = request.form.get('rule_name')
     series_ids = request.form.getlist('series_ids')
     if not rule_name or rule_name not in config['rules']:
+        referer = request.referrer or ''
+        if '/rules' in referer:
+            return redirect(url_for('rules_page'))
         return redirect(url_for('index', message="Invalid rule selected"))
     
     # STEP 1: Collect existing activity data BEFORE removing
@@ -1387,7 +1391,33 @@ def assign_rules():
     if tag_sync_failed > 0:
         message += f" ({tag_sync_failed} tag syncs failed)"
     
+    # Redirect back to where they came from
+    referer = request.referrer or ''
+    if '/rules' in referer:
+        return redirect(url_for('rules_page'))
     return redirect(url_for('index', message=message))
+
+@app.template_filter('sonarr_url')
+def sonarr_series_url(series):
+    """Generate Sonarr series URL from series object."""
+    # Use titleSlug if available, otherwise fallback to ID
+    if isinstance(series, dict):
+        if 'titleSlug' in series:
+            return f"{SONARR_URL}/series/{series['titleSlug']}"
+        else:
+            return f"{SONARR_URL}/series/{series.get('id', '')}"
+    else:
+        # If it's just an ID passed directly
+        return f"{SONARR_URL}/series/{series}"
+
+# Alternative: If you prefer a simple ID-based approach
+@app.template_filter('sonarr_url_simple')
+def sonarr_series_url_simple(series_id):
+    """Generate Sonarr series URL from series ID."""
+    return f"{SONARR_URL}/series/{series_id}"
+@app.route('/delete-rule/<rule_name>', methods=['POST'])
+
+
 
 @app.context_processor
 def inject_service_urls():
@@ -1451,6 +1481,9 @@ def set_default_rule():
         return redirect(url_for('index', message="Invalid rule selected"))
     config['default_rule'] = rule_name
     save_config(config)
+    referer = request.referrer or ''
+    if '/rules' in referer:
+        return redirect(url_for('rules_page'))
     return redirect(url_for('index', message=f"Set '{rule_name}' as default rule"))
 
 # UPDATE unassign_series() function
@@ -1494,6 +1527,9 @@ def unassign_series():
     if tag_removal_failed > 0:
         message += f" ({tag_removal_failed} tag removals failed)"
     
+    referer = request.referrer or ''
+    if '/rules' in referer:
+        return redirect(url_for('rules_page'))
     return redirect(url_for('index', message=message))
 # ============================================================================
 # API ROUTES
@@ -1747,6 +1783,9 @@ def cleanup_config_rules():
 def cleanup():
     """Clean up configuration."""
     cleanup_config_rules()
+    referer = request.referrer or ''
+    if '/rules' in referer:
+        return redirect(url_for('rules_page'))
     return redirect(url_for('index', message="Configuration cleaned up successfully"))
 
 @app.route('/api/series-with-status')
@@ -1813,7 +1852,8 @@ def api_series_with_status():
 @app.route('/scheduler')
 def scheduler_admin():
     """Scheduler administration page."""
-    return render_template('scheduler_admin.html')
+    config = load_config()
+    return render_template('scheduler_admin.html', config=config)
 
 @app.route('/api/scheduler-status')
 def scheduler_status():
@@ -3032,8 +3072,10 @@ def process_sonarr_webhook():
     
 def handle_episode_grab(json_data):
     """
-    Mark series as cleaned when episode is grabbed.
-    This stops the "waiting for content" checking loop.
+    Handle episode grab:
+    1. Mark series as cleaned (stops grace checking)
+    2. Log download for dashboard
+    3. Delete pending Discord notifications
     """
     try:
         series = json_data.get('series', {})
@@ -3048,8 +3090,13 @@ def handle_episode_grab(json_data):
         episode_info = episodes[0]
         season_num = episode_info.get('seasonNumber')
         episode_num = episode_info.get('episodeNumber')
+        episode_id = episode_info.get('id')
         
-        # Load config and find series
+        app.logger.info(f"✅ Episode grabbed: {series_title} S{season_num}E{episode_num}")
+        
+        # ──────────────────────────────────────────────────────
+        # 1. MARK AS CLEANED (stops grace checking)
+        # ──────────────────────────────────────────────────────
         config = load_config()
         
         for rule_name, rule in config['rules'].items():
@@ -3057,17 +3104,81 @@ def handle_episode_grab(json_data):
                 series_data = rule['series'][str(series_id)]
                 
                 if isinstance(series_data, dict):
-                    # Mark as cleaned - stops grace checking loop
                     series_data['grace_cleaned'] = True
                     save_config(config)
-                    app.logger.info(f"✅ {series_title}: Grabbed S{season_num}E{episode_num} - marked as cleaned")
+                    app.logger.info(f"✓ Marked as cleaned in rule '{rule_name}'")
                 break
+        
+        # ──────────────────────────────────────────────────────
+        # 2. LOG DOWNLOAD FOR DASHBOARD (7-day rolling window)
+        # ──────────────────────────────────────────────────────
+        try:
+            from datetime import datetime, timedelta
+            
+            download_event = {
+                'series_title': series_title,
+                'series_id': series_id,
+                'season': season_num,
+                'episode': episode_num,
+                'episode_title': episode_info.get('title', ''),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            downloads_file = os.path.join(os.getcwd(), 'data', 'recent_downloads.json')
+            os.makedirs(os.path.dirname(downloads_file), exist_ok=True)
+            
+            if os.path.exists(downloads_file):
+                with open(downloads_file, 'r') as f:
+                    downloads = json.load(f)
+            else:
+                downloads = []
+            
+            downloads.append(download_event)
+            
+            # Auto-cleanup: keep only last 7 days
+            cutoff = datetime.now() - timedelta(days=7)
+            downloads = [
+                d for d in downloads 
+                if datetime.fromisoformat(d['timestamp']) > cutoff
+            ]
+            
+            with open(downloads_file, 'w') as f:
+                json.dump(downloads, f, indent=2)
+                
+            app.logger.info(f"📥 Logged download for dashboard: {series_title} S{season_num}E{episode_num}")
+            
+        except Exception as e:
+            app.logger.error(f"Error logging download for dashboard: {e}")
+        
+        # ──────────────────────────────────────────────────────
+        # 3. DELETE PENDING DISCORD NOTIFICATION
+        # ──────────────────────────────────────────────────────
+        try:
+            from notification_storage import get_and_remove_notification
+            from notifications import delete_discord_message
+            
+            message_id = get_and_remove_notification(episode_id)
+            
+            if message_id:
+                app.logger.info(f"🗑️ Deleting pending search notification for episode {episode_id}")
+                if delete_discord_message(message_id):
+                    app.logger.info(f"✅ Successfully deleted notification message {message_id}")
+                else:
+                    app.logger.warning(f"⚠️ Failed to delete notification message {message_id}")
+        except ImportError:
+            # Notification modules not available, skip
+            pass
+        except Exception as e:
+            app.logger.error(f"Error deleting notification: {e}")
         
         return jsonify({"status": "success", "message": "Grab processed"}), 200
                 
     except Exception as e:
         app.logger.error(f"Error handling grab webhook: {str(e)}")
+        import traceback
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({"status": "error", "message": str(e)}), 500
+                        
 
 @app.route('/seerr-webhook', methods=['POST'])
 def process_seerr_webhook():
@@ -3804,40 +3915,7 @@ def time_ago(timestamp):
     except:
         return "recently"
     
-def handle_episode_grab(data):
-    """Handle Sonarr grab event - delete pending search notification if exists"""
-    try:
-        episodes = data.get('episodes', [])
-        series_title = data.get('series', {}).get('title', 'Unknown')
-        
-        for episode in episodes:
-            episode_id = episode.get('id')
-            season = episode.get('seasonNumber')
-            episode_num = episode.get('episodeNumber')
-            
-            app.logger.info(f"✅ Episode grabbed: {series_title} S{season}E{episode_num}")
-            
-            # Import notification helpers
-            from notification_storage import get_and_remove_notification
-            from notifications import delete_discord_message
-            
-            # Check if we have a pending notification for this episode
-            message_id = get_and_remove_notification(episode_id)
-            
-            if message_id:
-                app.logger.info(f"🗑️ Deleting pending search notification for episode {episode_id}")
-                if delete_discord_message(message_id):
-                    app.logger.info(f"✅ Successfully deleted notification message {message_id}")
-                else:
-                    app.logger.warning(f"⚠️ Failed to delete notification message {message_id}")
-        
-        return jsonify({'status': 'success', 'message': 'Grab event processed'}), 200
-        
-    except Exception as e:
-        app.logger.error(f"Error handling grab webhook: {e}")
-        import traceback
-        app.logger.error(f"Traceback: {traceback.format_exc()}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+
     
 def migrate_create_rule_tags():
     """One-time migration: Create tags for all existing rules in Sonarr"""

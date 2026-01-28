@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="mb-4">
+        <h2><i class="fas fa-list me-2"></i>Rules</h2>
+    </div>
+
+    <!-- Desktop: Table view -->
+    <div class="table-responsive d-none d-md-block">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Rule Name</th>
+                    <th>Description</th>
+                    <th>Series Count</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if config and config.rules %}
+                    {% for rule_name in config.rules.keys() %}
+                    {% set rule_details = config.rules[rule_name] %}
+                    <tr>
+                        <td>
+                            <strong>{{ rule_name }}</strong>
+                            {% if config.default_rule and rule_name == config.default_rule %}
+                            <span class="badge bg-warning text-dark">Default</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ rule_details.description or '' }}</td>
+                        <td>
+                            {% if rule_details.series %}
+                            <span class="badge bg-secondary">{{ rule_details.series|length }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="/edit-rule/{{ rule_name }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-edit"></i> Edit
+                                </a>
+                                {% if not config.default_rule or rule_name != config.default_rule %}
+                                <form method="POST" action="/delete-rule/{{ rule_name }}" style="display: inline;" onsubmit="return confirm('Delete {{ rule_name }}?');">
+                                    <button type="submit" class="btn btn-outline-danger">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5">
+                            <p class="text-muted">No rules configured</p>
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Mobile: Card view -->
+    <div class="d-md-none">
+        {% if config and config.rules %}
+            {% for rule_name in config.rules.keys() %}
+            {% set rule_details = config.rules[rule_name] %}
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h5 class="card-title mb-1">{{ rule_name }}</h5>
+                            {% if config.default_rule and rule_name == config.default_rule %}
+                            <span class="badge bg-warning text-dark">Default</span>
+                            {% endif %}
+                        </div>
+                        <span class="badge bg-secondary">{{ rule_details.series|length if rule_details.series else 0 }}</span>
+                    </div>
+                    
+                    {% if rule_details.description %}
+                    <p class="card-text text-muted small mb-3">{{ rule_details.description }}</p>
+                    {% endif %}
+                    
+                    <div class="d-flex gap-2">
+                        <a href="/edit-rule/{{ rule_name }}" class="btn btn-outline-primary btn-sm flex-fill">
+                            <i class="fas fa-edit"></i> Edit
+                        </a>
+                        {% if not config.default_rule or rule_name != config.default_rule %}
+                        <form method="POST" action="/delete-rule/{{ rule_name }}" class="flex-fill" onsubmit="return confirm('Delete {{ rule_name }}?');">
+                            <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                <h4>No Rules Configured</h4>
+                <p class="text-muted">Create your first cleanup rule to get started.</p>
+                <a href="{{ url_for('create_rule') }}" class="btn btn-primary">
+                    <i class="fas fa-plus-circle me-1"></i>Create Rule
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

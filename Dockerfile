@@ -29,6 +29,7 @@ COPY notifications.py .
 COPY notification_storage.py .
 COPY activity_storage.py .
 COPY pending_deletions.py .
+COPY dashboard.py .
 COPY templates/ templates/
 COPY static/ static/
 

@@ -3,9 +3,7 @@
 
 {% block title %}Scheduler Admin - OCDarr{% endblock %}
 
-
 {% block content %}
-<div class="container-fluid">
 <div class="row">
     <!-- Global Storage Gate Settings -->
     <div class="col-md-12 mb-4">
@@ -248,10 +246,9 @@
         
     </div>
 </div>
-</div>
 {% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
 <script>
 let schedulerStatusInterval;
 let globalSettings = {};
