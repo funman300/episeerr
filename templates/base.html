@@ -277,6 +277,10 @@
             .episeerr-main {
                 margin-left: 0;
             }
+            
+            .content-container {
+                max-width: 100vw; /* Full width on mobile */
+            }
 
             .mobile-navbar {
                 display: flex !important;
@@ -312,7 +316,8 @@
         /* Content Container */
         .content-container {
             padding: 24px;
-            max-width: 1920px;
+            max-width: calc(100vw - 220px - 48px); /* Viewport width - sidebar width - padding */
+            width: 100%;
             margin: 0 auto;
         }
 

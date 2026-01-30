@@ -2,6 +2,7 @@
 
 {% block content %}
 <div class="container-fluid">
+    <!-- Rules Section -->
     <div class="mb-4">
         <h2><i class="fas fa-list me-2"></i>Rules</h2>
     </div>
@@ -110,5 +111,344 @@
             </div>
         {% endif %}
     </div>
+
+    <!-- ──────────────────────────────────────────────────────────── -->
+    <!-- SERIES MANAGEMENT SECTION (copied from rules_index.html)    -->
+    <!-- ──────────────────────────────────────────────────────────── -->
+    <hr class="my-5">
+    
+    <div class="mb-4">
+        <h2><i class="fas fa-tv me-2"></i>Manage Series Assignments</h2>
+    </div>
+
+    <!-- Filters + Search + Selected Count -->
+    <div class="series-header mb-3 p-3 bg-dark border border-secondary rounded">
+        <div class="row g-3 align-items-end">
+
+            <!-- Search by Name -->
+            <div class="col-md-4">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-dark border-secondary"><i class="fas fa-search text-muted"></i></span>
+                    <input type="text" id="seriesSearchInput" class="form-control bg-dark text-light border-secondary" placeholder="Search series by name...">
+                </div>
+            </div>
+
+            <!-- Rule Filter -->
+            <div class="col-md-3">
+                <select id="ruleFilterSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
+                    <option value="">All Rules</option>
+                    <option value="Unassigned">Unassigned</option>
+                    {% for rule_name in config.rules.keys() | sort %}
+                    <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Status Filter -->
+            <div class="col-md-3">
+                <select id="statusFilterSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
+                    <option value="">All Status</option>
+                    <option value="continuing">Continuing</option>
+                    <option value="ended">Ended</option>
+                    <option value="upcoming">Upcoming</option>
+                </select>
+            </div>
+
+            <!-- Selected Count -->
+            <div class="col-auto ms-auto">
+                <span class="text-muted small fw-bold" id="selectedCount">0 selected</span>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Bulk Actions Bar -->
+    <div class="bulk-actions-bar mb-4 p-3 bg-dark border border-primary rounded" id="bulkActionsBar">
+        <div class="row g-3 align-items-center">
+            <div class="col-auto">
+                <strong><span id="bulkSelectedCount">0</span> selected</strong>
+            </div>
+            <div class="col-md-3">
+                <select id="bulkRuleSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
+                    <option value="">Assign to Rule...</option>
+                    {% for rule_name in config.rules.keys() | sort %}
+                    <option value="{{ rule_name }}">{{ rule_name.replace('_', ' ').title() }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-sm btn-primary" onclick="assignSelected()">
+                    <i class="fas fa-check me-1"></i> Assign
+                </button>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-sm btn-outline-danger" onclick="unassignSelected()">
+                    <i class="fas fa-unlink me-1"></i> Unassign
+                </button>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-sm btn-outline-secondary" onclick="clearSelection()">
+                    <i class="fas fa-ban me-1"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table View -->
+    <div id="seriesTableView" class="table-responsive">
+        <table class="table table-dark table-hover table-sm">
+            <thead class="sticky-top bg-dark">
+                <tr>
+                    <th width="50" class="text-center">
+                        <input type="checkbox" id="select-all-checkbox" onchange="toggleAll()">
+                    </th>
+                    <th class="sortable" data-sort="title" style="cursor: pointer;">
+                        Series <i class="fas fa-sort ms-1"></i>
+                    </th>
+                    <th class="sortable" data-sort="rule" style="cursor: pointer;">
+                        Current Rule <i class="fas fa-sort ms-1"></i>
+                    </th>
+                    <th class="sortable" data-sort="status" style="cursor: pointer;">
+                        Status <i class="fas fa-sort ms-1"></i>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="series-table-body"></tbody>
+        </table>
+    </div>
+
+    <!-- Hidden form for submissions -->
+    <form method="POST" action="{{ url_for('assign_rules') }}" id="assignment-form" style="display: none;">
+        <input type="hidden" name="rule_name" id="hidden-rule-name">
+    </form>
+
 </div>
+
+<style>
+.status-continuing { color: #10b981; }
+.status-ended { color: #ef4444; }
+.status-upcoming { color: #3b82f6; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ────────────────────────────────────────────────
+// Globals
+// ────────────────────────────────────────────────
+const allSeriesData = {{ all_series|tojson|safe }} || [];
+let currentSort = { column: 'title', direction: 'asc' };
+const SONARR_URL = '{{ SONARR_URL }}';
+
+// ────────────────────────────────────────────────
+// Init
+// ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  setupEventListeners();
+  renderView();
+});
+
+// ────────────────────────────────────────────────
+// Render table view only
+// ────────────────────────────────────────────────
+function renderView() {
+  const filtered = getFilteredAndSortedSeries();
+  renderTableView(filtered);
+  updateSelectedCount();
+}
+
+// ────────────────────────────────────────────────
+// Filter + Sort Logic
+// ────────────────────────────────────────────────
+function getFilteredAndSortedSeries() {
+  let data = [...allSeriesData];
+
+  // Search
+  const search = (document.getElementById('seriesSearchInput')?.value || '').toLowerCase().trim();
+  if (search) {
+    data = data.filter(s => s.title.toLowerCase().includes(search));
+  }
+
+  // Rule filter
+  const ruleVal = document.getElementById('ruleFilterSelect')?.value;
+  if (ruleVal) {
+    if (ruleVal === 'Unassigned') {
+      data = data.filter(s => !s.assigned_rule || s.assigned_rule === 'None');
+    } else {
+      data = data.filter(s => s.assigned_rule === ruleVal);
+    }
+  }
+
+  // Status filter
+  const statusVal = document.getElementById('statusFilterSelect')?.value;
+  if (statusVal) {
+    data = data.filter(s => s.status === statusVal);
+  }
+
+  // Sort
+  data.sort((a, b) => {
+    let va, vb;
+    switch (currentSort.column) {
+      case 'title':
+        va = a.title.toLowerCase();
+        vb = b.title.toLowerCase();
+        break;
+      case 'rule':
+        va = (a.assigned_rule || 'zzz').toLowerCase();
+        vb = (b.assigned_rule || 'zzz').toLowerCase();
+        break;
+      case 'status':
+        const prio = { continuing: 1, upcoming: 2, ended: 3 };
+        va = prio[a.status] || 4;
+        vb = prio[b.status] || 4;
+        break;
+      default: return 0;
+    }
+    if (typeof va === 'string') {
+      return currentSort.direction === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    return currentSort.direction === 'asc' ? va - vb : vb - va;
+  });
+
+  return data;
+}
+
+// ────────────────────────────────────────────────
+// Table Rendering
+// ────────────────────────────────────────────────
+function renderTableView(series) {
+  const tbody = document.getElementById('series-table-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+
+  if (!series.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No series match your filters</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = series.map(s => {
+    const rule = s.assigned_rule && s.assigned_rule !== 'None'
+      ? s.assigned_rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      : 'Unassigned';
+    const ruleCls = rule === 'Unassigned' ? 'bg-secondary' : 'bg-primary';
+
+    return `
+      <tr>
+        <td class="text-center">
+          <input type="checkbox" class="series-checkbox" value="${s.id}" onchange="updateSelectedCount()">
+        </td>
+        <td>
+          <a href="${SONARR_URL}/series/${s.titleSlug || encodeURIComponent(s.title)}" target="_blank" class="text-light text-decoration-none">
+            ${s.title}
+          </a>
+        </td>
+        <td><span class="badge ${ruleCls}">${rule}</span></td>
+        <td><span class="status-${s.status || 'unknown'}">${getStatusText(s)}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ────────────────────────────────────────────────
+// Status Helper
+// ────────────────────────────────────────────────
+function getStatusText(s) {
+  const map = {
+    continuing: '📺 Continuing',
+    ended: '🏁 Ended',
+    upcoming: '🔜 Upcoming'
+  };
+  return map[s.status] || '❓ Unknown';
+}
+
+// ────────────────────────────────────────────────
+// Selection & Bulk Actions
+// ────────────────────────────────────────────────
+function updateSelectedCount() {
+  const count = document.querySelectorAll('.series-checkbox:checked').length;
+  document.getElementById('selectedCount').textContent = `${count} selected`;
+  document.getElementById('bulkSelectedCount').textContent = count;
+}
+
+function toggleAll() {
+  const checked = document.getElementById('select-all-checkbox').checked;
+  document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = checked);
+  updateSelectedCount();
+}
+
+function clearSelection() {
+  document.querySelectorAll('.series-checkbox').forEach(cb => cb.checked = false);
+  document.getElementById('select-all-checkbox').checked = false;
+  updateSelectedCount();
+}
+
+function assignSelected() {
+  const rule = document.getElementById('bulkRuleSelect')?.value;
+  if (!rule) return alert('Please select a rule to assign to.');
+
+  const ids = Array.from(document.querySelectorAll('.series-checkbox:checked')).map(cb => cb.value);
+  if (!ids.length) return alert('No series selected.');
+
+  const form = document.getElementById('assignment-form');
+  form.querySelector('[name="rule_name"]').value = rule;
+
+  ids.forEach(id => {
+    const inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'series_ids';
+    inp.value = id;
+    form.appendChild(inp);
+  });
+
+  form.submit();
+}
+
+function unassignSelected() {
+  const ids = Array.from(document.querySelectorAll('.series-checkbox:checked')).map(cb => cb.value);
+  if (!ids.length) return alert('No series selected.');
+  if (!confirm(`Unassign ${ids.length} series from all rules?`)) return;
+
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '{{ url_for("unassign_series") }}';
+
+  ids.forEach(id => {
+    const inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'series_ids';
+    inp.value = id;
+    form.appendChild(inp);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+}
+
+// ────────────────────────────────────────────────
+// Event Listeners
+// ────────────────────────────────────────────────
+function setupEventListeners() {
+  ['seriesSearchInput', 'ruleFilterSelect', 'statusFilterSelect'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (el.tagName === 'INPUT') el.addEventListener('input', renderView);
+      else el.addEventListener('change', renderView);
+    }
+  });
+
+  document.querySelectorAll('.sortable').forEach(h => {
+    h.addEventListener('click', () => {
+      const col = h.dataset.sort;
+      if (currentSort.column === col) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.column = col;
+        currentSort.direction = 'asc';
+      }
+      renderView();
+    });
+  });
+}
+</script>
 {% endblock %}

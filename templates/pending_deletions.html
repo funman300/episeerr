@@ -289,17 +289,26 @@ function approveEpisodes(episodeIds) {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({episode_ids: episodeIds})
     })
-    .then(r => r.json())
+    .then(r => {
+        if (!r.ok) {
+            // Server returned an error - try to get error message
+            return r.text().then(text => {
+                throw new Error(`Server error (${r.status}): ${text.substring(0, 200)}`);
+            });
+        }
+        return r.json();
+    })
     .then(data => {
         if (data.success) {
             alert(`Successfully deleted ${data.deleted_count} episode(s)`);
             location.reload();
         } else {
-            alert('Error: ' + (data.errors || []).join(', '));
+            alert('Error: ' + (data.errors || data.error || 'Unknown error'));
         }
     })
     .catch(err => {
-        alert('Error approving deletions: ' + err);
+        console.error('Approve error:', err);
+        alert('Error approving deletions: ' + err.message);
     });
 }
 
@@ -309,17 +318,26 @@ function rejectEpisodes(episodeIds) {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({episode_ids: episodeIds})
     })
-    .then(r => r.json())
+    .then(r => {
+        if (!r.ok) {
+            // Server returned an error - try to get error message
+            return r.text().then(text => {
+                throw new Error(`Server error (${r.status}): ${text.substring(0, 200)}`);
+            });
+        }
+        return r.json();
+    })
     .then(data => {
         if (data.success) {
             alert(`Rejected ${data.rejected_count} episode(s) - won't be shown again for 30 days`);
             location.reload();
         } else {
-            alert('Error rejecting deletions');
+            alert('Error rejecting deletions: ' + (data.error || 'Unknown error'));
         }
     })
     .catch(err => {
-        alert('Error rejecting deletions: ' + err);
+        console.error('Reject error:', err);
+        alert('Error rejecting deletions: ' + err.message);
     });
 }
 </script>

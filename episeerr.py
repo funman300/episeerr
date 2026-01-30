@@ -1,4 +1,4 @@
-__version__ = "3.1.1"
+__version__ = "3.1.2"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -388,8 +388,30 @@ Add these routes to your Flask application to support the sidebar navigation.
 
 @app.route('/rules')
 def rules_page():
+    """Rules management page with series assignment interface."""
     config = load_config()
-    return render_template('rules.html', config=config)
+    all_series = get_sonarr_series()
+    
+    # Get SONARR_URL for template links
+    sonarr_preferences = sonarr_utils.load_preferences()
+    sonarr_url = sonarr_preferences['SONARR_URL']
+    
+    # Map series to their assigned rules
+    rules_mapping = {}
+    for rule_name, details in config['rules'].items():
+        series_dict = details.get('series', {})
+        for series_id in series_dict.keys():
+            rules_mapping[str(series_id)] = rule_name
+    
+    for series in all_series:
+        series['assigned_rule'] = rules_mapping.get(str(series['id']), 'None')
+    
+    all_series.sort(key=lambda x: x.get('title', '').lower())
+    
+    return render_template('rules.html', 
+                         config=config,
+                         all_series=all_series,
+                         SONARR_URL=sonarr_url)
 # Add this route to provide rules list for the sidebar
 @app.route('/api/rules-list')
 def api_rules_list():
@@ -610,7 +632,7 @@ def view_pending_deletions():
 def approve_pending_deletions():
     """Approve and execute deletions"""
     import pending_deletions
-    from media_processor import delete_episodes_in_sonarr_with_logging
+    from media_processor import delete_episodes_immediately
     
     try:
         data = request.get_json()
@@ -619,7 +641,7 @@ def approve_pending_deletions():
         if not episode_ids:
             return jsonify({'success': False, 'error': 'No episodes specified'}), 400
         
-        result = pending_deletions.approve_deletions(episode_ids, delete_episodes_in_sonarr_with_logging)
+        result = pending_deletions.approve_deletions(episode_ids, delete_episodes_immediately)
         
         return jsonify({
             'success': True,
@@ -2643,7 +2665,6 @@ def process_sonarr_webhook():
 
         assigned_rule = None
         is_select_request = False
-        has_episeerr_default = False
 
         config = None  # lazy load
         
@@ -2690,11 +2711,6 @@ def process_sonarr_webhook():
                 app.logger.info("Detected episeerr_select tag → selection workflow")
                 break
                 
-            elif rule_name == 'default':
-                has_episeerr_default = True
-                app.logger.info("Detected episeerr_default tag")
-                break
-                
             else:
                 # Direct rule tag - case-insensitive lookup
                 if config is None:
@@ -2722,10 +2738,8 @@ def process_sonarr_webhook():
         # ────────────────────────────────────────────────────────────────
         app.logger.info(f"=== TAG DETECTION SUMMARY ===")
         app.logger.info(f"assigned_rule: {assigned_rule}")
-        app.logger.info(f"is_select_request: {is_select_request}")
-        app.logger.info(f"has_episeerr_default: {has_episeerr_default}")
-        
-        if not assigned_rule and not is_select_request and not has_episeerr_default:
+        app.logger.info(f"is_select_request: {is_select_request}")        
+        if not assigned_rule and not is_select_request:
             import media_processor
             global_settings = media_processor.load_global_settings()
             app.logger.info(f"Auto-assign check: enabled={global_settings.get('auto_assign_new_series', False)}")
@@ -2754,7 +2768,6 @@ def process_sonarr_webhook():
                 
                 # Set assigned_rule and continue to processing
                 assigned_rule = default_rule_name
-                has_episeerr_default = True
             else:
                 # ONLY return if auto-assign is OFF
                 app.logger.info("No episeerr tags + auto-assign off → no action")
@@ -2791,7 +2804,7 @@ def process_sonarr_webhook():
                 app.logger.warning(f"Unexpected tag type in removal: {tag_item}")
                 continue
             
-            if label in ['episeerr_select', 'episeerr_default', 'episeerr_delay']:
+            if label in ['episeerr_select', 'episeerr_delay']:
                 removed.append(label)
                 if label == 'episeerr_delay':
                     had_delay_tag = True
@@ -2885,12 +2898,6 @@ def process_sonarr_webhook():
         # ─── Rule processing ─────────────────────────────────────────────
         if config is None:
             config = load_config()
-
-        if has_episeerr_default and assigned_rule is None:
-            assigned_rule = config.get('default_rule', 'default')
-            if assigned_rule not in config['rules']:
-                app.logger.error(f"Default rule '{assigned_rule}' missing")
-                assigned_rule = list(config['rules'].keys())[0]
 
         app.logger.info(f"Applying rule: {assigned_rule}")
 

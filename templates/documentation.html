@@ -38,9 +38,8 @@
         <h5>📚 Detailed Documentation Available</h5>
         <p class="mb-2">For deep dives and step-by-step guides:</p>
         <ul class="mb-0">
-            <li><a href="https://github.com/Vansmak/episeerr/blob/main/docs/README.md" target="_blank">Documentation Hub</a></li>
-            <li><a href="https://github.com/Vansmak/episeerr/blob/main/docs/core-concepts/deletion-system.md" target="_blank">Deletion System Guide</a> ⭐</li>
-            <li><a href="https://github.com/Vansmak/episeerr/blob/main/docs/configuration/webhook-setup.md" target="_blank">Jellyfin Setup (3 modes)</a></li>
+            <li><a href="https://github.com/Vansmak/episeerr/blob/main/README.md" target="_blank">Documentation Hub</a></li>
+            
         </ul>
     </div>
     <!-- Overview -->
@@ -167,7 +166,7 @@
                         <li><strong>Torrent Delay:</strong> 999999 minutes (essentially infinite)</li>
                     </ul>
                 </li>
-                <li>Set <strong>Tags:</strong> <code>episeerr_default</code> and/or <code>episeerr_select</code></li>
+                <li>Set <strong>Tags:</strong> <code>episeerr_[rule_name]</code> and/or <code>episeerr_select</code></li>
                 <li>Save</li>
             </ol>
 
@@ -205,7 +204,7 @@
                         <div class="card-body">
                             <ol>
                                 <li>In Sonarr, select a show</li>
-                                <li>Add tag: <code>episeerr_default</code></li>
+                                <li>Add tag: <code>episeerr_[rule_name]</code></li>
                                 <li>Save</li>
                                 <li>Sonarr webhook triggers</li>
                                 <li>Episeerr automatically adds to default rule</li>
@@ -747,17 +746,24 @@
                 <div class="col-md-6">
                     <div class="card border-success mb-3">
                         <div class="card-header bg-success text-white">
-                            <h6><i class="fas fa-magic me-2"></i>episeerr_default</h6>
+                            <h6><i class="fas fa-tags me-2"></i>Rule Tags</h6>
                         </div>
                         <div class="card-body">
-                            <p><strong>Automatic Processing</strong></p>
+                            <p><strong>Direct Rule Assignment</strong></p>
+                            <p>Tag shows with <code>episeerr_[rule_name]</code> to process immediately:</p>
+                            <ul>
+                                <li><code>episeerr_one_at_a_time</code></li>
+                                <li><code>episeerr_gracewatched</code></li>
+                                <li><code>episeerr_keepall</code></li>
+                                <li>Or any rule you've created</li>
+                            </ul>
+                            <p><strong>How it works:</strong></p>
                             <ol>
-                                <li>Add tag to show in Sonarr</li>
-                                <li>Episeerr automatically adds to default rule</li>
-                                <li>Processes based on rule settings</li>
-                                <li>Tag removed after processing</li>
+                                <li>Add rule tag to show in Sonarr</li>
+                                <li>Episeerr processes immediately</li>
+                                <li>Episodes managed by that rule</li>
                             </ol>
-                            <p class="text-muted"><small>Perfect for shows you want automated immediately</small></p>
+                            <p class="text-muted"><small>Perfect for shows you want managed by a specific rule</small></p>
                         </div>
                     </div>
                 </div>
@@ -781,13 +787,25 @@
                 </div>
             </div>
 
+            <h5 class="mt-3">Auto-Assign (Separate Feature):</h5>
+            <div class="alert alert-info">
+                <p><strong>Auto-assign is independent from tags</strong> - it automatically adds new shows to your default rule when they're added to Sonarr without any tags.</p>
+                <ul class="mb-0">
+                    <li><strong>Enable it:</strong> New shows automatically join default rule (waits for first watch)</li>
+                    <li><strong>Disable it:</strong> Only tagged shows get managed</li>
+                    <li><strong>Works together:</strong> You can use BOTH auto-assign AND direct rule tags</li>
+                </ul>
+                <p class="mb-0 mt-2"><small>See the <a href="#auto-assign">Auto-Assign section</a> below for full details.</small></p>
+            </div>
+
             <h5 class="mt-3">Jellyseerr/Overseerr Integration:</h5>
             <div class="alert alert-info">
                 <p>When requesting shows through Jellyseerr/Overseerr:</p>
                 <ul class="mb-0">
                     <li>Request gets sent to Sonarr</li>
                     <li>Episeerr captures the requested seasons</li>
-                    <li>If <code>episeerr_default</code> tag is set, processes those specific seasons automatically</li>
+                    <li>If auto-assign is ON, automatically adds to default rule</li>
+                    <li>If you tagged it with a rule tag, uses that rule instead</li>
                     <li>Season-aware: starts from the season you requested, not always Season 1</li>
                 </ul>
             </div>
@@ -1054,7 +1072,7 @@
                 <li>
                     <strong>Assign Tags (IMPORTANT)</strong>
                     <ul>
-                        <li><strong>Tags:</strong> <code>episeerr_default</code>, <code>episeerr_select</code></li>
+                        <li><strong>Tags:</strong> <code>episeerr_[rule_name]</code>, <code>episeerr_select</code></li>
                         <li>Any show with these tags will use this delay profile</li>
                     </ul>
                 </li>
@@ -1075,7 +1093,7 @@
                     <pre class="bg-dark text-light p-2 mb-0"><code>Delay Profile Name: Episeerr Managed Shows
 Usenet Delay: 999999 minutes
 Torrent Delay: 999999 minutes
-Tags: episeerr_default, episeerr_select
+Tags: episeerr_[rule_name], episeerr_select
 Order: 1 (higher priority)</code></pre>
                 </div>
             </div>
@@ -1085,7 +1103,7 @@ Order: 1 (higher priority)</code></pre>
                 <ul class="mb-0">
                     <li><strong>Multiple Profiles:</strong> Create separate delay profiles for Episeerr shows vs regular shows</li>
                     <li><strong>Order Matters:</strong> Episeerr delay profile should be higher priority (lower order number)</li>
-                    <li><strong>Test It:</strong> Add a show with <code>episeerr_default</code> tag and verify it doesn't auto-download</li>
+                    <li><strong>Test It:</strong> Add a show with <code>episeerr_[rule_name]</code> tag and verify it doesn't auto-download</li>
                 </ul>
             </div>
         </div>
@@ -1097,7 +1115,7 @@ Order: 1 (higher priority)</code></pre>
             <h4 class="mb-0"><i class="fas fa-magic me-2"></i>Auto-Assign New Series</h4>
         </div>
         <div class="card-body">
-            <p>Auto-assign automatically adds new shows to your default rule when they're added to Sonarr.</p>
+            <p><strong>Auto-assign is a separate feature from tags</strong> - it automatically adds new shows to your default rule when they're added to Sonarr <strong>WITHOUT any tags</strong>.</p>
 
             <h5>How It Works:</h5>
             <div class="row">
@@ -1110,10 +1128,11 @@ Order: 1 (higher priority)</code></pre>
                             <p><strong>What happens:</strong></p>
                             <ol>
                                 <li>Add show to Sonarr</li>
-                                <li>Add <code>episeerr_default</code> tag manually</li>
-                                <li>Episeerr processes it</li>
-                                <li>Must tag EVERY show manually</li>
+                                <li>Nothing happens (unless you tag it)</li>
+                                <li>Must use rule tags to manage</li>
+                                <li>Or use <code>episeerr_select</code> for manual selection</li>
                             </ol>
+                            <p class="text-muted"><small>Only tagged shows get managed</small></p>
                         </div>
                     </div>
                 </div>
@@ -1128,12 +1147,23 @@ Order: 1 (higher priority)</code></pre>
                             <ol>
                                 <li>Add show to Sonarr (no tags)</li>
                                 <li>Episeerr automatically assigns to default rule</li>
-                                <li>Starts managing immediately</li>
+                                <li>Waits for first watch to start processing</li>
                                 <li>Zero manual work!</li>
                             </ol>
+                            <p class="text-muted"><small>Passive assignment - waits for viewing activity</small></p>
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <h5 class="mt-3">Tags and Auto-Assign Work Together:</h5>
+            <div class="alert alert-success">
+                <p><strong>You can use BOTH at the same time:</strong></p>
+                <ul class="mb-0">
+                    <li><strong>Tagged shows:</strong> Process immediately with their rule tag</li>
+                    <li><strong>Untagged shows (with auto-assign ON):</strong> Automatically join default rule</li>
+                    <li><strong>Untagged shows (with auto-assign OFF):</strong> Not managed at all</li>
+                </ul>
             </div>
 
             <h5 class="mt-3">When to Enable Auto-Assign:</h5>
@@ -1171,7 +1201,7 @@ Order: 1 (higher priority)</code></pre>
 
             <h5 class="mt-3">How to Enable/Disable:</h5>
             <ol>
-                <li>Go to <strong>Admin Panel</strong></li>
+                <li>Go to <strong>Settings</strong> (in sidebar)</li>
                 <li>Find <strong>Global Storage Gate</strong> card at top</li>
                 <li>Check/Uncheck <strong>"Auto-assign new series"</strong></li>
                 <li>Click <strong>Save Global Settings</strong></li>
@@ -1182,8 +1212,9 @@ Order: 1 (higher priority)</code></pre>
                 <ul class="mb-0">
                     <li><strong>Only affects NEW shows:</strong> Existing shows are not automatically assigned</li>
                     <li><strong>Requires default rule:</strong> Must have at least one rule marked as "default"</li>
-                    <li><strong>Tags override:</strong> If a show has <code>episeerr_default</code> or <code>episeerr_select</code> tag, it's processed regardless of auto-assign setting</li>
+                    <li><strong>Tags override auto-assign:</strong> If a show has a rule tag or <code>episeerr_select</code>, it uses that instead</li>
                     <li><strong>Works with *seerr:</strong> Shows requested through Jellyseerr/Overseerr are auto-assigned if enabled</li>
+                    <li><strong>Passive mode:</strong> Auto-assigned shows wait for first watch before processing</li>
                 </ul>
             </div>
 
@@ -1194,7 +1225,7 @@ Order: 1 (higher priority)</code></pre>
                     <ol>
                         <li>Add show in Sonarr</li>
                         <li>Go to Sonarr → Series → Select show</li>
-                        <li>Add tag: <code>episeerr_default</code></li>
+                        <li>Add rule tag (e.g., <code>episeerr_one_at_a_time</code>)</li>
                         <li>Save</li>
                         <li>Episeerr processes via webhook</li>
                     </ol>
@@ -1232,7 +1263,7 @@ Order: 1 (higher priority)</code></pre>
                     <li>Is the series assigned to a rule?</li>
                     <li>Are webhooks configured and firing?</li>
                     <li>Check logs: Admin → View Logs → episeerr.log</li>
-                    <li>Verify Sonarr tags are correct (episeerr_default or episeerr_select)</li>
+                    <li>Verify Sonarr tags are correct (episeerr_[rule_name] or episeerr_select)</li>
                 </ul>
             </div>
         </div>
@@ -1313,7 +1344,7 @@ Order: 1 (higher priority)</code></pre>
                 <dd>
                     <strong>A: It depends on your setup:</strong>
                     <ul>
-                        <li><strong>Sonarr webhook:</strong> ✅ REQUIRED - Detects new series and processes tags (episeerr_default/episeerr_select)</li>
+                        <li><strong>Sonarr webhook:</strong> ✅ REQUIRED - Detects new series and processes tags (episeerr_[rule_name]/episeerr_select)</li>
                         <li><strong>Jellyseerr/Overseerr webhook:</strong> ✅ REQUIRED if you use *seerr - Captures requested seasons for proper automation</li>
                         <li><strong>Tautulli/Jellyfin webhook:</strong> ⚙️ OPTIONAL - Only needed for viewing-based automation (auto-get next episode after watching)</li>
                     </ul>

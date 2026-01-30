@@ -1,3 +1,13 @@
+# ⚠️ Documentation Moved
+
+**Main documentation is now in the root README.md**
+
+👉 [**Go to Main README**](../README.md)
+
+---
+
+This folder is kept for backward compatibility with existing links.
+For the latest documentation, always check the root README.md.
 # Episeerr Documentation
 
 **Smart episode management for Sonarr** - Automate downloads, manage storage, and keep only what you need.
