@@ -23,7 +23,21 @@ JELLYFIN_API_KEY = os.getenv('JELLYFIN_API_KEY')
 TAUTULLI_URL = os.getenv('TAUTULLI_URL')
 TAUTULLI_API_KEY = os.getenv('TAUTULLI_API_KEY')
 
-
+def get_series_banner(series_id):
+    """Get banner URL from Sonarr for series"""
+    try:
+        headers = {'X-Api-Key': SONARR_API_KEY}
+        response = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers, timeout=5)
+        
+        if response.ok:
+            series_data = response.json()
+            for image in series_data.get('images', []):
+                if image.get('coverType') == 'banner':
+                    return image.get('remoteUrl')
+        return None
+    except:
+        return None
+    
 @dashboard_bp.route('/dashboard')
 def dashboard():
     """Main dashboard page"""
@@ -32,22 +46,16 @@ def dashboard():
 
 @dashboard_bp.route('/api/dashboard/calendar')
 def calendar_data():
-    """Get episodes for rolling 7 days: recent downloads + upcoming"""
+    """Get upcoming episodes + recent downloads (two separate lists)"""
     try:
         from datetime import datetime, timedelta
         import os
         import json
         
         today = datetime.now()
-        
-        # Calculate rolling 7-day window (past 7 days + next 7 days)
-        week_ago = today - timedelta(days=7)
         week_ahead = today + timedelta(days=7)
         
-        start_date = week_ago.strftime('%Y-%m-%d')
-        end_date = week_ahead.strftime('%Y-%m-%d')
-        
-        logger.info(f"Calendar range: {start_date} to {end_date}")
+        logger.info(f"Calendar range: {today.strftime('%Y-%m-%d')} to {week_ahead.strftime('%Y-%m-%d')}")
         
         # ──────────────────────────────────────────────────────
         # 1. GET UPCOMING FROM SONARR (next 7 days)
@@ -56,7 +64,7 @@ def calendar_data():
         calendar_url = f"{SONARR_URL}/api/v3/calendar"
         params = {
             'start': today.strftime('%Y-%m-%d'),
-            'end': end_date,
+            'end': week_ahead.strftime('%Y-%m-%d'),
             'includeSeries': 'true',
             'includeUnmonitored': 'false'
         }
@@ -82,6 +90,27 @@ def calendar_data():
                 logger.error(f"Error loading downloads: {e}")
         
         # ──────────────────────────────────────────────────────
+        # 2.5 LOAD WATCHED EPISODES TO FILTER OUT
+        # ──────────────────────────────────────────────────────
+        watched_episodes = set()
+        watched_file = os.path.join(os.getcwd(), 'data', 'activity', 'watched.json')
+        
+        if os.path.exists(watched_file):
+            try:
+                with open(watched_file, 'r') as f:
+                    watched_data = json.load(f)
+                    for watch in watched_data:
+                        watched_episodes.add((
+                            watch.get('series_id'),
+                            watch.get('season'),
+                            watch.get('episode')
+                        ))
+                logger.info(f"Loaded {len(watched_episodes)} watched episodes to filter")
+            except Exception as e:
+                logger.error(f"Error loading watched episodes: {e}")
+        
+               
+        # ──────────────────────────────────────────────────────
         # 3. LOAD EPISEERR CONFIG FOR RULES
         # ──────────────────────────────────────────────────────
         from episeerr import load_config
@@ -95,14 +124,21 @@ def calendar_data():
         # ──────────────────────────────────────────────────────
         # 4. PROCESS UPCOMING EPISODES
         # ──────────────────────────────────────────────────────
-        calendar_events = []
+        upcoming_events = []
         now = datetime.now()
+        downloaded_ids = {(dl['series_id'], dl['season'], dl['episode']) for dl in recent_downloads}
         
         for ep in upcoming_episodes:
             series_id = ep.get('seriesId')
+            season = ep.get('seasonNumber')
+            episode = ep.get('episodeNumber')
+            
+            # Skip if already in downloaded list
+            if (series_id, season, episode) in downloaded_ids:
+                continue
+            
             has_rule = series_id in series_rules
             rule_name = series_rules.get(series_id)
-            
             has_file = ep.get('hasFile', False)
             monitored = ep.get('monitored', False)
             
@@ -115,19 +151,8 @@ def calendar_data():
                 except:
                     has_aired = False
             
-            # Check if recently grabbed
-            recently_grabbed = False
-            for dl in recent_downloads:
-                if (dl.get('series_id') == series_id and 
-                    dl.get('season') == ep.get('seasonNumber') and 
-                    dl.get('episode') == ep.get('episodeNumber')):
-                    recently_grabbed = True
-                    break
-            
-            if recently_grabbed:
-                status = 'recently_downloaded'
-                color = 'green'
-            elif has_file:
+            # Determine status
+            if has_file:
                 status = 'downloaded'
                 color = 'gray'
             elif not monitored:
@@ -143,98 +168,55 @@ def calendar_data():
                 status = 'no_rule'
                 color = 'yellow'
             
-            calendar_events.append({
-                'id': ep.get('id'),
+            upcoming_events.append({
                 'series_id': series_id,
                 'series_title': ep.get('series', {}).get('title', 'Unknown'),
                 'episode_title': ep.get('title', 'TBA'),
-                'season': ep.get('seasonNumber'),
-                'episode': ep.get('episodeNumber'),
-                'air_date': ep.get('airDateUtc'),
-                'has_file': has_file,
-                'monitored': monitored,
+                'season': season,
+                'episode': episode,
+                'air_date': air_date_str,
                 'has_rule': has_rule,
                 'rule_name': rule_name,
                 'status': status,
                 'color': color,
-                'recently_grabbed': recently_grabbed,
-                'overview': ep.get('overview', '')
+                'banner': get_series_banner(series_id)  # ADD THIS LINE
             })
         
         # ──────────────────────────────────────────────────────
-        # 5. ADD DOWNLOADED EPISODES THAT AREN'T IN CALENDAR
+        # 5. FORMAT RECENT DOWNLOADS (use grab timestamp)
         # ──────────────────────────────────────────────────────
-        # Create set of episodes already in calendar
-        calendar_episode_keys = {
-            (e['series_id'], e['season'], e['episode']) 
-            for e in calendar_events
-        }
+        downloaded_events = []
         
-        # Get full episode details from Sonarr for downloaded episodes
         for dl in recent_downloads:
+            # Skip if already watched
             dl_key = (dl['series_id'], dl['season'], dl['episode'])
-            
-            # Skip if already in calendar
-            if dl_key in calendar_episode_keys:
+            if dl_key in watched_episodes:
                 continue
             
-            # Fetch episode details from Sonarr
-            try:
-                series_response = requests.get(
-                    f"{SONARR_URL}/api/v3/series/{dl['series_id']}",
-                    headers=headers,
-                    timeout=5
-                )
-                
-                if series_response.ok:
-                    series_data = series_response.json()
-                    
-                    # Get episode details
-                    ep_response = requests.get(
-                        f"{SONARR_URL}/api/v3/episode?seriesId={dl['series_id']}",
-                        headers=headers,
-                        timeout=5
-                    )
-                    
-                    if ep_response.ok:
-                        episodes = ep_response.json()
-                        matching_ep = next(
-                            (e for e in episodes 
-                             if e['seasonNumber'] == dl['season'] and 
-                                e['episodeNumber'] == dl['episode']),
-                            None
-                        )
-                        
-                        if matching_ep:
-                            has_rule = dl['series_id'] in series_rules
-                            
-                            calendar_events.append({
-                                'id': matching_ep.get('id'),
-                                'series_id': dl['series_id'],
-                                'series_title': dl['series_title'],
-                                'episode_title': dl.get('episode_title', 'TBA'),
-                                'season': dl['season'],
-                                'episode': dl['episode'],
-                                'air_date': matching_ep.get('airDateUtc'),
-                                'has_file': True,
-                                'monitored': matching_ep.get('monitored', False),
-                                'has_rule': has_rule,
-                                'rule_name': series_rules.get(dl['series_id']),
-                                'status': 'recently_downloaded',
-                                'color': 'green',
-                                'recently_grabbed': True,
-                                'overview': matching_ep.get('overview', '')
-                            })
-                            
-                            logger.info(f"Added downloaded episode: {dl['series_title']} S{dl['season']}E{dl['episode']}")
-            except Exception as e:
-                logger.error(f"Error fetching details for downloaded episode: {e}")
+            has_rule = dl['series_id'] in series_rules
+            
+            downloaded_events.append({
+                'series_id': dl['series_id'],
+                'series_title': dl['series_title'],
+                'episode_title': dl.get('episode_title', ''),
+                'season': dl['season'],
+                'episode': dl['episode'],
+                'grabbed_date': dl['timestamp'],
+                'has_rule': has_rule,
+                'rule_name': series_rules.get(dl['series_id']),
+                'status': 'ready',
+                'color': 'green',
+                'banner': get_series_banner(dl['series_id'])  # ADD THIS LINE
+            })
+        # Sort by grab time (newest first)
+        downloaded_events.sort(key=lambda x: x['grabbed_date'], reverse=True)
         
         return jsonify({
             'success': True,
-            'events': calendar_events,
-            'recent_downloads_count': len(recent_downloads),
-            'total': len(calendar_events)
+            'upcoming': upcoming_events,
+            'downloaded': downloaded_events,
+            'upcoming_count': len(upcoming_events),
+            'downloaded_count': len(downloaded_events)
         })
         
     except Exception as e:
@@ -242,7 +224,8 @@ def calendar_data():
         return jsonify({
             'success': False,
             'error': str(e),
-            'events': []
+            'upcoming': [],
+            'downloaded': []
         }), 500
 
 
@@ -332,15 +315,18 @@ def activity_feed():
         
         # Use Episeerr's own activity tracking
         activity_dir = os.path.join(os.getcwd(), 'data', 'activity')
+        logger.info(f"Reading activity from: {activity_dir}")
         
-        # Last search (from searches.json)
+        # Last search (from searches.json) - SORT BY TIMESTAMP DESC
         try:
             searches_file = os.path.join(activity_dir, 'searches.json')
             if os.path.exists(searches_file):
                 with open(searches_file, 'r') as f:
                     searches = json.load(f)
                     if searches:
-                        last_search = searches[0]  # Most recent
+                        # Sort by timestamp DESC to get truly most recent
+                        searches_sorted = sorted(searches, key=lambda x: x.get('timestamp', 0), reverse=True)
+                        last_search = searches_sorted[0]  # Most recent after sorting
                         services.append({
                             'service': 'Sonarr',
                             'icon': 'fa-tv',
@@ -351,17 +337,21 @@ def activity_feed():
                             'action_icon': 'fa-search'
                         })
                         logger.info(f"Added search: {last_search['series_title']}")
+            else:
+                logger.warning(f"searches.json not found at {searches_file}")
         except Exception as e:
             logger.error(f"Error reading searches.json: {e}")
         
-        # Last watched (from watched.json)
+        # Last watched (from watched.json) - SORT BY TIMESTAMP DESC
         try:
             watched_file = os.path.join(activity_dir, 'watched.json')
             if os.path.exists(watched_file):
                 with open(watched_file, 'r') as f:
                     watched = json.load(f)
                     if watched:
-                        last_watched = watched[0]  # Most recent
+                        # Sort by timestamp DESC to get truly most recent
+                        watched_sorted = sorted(watched, key=lambda x: x.get('timestamp', 0), reverse=True)
+                        last_watched = watched_sorted[0]  # Most recent after sorting
                         user = last_watched.get('user', 'Unknown')
                         services.append({
                             'service': 'Jellyfin/Tautulli',
@@ -372,7 +362,9 @@ def activity_feed():
                             'timestamp': datetime.fromtimestamp(last_watched['timestamp']).isoformat(),
                             'action_icon': 'fa-play'
                         })
-                        logger.info(f"Added watch: {last_watched['series_title']}")
+                        logger.info(f"Added watch: {last_watched['series_title']} by {user} at {last_watched['timestamp']}")
+            else:
+                logger.warning(f"watched.json not found at {watched_file}")
         except Exception as e:
             logger.error(f"Error reading watched.json: {e}")
         

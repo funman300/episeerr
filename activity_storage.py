@@ -74,7 +74,9 @@ def save_search_event(series_id, series_title, season, episode, episode_ids):
     logger.info(f"📝 Logged search event: {series_title} S{season}E{episode}")
 
 def save_watch_event(series_id, series_title, season, episode, user):
-    """Save when user watches an episode"""
+    """Save when user watches an episode (with 7-day auto-cleanup)"""
+    from datetime import datetime
+    
     # Get backdrop instead of poster
     backdrop_url = get_series_backdrop(series_id)
     
@@ -87,9 +89,10 @@ def save_watch_event(series_id, series_title, season, episode, user):
         'backdrop_url': backdrop_url,
         'timestamp': int(time.time())
     }
-    _append_to_activity_log(WATCHES_FILE, event, max_entries=10)
+    
+    # Modified append with 7-day cleanup instead of max_entries
+    _append_to_activity_log_with_cleanup(WATCHES_FILE, event, days=7)
     logger.info(f"📝 Logged watch event: {series_title} S{season}E{episode} by {user}")
-
 def save_request_event(request_data):
     """Save Jellyseerr request before file is deleted"""
     try:
@@ -111,24 +114,56 @@ def save_request_event(request_data):
         
     except Exception as e:
         logger.error(f"Failed to save request event: {e}")
+        
+def save_search_event(series_id, series_title, season, episode, episode_ids):
+    """Save when Sonarr searches for episodes (with 7-day auto-cleanup)"""
+    from datetime import datetime
+    
+    # Get backdrop instead of poster
+    backdrop_url = get_series_backdrop(series_id)
+    
+    event = {
+        'series_id': series_id,
+        'series_title': series_title,
+        'season': season,
+        'episode': episode,
+        'episode_ids': episode_ids,
+        'backdrop_url': backdrop_url,
+        'timestamp': int(time.time())
+    }
+    
+    # Modified append with 7-day cleanup instead of max_entries
+    _append_to_activity_log_with_cleanup(SEARCHES_FILE, event, days=7)
+    logger.info(f"📝 Logged search event: {series_title} S{season}E{episode}")
 
-def _append_to_activity_log(filepath, event, max_entries=10):
-    """Helper to append event and keep only last N entries"""
+# ADD THIS NEW HELPER FUNCTION (after the existing _append_to_activity_log)
+
+def _append_to_activity_log_with_cleanup(filepath, event, days=7):
+    """Helper to append event and auto-cleanup entries older than N days"""
     try:
+        from datetime import datetime
+        
         if os.path.exists(filepath):
             with open(filepath, 'r') as f:
                 events = json.load(f)
         else:
             events = []
         
-        events.insert(0, event)  # Add to front
-        events = events[:max_entries]  # Keep only last N
+        # Add new event
+        events.append(event)
+        
+        # Auto-cleanup: keep only last N days
+        cutoff = datetime.now().timestamp() - (days * 24 * 60 * 60)
+        events = [e for e in events if e.get('timestamp', 0) > cutoff]
         
         with open(filepath, 'w') as f:
             json.dump(events, f, indent=2)
             
     except Exception as e:
         logger.error(f"Failed to save activity: {e}")
+
+
+
 
 def get_last_search():
     """Get most recent search event"""

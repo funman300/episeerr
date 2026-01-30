@@ -538,8 +538,15 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-
     <script>
+    // Services injected via Flask context processor (comes from .env / compose env)
+    window.servicesData = {{ services | tojson }};
+
+    // Optional debug (remove later if you want)
+    // console.log('Loaded services from environment:', window.servicesData);
+    </script>
+    <script>
+    
     // Theme Management
     document.addEventListener('DOMContentLoaded', function() {
         // Load saved theme
@@ -727,23 +734,23 @@
         const container = document.getElementById('systemLinksContainer');
         if (!container) return;
 
-        // Check if services data is available
-        if (typeof window.servicesData !== 'undefined' && window.servicesData) {
-            const services = window.servicesData;
-            
-            if (Object.keys(services).length > 0) {
-                container.innerHTML = Object.entries(services).map(([key, service]) => {
-                    return `
-                        <a href="${service.url}" target="_blank" class="sidebar-rule-item">
-                            <i class="${service.icon}"></i>
-                            <span class="sidebar-rule-name">${service.name}</span>
-                            <i class="fas fa-external-link-alt" style="font-size: 0.7rem; opacity: 0.5;"></i>
-                        </a>
-                    `;
-                }).join('');
-            }
+        const services = window.servicesData || {};
+
+        if (Object.keys(services).length === 0) {
+            container.innerHTML = '<div class="sidebar-rule-item text-muted small py-2">No external services configured in .env</div>';
+            return;
         }
+
+        container.innerHTML = Object.entries(services).map(([id, service]) => `
+            <a href="${service.url}" target="_blank" class="sidebar-rule-item" title="${id.toUpperCase()}">
+                <i class="${service.icon}"></i>
+                <span class="sidebar-rule-name">${service.name}</span>
+                <i class="fas fa-external-link-alt ms-1" style="font-size: 0.7rem; opacity: 0.6;"></i>
+            </a>
+        `).join('');
     }
+        
+    
 
     // Delete Rule Function
     function deleteRule(ruleName) {

@@ -1453,14 +1453,24 @@ def process_episodes_for_webhook(series_id, season_number, episode_number, rule,
         )
         
         if episodes_leaving_keep_block:
-            episode_file_ids = [ep['episodeFileId'] for ep in episodes_leaving_keep_block if 'episodeFileId' in ep]
-            if episode_file_ids:
-                delete_episodes_immediately(
-                    episode_file_ids, 
-                    series_title or f"Series {series_id}",
-                    reason=f"Keep Rule (keeping {keep_count} {keep_type})"
-                )
-                logger.info(f"Immediately deleted {len(episode_file_ids)} episodes leaving keep block")
+            # Filter out anchor episodes (S01E01) - never delete these
+            episodes_to_delete = [ep for ep in episodes_leaving_keep_block if not is_anchor_episode(ep, series_id)]
+            
+            if episodes_to_delete:
+                episode_file_ids = [ep['episodeFileId'] for ep in episodes_to_delete if 'episodeFileId' in ep]
+                if episode_file_ids:
+                    delete_episodes_immediately(
+                        episode_file_ids, 
+                        series_title or f"Series {series_id}",
+                        reason=f"Keep Rule (keeping {keep_count} {keep_type})"
+                    )
+                    logger.info(f"Immediately deleted {len(episode_file_ids)} episodes leaving keep block")
+            
+            # Log if we protected any anchors
+            protected_anchors = [ep for ep in episodes_leaving_keep_block if is_anchor_episode(ep, series_id)]
+            if protected_anchors:
+                for ep in protected_anchors:
+                    logger.info(f"🔒 Protected anchor S{ep.get('seasonNumber')}E{ep.get('episodeNumber')} from keep rule deletion")
         
         logger.info(f"✅ Webhook processing complete for {series_id}")
             
@@ -1486,6 +1496,12 @@ def load_global_settings():
                 save_global_settings(settings)
                 logger.info("✓ Migrated global_settings.json - added dry_run_mode: true")
             
+            # MIGRATION: Add protect_pilot if missing (default to False)
+            if 'protect_pilot' not in settings:
+                settings['protect_pilot'] = False
+                save_global_settings(settings)
+                logger.info("✓ Migrated global_settings.json - added protect_pilot: false")
+            
             return settings
         else:
             # Default settings (already has dry_run_mode: True - good!)
@@ -1494,6 +1510,7 @@ def load_global_settings():
                 'cleanup_interval_hours': 6,
                 'dry_run_mode': True,
                 'auto_assign_new_series': False,
+                'protect_pilot': False,  # Don't delete S01E01 (pilot episode)
                 'notifications_enabled': False,
                 'discord_webhook_url': '',
                 'episeerr_url': 'http://localhost:5002'
@@ -1601,6 +1618,59 @@ def is_dry_run_enabled(rule_name=None):
     # Check rule-specific setting (you'll need to implement this based on your setup)
     # For now, return False
     return False
+def is_anchor_episode(episode, series_id=None):
+    """
+    Check if an episode is an "anchor" that should never be deleted.
+    
+    Anchor episodes are protected from ALL cleanup operations:
+    - Grace period cleanup (watched/unwatched)
+    - Keep rule cleanup (seasons/episodes)
+    - Dormant cleanup
+    - Manual unmonitor operations
+    
+    Currently anchored:
+    - S01E01 (pilot episode) - IF global setting 'protect_pilot' is enabled OR rule-level 'keep_pilot' is enabled
+    
+    Args:
+        episode: Episode dict with 'seasonNumber' and 'episodeNumber'
+        series_id: Optional series ID to check rule-based protection
+    
+    Returns:
+        bool: True if episode should be protected from deletion
+    """
+    season = episode.get('seasonNumber')
+    episode_num = episode.get('episodeNumber')
+    
+    # Check if this is the pilot episode
+    is_pilot = (season == 1 and episode_num == 1)
+    
+    if not is_pilot:
+        return False
+    
+    # PRIORITY 1: Check global pilot protection (highest priority)
+    global_settings = load_global_settings()
+    protect_pilot_global = global_settings.get('protect_pilot', False)
+    
+    if protect_pilot_global:
+        return True
+    
+    # PRIORITY 2: Check rule-based pilot protection
+    if series_id is not None:
+        from episeerr import load_config, get_rule_for_series
+        config = load_config()
+        rule = get_rule_for_series(series_id, config)
+        
+        if rule and rule.get('keep_pilot', False):
+            return True
+    
+    # Future: Could add more anchor types here
+    # - Series finales
+    # - User-bookmarked episodes
+    # - Episodes with specific tags
+    
+    return False
+
+
 def delete_episodes_immediately(episode_file_ids, series_title, reason="Keep Rule"):
     """
     Direct deletion for Keep rule - NO dry run, NO approval queue.
@@ -1854,6 +1924,9 @@ def run_grace_watched_cleanup():
                             keep_episode = watched_episodes[-1]
                             delete_episodes = watched_episodes[:-1]
                             
+                            # Filter out anchor episodes (S01E01)
+                            delete_episodes = [ep for ep in delete_episodes if not is_anchor_episode(ep, series_id)]
+                            
                             episode_file_ids = [ep['episodeFileId'] for ep in delete_episodes if 'episodeFileId' in ep]
                             
                             if episode_file_ids:
@@ -2000,6 +2073,9 @@ def run_grace_unwatched_cleanup():
                             bookmark_episode = unwatched_episodes[0]
                             delete_episodes = unwatched_episodes[1:]
                             
+                            # Filter out anchor episodes (S01E01)
+                            delete_episodes = [ep for ep in delete_episodes if not is_anchor_episode(ep, series_id)]
+                            
                             episode_file_ids = [ep['episodeFileId'] for ep in delete_episodes if 'episodeFileId' in ep]
                             
                             if episode_file_ids:
@@ -2143,7 +2219,9 @@ def run_dormant_cleanup():
                     days_since_activity = (current_time - activity_date) / (24 * 60 * 60)
                     if days_since_activity > dormant_days:
                         all_episodes = fetch_all_episodes(series_id)
-                        episode_file_ids = [ep['episodeFileId'] for ep in all_episodes if ep.get('hasFile') and 'episodeFileId' in ep]
+                        # Filter out anchor episodes (S01E01) even from dormant cleanup
+                        deletable_episodes = [ep for ep in all_episodes if ep.get('hasFile') and 'episodeFileId' in ep and not is_anchor_episode(ep, series_id)]
+                        episode_file_ids = [ep['episodeFileId'] for ep in deletable_episodes]
                         
                         if episode_file_ids:
                             candidates.append({

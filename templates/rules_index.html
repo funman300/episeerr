@@ -127,6 +127,8 @@
 /* Series Grid Styles */
 .series-grid-col {
   flex: 0 0 auto;
+  display: flex;
+  justify-content: center; /* Center cards on all screen sizes */
 }
 
 @media (min-width: 1600px) { .series-grid-col { width: 12.5%; } }
@@ -144,6 +146,7 @@
   overflow: hidden;
   transition: all 0.2s ease;
   height: 100%;
+  width: 100%; /* Fill the flex container */
 }
 
 .series-grid-card:hover {
@@ -243,56 +246,7 @@
 
 {% block extra_js %}
 <script>
-// Store services data for sidebar
-window.servicesData = {};
 
-{% if SONARR_URL %}
-window.servicesData['sonarr'] = {
-    'name': 'Sonarr',
-    'url': '{{ SONARR_URL }}',
-    'icon': 'fas fa-video'
-};
-{% endif %}
-
-{% if JELLYSEERR_URL %}
-window.servicesData['jellyseerr'] = {
-    'name': 'Jellyseerr',
-    'url': '{{ JELLYSEERR_URL }}',
-    'icon': 'fas fa-film'
-};
-{% endif %}
-
-{% if OVERSEERR_URL %}
-window.servicesData['overseerr'] = {
-    'name': 'Overseerr',
-    'url': '{{ OVERSEERR_URL }}',
-    'icon': 'fas fa-film'
-};
-{% endif %}
-
-{% if JELLYFIN_URL %}
-window.servicesData['jellyfin'] = {
-    'name': 'Jellyfin',
-    'url': '{{ JELLYFIN_URL }}',
-    'icon': 'fas fa-play-circle'
-};
-{% endif %}
-
-{% if PLEX_URL %}
-window.servicesData['plex'] = {
-    'name': 'Plex',
-    'url': '{{ PLEX_URL }}',
-    'icon': 'fas fa-server'
-};
-{% endif %}
-
-{% if TAUTULLI_URL %}
-window.servicesData['tautulli'] = {
-    'name': 'Tautulli',
-    'url': '{{ TAUTULLI_URL }}',
-    'icon': 'fas fa-chart-bar'
-};
-{% endif %}
 
 // ────────────────────────────────────────────────
 // Globals
@@ -427,9 +381,7 @@ function renderGridView(series) {
         <div class="card series-grid-card">
           <div class="series-poster-container">
             <img src="${poster}" class="series-poster" alt="${s.title}" loading="lazy" onerror="this.src='/static/placeholder.png'">
-            <div class="series-checkbox-overlay">
-              <input type="checkbox" class="series-checkbox form-check-input bg-dark" value="${s.id}" onchange="updateSelectedCount()">
-            </div>
+            
           </div>
           <div class="series-info">
             <div class="series-title">${s.title}</div>

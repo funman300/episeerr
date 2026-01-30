@@ -6,248 +6,251 @@
 
 {% block content %}
 <div class="container-fluid">
-<div class="row">
-    <!-- Global Storage Gate Settings -->
-    <div class="col-md-12 mb-4">
-        <div class="card">
-            <div class="card-header">
-                <h5><i class="fas fa-globe me-2"></i>Global Storage Gate</h5>
-            </div>
-            <div class="card-body">
-                <form id="globalSettingsForm">
-                    <div class="row">
-                        <div class="col-md-2">
-                            <div class="mb-3">
-                                <label for="globalStorageGate" class="form-label">
-                                    Storage Threshold (GB)
-                                    <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
-                                       title="Global threshold - cleanup only runs when free space drops below this amount"></i>
-                                </label>
-                                <input type="number" class="form-control" id="globalStorageGate" 
-                                       name="global_storage_min_gb" min="1" placeholder="Leave empty to disable">
-                                <div class="form-text">
-                                    Example: "20" = Only run cleanup when less than 20GB free
+    <div class="row">
+        <!-- Global Settings Card -->
+        <div class="col-md-12 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-cog me-2"></i>Global Settings</h5>
+                </div>
+                <div class="card-body">
+                    <form id="globalSettingsForm">
+                        
+                        <!-- Storage Gate Section -->
+                        <h6 class="border-bottom pb-2 mb-3">
+                            <i class="fas fa-hdd me-2"></i>Storage Gate
+                        </h6>
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="globalStorageGate" class="form-label">
+                                        Storage Threshold (GB)
+                                        <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                           title="Cleanup only runs when free space drops below this amount"></i>
+                                    </label>
+                                    <input type="number" class="form-control" id="globalStorageGate" 
+                                           name="global_storage_min_gb" min="1" placeholder="Leave empty to disable">
+                                    <small class="form-text text-muted">
+                                        Example: "20" = Only cleanup when &lt;20GB free
+                                    </small>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-2">
-                            <div class="mb-3">
-                                <label for="cleanupInterval" class="form-label">
-                                    Cleanup Interval (hours)
-                                </label>
-                                <input type="number" class="form-control" id="cleanupInterval" 
-                                       name="cleanup_interval_hours" min="1" max="168" value="6">
-                                <div class="form-text">
-                                    How often to check for cleanup (1-168 hours)
+
+                        <!-- Cleanup Behavior Section -->
+                        <h6 class="border-bottom pb-2 mb-3">
+                            <i class="fas fa-broom me-2"></i>Cleanup Behavior
+                        </h6>
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="cleanupInterval" class="form-label">
+                                        Cleanup Interval (hours)
+                                    </label>
+                                    <input type="number" class="form-control" id="cleanupInterval" 
+                                           name="cleanup_interval_hours" min="1" max="168" value="6">
+                                    <small class="form-text text-muted">
+                                        How often to check (1-168 hours)
+                                    </small>
                                 </div>
                             </div>
-                        </div>
-                        <div class="col-md-2">
-                            <div class="mb-3">
-                                <div class="form-check mt-4">
+                            
+                            <div class="col-md-9">
+                                <label class="form-label">Cleanup Options</label>
+                                
+                                <div class="form-check form-switch mb-2">
                                     <input class="form-check-input" type="checkbox" id="dryRunMode" name="dry_run_mode">
                                     <label class="form-check-label" for="dryRunMode">
                                         <strong>Global Dry Run Mode</strong>
+                                        <small class="text-muted d-block">Show what would be deleted without actually deleting</small>
                                     </label>
-                                    <div class="form-text">Show what would be deleted without actually deleting</div>
+                                </div>
+                                
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="protectPilot" name="protect_pilot">
+                                    <label class="form-check-label" for="protectPilot">
+                                        <strong><i class="fas fa-shield-alt me-1"></i>Protect Pilot Episodes (S01E01)</strong>
+                                        <small class="text-muted d-block">Never delete pilot episodes - keep for rewatching from the beginning</small>
+                                    </label>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
-                            <div class="mb-3">
-                                <div class="form-check mt-4">
+
+                        <!-- Series Management Section -->
+                        <h6 class="border-bottom pb-2 mb-3">
+                            <i class="fas fa-tv me-2"></i>Series Management
+                        </h6>
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-2">
                                     <input class="form-check-input" type="checkbox" id="autoAssignNewSeries" name="auto_assign_new_series">
                                     <label class="form-check-label" for="autoAssignNewSeries">
                                         <strong>Auto-assign new series</strong>
+                                        <small class="text-muted d-block">New series without tags automatically go to default rule</small>
                                     </label>
-                                    <div class="form-text">New series without tags go to default rule</div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
-                            <div class="mb-3">
-                                <label class="form-label">&nbsp;</label>
-                                <div class="d-grid">
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="fas fa-save me-1"></i>Save Global Settings
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Notifications Section -->
-                    <hr class="my-4">
-                    <h6><i class="fas fa-bell me-2"></i>Notifications</h6>
-                    
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="mb-3">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="notifications_enabled" name="notifications_enabled"
-                                           {% if config.notifications_enabled %}checked{% endif %}>
+
+                        <!-- Notifications Section -->
+                        <h6 class="border-bottom pb-2 mb-3">
+                            <i class="fas fa-bell me-2"></i>Notifications
+                        </h6>
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="notifications_enabled" name="notifications_enabled">
                                     <label class="form-check-label" for="notifications_enabled">
-                                        Enable Discord Notifications
+                                        <strong>Enable Discord Notifications</strong>
                                     </label>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="discord_webhook_url" class="form-label">Discord Webhook URL</label>
-                                <input type="text" class="form-control" id="discord_webhook_url" name="discord_webhook_url"
-                                       value="{{ config.discord_webhook_url }}" 
-                                       placeholder="https://discord.com/api/webhooks/...">
-                                <div class="form-text">
-                                    <a href="https://support.discord.com/hc/en-us/articles/228383668" target="_blank">
-                                        How to create a Discord webhook
-                                    </a>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="discord_webhook_url" class="form-label">Discord Webhook URL</label>
+                                    <input type="url" class="form-control" id="discord_webhook_url" name="discord_webhook_url" placeholder="https://discord.com/api/webhooks/...">
+                                    <small class="form-text text-muted">
+                                        <a href="https://support.discord.com/hc/en-us/articles/228383668" target="_blank">How to create a webhook</a>
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="episeerr_url" class="form-label">Episeerr URL</label>
+                                    <input type="url" class="form-control" id="episeerr_url" name="episeerr_url" value="http://localhost:5002">
+                                    <small class="form-text text-muted">Used for notification links</small>
                                 </div>
                             </div>
                         </div>
                         
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="episeerr_url" class="form-label">Episeerr URL</label>
-                                <input type="text" class="form-control" id="episeerr_url" name="episeerr_url"
-                                       value="{{ config.episeerr_url }}" 
-                                       placeholder="http://localhost:5002">
-                                <div class="form-text">Used for notification links to pending requests</div>
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="alert alert-info">
+                                    <small>
+                                        <strong>Notification Types:</strong><br>
+                                        • ⚠️ Episodes not found after search<br>
+                                        • 📋 Pending episode selection requests<br>
+                                        • ⚠️ Tagged requests with no episodes grabbed<br>
+                                        • ❌ Critical errors
+                                    </small>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="alert alert-info alert-sm">
-                                <small>
-                                    <strong>Notification Types:</strong><br>
-                                    • ⚠️ Episodes not found after search<br>
-                                    • 📋 Pending episode selection requests<br>
-                                    • ⚠️ Tagged requests with no episodes grabbed<br>
-                                    • ❌ Critical errors
-                                </small>
+
+                        <!-- Save Button -->
+                        <div class="row">
+                            <div class="col-md-12">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-save me-2"></i>Save Global Settings
+                                </button>
                             </div>
                         </div>
-                    </div>
-                    
-                </form>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
-</div>
-<div class="row">
-    <!-- Status Overview - Left Side -->
-    <div class="col-md-8">
-        <div class="row">
-            <!-- Scheduler Status -->
-            <div class="col-md-6 mb-3">
-                <div class="card h-100">
-                    <div class="card-header">
-                        <h6><i class="fas fa-clock me-2"></i>Scheduler Status</h6>
-                    </div>
-                    <div class="card-body">
-                        <div id="scheduler-status">
-                            <div class="text-center">
-                                <div class="spinner-border spinner-border-sm" role="status">
-                                    <span class="visually-hidden">Loading...</span>
+    
+    <!-- Status Dashboard Row -->
+    <div class="row">
+        <!-- Status Overview - Left Side -->
+        <div class="col-md-8">
+            <div class="row">
+                <!-- Scheduler Status -->
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h6><i class="fas fa-clock me-2"></i>Scheduler Status</h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="scheduler-status">
+                                <div class="text-center">
+                                    <div class="spinner-border spinner-border-sm" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="small mt-2">Loading...</p>
                                 </div>
-                                <p class="small mt-2">Loading...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Storage Status -->
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6><i class="fas fa-hard-drive me-2"></i>Storage Status</h6>
+                            <button class="btn btn-sm btn-outline-info" onclick="refreshStatus()">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="storage-status">
+                                <small class="text-muted">Loading...</small>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- Storage Status -->
-            <div class="col-md-6 mb-3">
-                <div class="card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h6><i class="fas fa-hard-drive me-2"></i>Storage Status</h6>
-                        <button class="btn btn-sm btn-outline-info" onclick="refreshStatus()">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div id="storage-status">
-                            <!-- Will be populated by JavaScript -->
+            <!-- Manual Actions -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6><i class="fas fa-play me-2"></i>Manual Actions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-primary" onclick="forceCleanup()">
+                                    <i class="fas fa-play me-1"></i>Clean Shows Now
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="refreshStatus()">
+                                    <i class="fas fa-refresh me-1"></i>Refresh Status
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-grid gap-2">
+                                <a href="/dry-run-settings" class="btn btn-info">
+                                    <i class="fas fa-flask me-1"></i>Dry Run Settings
+                                </a>
+                                <button type="button" class="btn btn-warning" onclick="viewCleanupLogs()">
+                                    <i class="fas fa-file-alt me-1"></i>View Logs
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- Manual Actions -->
-        <div class="card mb-3">
-            <div class="card-header">
-                <h6><i class="fas fa-play me-2"></i>Manual Actions</h6>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="d-grid gap-2">
-                            <button type="button" class="btn btn-primary" onclick="forceCleanup()">
-                                <i class="fas fa-play me-1"></i>Clean Shows Now
-                            </button>
-                            <button type="button" class="btn btn-secondary" onclick="refreshStatus()">
-                                <i class="fas fa-refresh me-1"></i>Refresh Status
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="d-grid gap-2">
-                            <a href="/dry-run-settings" class="btn btn-info">
-                                <i class="fas fa-flask me-1"></i>Dry Run Settings
-                            </a>
-                            <button type="button" class="btn btn-warning" onclick="viewCleanupLogs()">
-                                <i class="fas fa-file-alt me-1"></i>View Logs
-                            </button>
-                            
-                            <!-- NEW: Documentation Button -->
-                            <a href="/docs" class="btn btn-success" target="_blank">
-                                <i class="fas fa-book me-1"></i>Documentation
-                            </a>
-                        </div>
+        <!-- Information Sidebar - Right Side -->
+        <div class="col-md-4">
+            <!-- Rules Summary -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6><i class="fas fa-list me-2"></i>Rules Summary</h6>
+                </div>
+                <div class="card-body">
+                    <div id="rules-summary">
+                        <small class="text-muted">Loading rules summary...</small>
                     </div>
                 </div>
             </div>
+
+            <!-- Current Status -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6><i class="fas fa-exclamation-triangle me-2"></i>Current Status</h6>
+                </div>
+                <div class="card-body">
+                    <div id="safety-status">
+                        <small class="text-muted">Loading safety status...</small>
+                    </div>
+                
         </div>
     </div>
-    
-    <!-- Information Sidebar - Right Side -->
-    <div class="col-md-4">
-        <!-- Rules Summary -->
-        <div class="card mb-3">
-            <div class="card-header">
-                <h6><i class="fas fa-list me-2"></i>Rules Summary</h6>
-            </div>
-            <div class="card-body">
-                <div id="rules-summary">
-                    <small class="text-muted">Loading rules summary...</small>
-                </div>
-            </div>
-        </div>
-
-        <!-- Current Status -->
-        <div class="card mb-3">
-            <div class="card-header">
-                <h6><i class="fas fa-exclamation-triangle me-2"></i>Current Status</h6>
-            </div>
-            <div class="card-body">
-                <div id="safety-status">
-                    <small class="text-muted">Loading safety status...</small>
-                </div>
-            </div>
-        </div>
-
-        
-
-        
-    </div>
-</div>
 </div>
 {% endblock %}
 
@@ -276,7 +279,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Refresh status every 30 seconds
     schedulerStatusInterval = setInterval(() => {
         loadSchedulerStatus();
-        loadRecentActivity();
         loadStorageStatus();
     }, 30000);
 });
@@ -298,8 +300,10 @@ async function loadGlobalSettings() {
                 globalSettings.dry_run_mode || false;
             document.getElementById('autoAssignNewSeries').checked = 
                 globalSettings.auto_assign_new_series || false;
+            document.getElementById('protectPilot').checked =           // ADD THIS
+                globalSettings.protect_pilot || false;                  // ADD THIS
             
-            // NEW: Load notification fields
+            // Notification fields
             document.getElementById('notifications_enabled').checked = 
                 globalSettings.notifications_enabled || false;
             document.getElementById('discord_webhook_url').value = 
@@ -312,32 +316,11 @@ async function loadGlobalSettings() {
                 updateStorageStatus(data.disk_info, globalSettings);
             }
             
-            // Update safety status to match global settings
+            // Update safety status
             updateSafetyStatusFromGlobal(globalSettings);
-        } else {
-            console.warn('Global settings response:', data);
-            // Set defaults on error
-            document.getElementById('globalStorageGate').value = '';
-            document.getElementById('cleanupInterval').value = 6;
-            document.getElementById('dryRunMode').checked = false;
-            document.getElementById('autoAssignNewSeries').checked = false;
-            
-            // NEW: Set notification defaults on error
-            document.getElementById('notifications_enabled').checked = false;
-            document.getElementById('discord_webhook_url').value = '';
-            document.getElementById('episeerr_url').value = 'http://localhost:5002';
         }
     } catch (error) {
         console.error('Error loading global settings:', error);
-        document.getElementById('globalStorageGate').value = '';
-        document.getElementById('cleanupInterval').value = 6;
-        document.getElementById('dryRunMode').checked = false;
-        document.getElementById('autoAssignNewSeries').checked = false;
-        
-        // NEW: Set notification defaults on error
-        document.getElementById('notifications_enabled').checked = false;
-        document.getElementById('discord_webhook_url').value = '';
-        document.getElementById('episeerr_url').value = 'http://localhost:5002';
     }
 }
 
@@ -350,6 +333,7 @@ async function saveGlobalSettings(event) {
         cleanup_interval_hours: parseInt(formData.get('cleanup_interval_hours')) || 6,
         dry_run_mode: formData.has('dry_run_mode'),
         auto_assign_new_series: formData.has('auto_assign_new_series'),
+        protect_pilot: formData.has('protect_pilot'),              // ADD THIS
         notifications_enabled: formData.has('notifications_enabled'),
         discord_webhook_url: formData.get('discord_webhook_url') || '',
         episeerr_url: formData.get('episeerr_url') || 'http://localhost:5002'
@@ -661,7 +645,6 @@ function viewCleanupLogs() {
 }
 
 function showMessage(message, type, duration = 5000) {
-    // Create a temporary alert
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show`;
     alertDiv.innerHTML = `
@@ -669,16 +652,18 @@ function showMessage(message, type, duration = 5000) {
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
     
-    // Insert at top of page
-    const container = document.querySelector('.container');
-    container.insertBefore(alertDiv, container.firstChild);
-    
-    // Auto-remove after duration
-    setTimeout(() => {
-        if (alertDiv.parentNode) {
-            alertDiv.remove();
-        }
-    }, duration);
+    // CHANGE THIS:
+    const container = document.querySelector('.container-fluid');  // Changed from .container
+    if (container) {  // Add null check
+        container.insertBefore(alertDiv, container.firstChild);
+        
+        // Auto-remove after duration
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, duration);
+    }
 }
 
 // Cleanup interval when leaving page

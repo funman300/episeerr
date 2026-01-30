@@ -1053,3 +1053,74 @@ a:hover .clickable-card .text-muted {
 .status-unknown {
     color: #6c757d;
 }
+/* ==============================================
+   DASHBOARD-SPECIFIC: Slim Stats Pills + Hero Layout
+============================================== */
+
+/* Slim pill stats (top bar) */
+.stat-pill {
+  font-size: 0.95rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  transition: all 0.2s;
+  padding: 8px 16px;
+  border-radius: 999px;
+}
+
+.stat-pill:hover {
+  background: rgba(255,255,255,0.1);
+  transform: translateY(-1px);
+}
+
+/* Full-width calendar hero card */
+.calendar-hero {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.calendar-hero .card-body {
+  background: var(--card-bg, #1a1d29);
+  min-height: 500px; /* gives space on desktop when content is light */
+}
+
+/* Slim activity items (right column feed) */
+.activity-feed .activity-item.slim {
+  font-size: 0.85rem;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color, #2d3142);
+}
+
+.activity-feed .activity-item.slim:last-child {
+  border-bottom: none;
+}
+
+.activity-feed .activity-item.slim .text-muted {
+  font-size: 0.75rem;
+}
+
+/* Mobile stacking for the 3-column calendar */
+@media (max-width: 991px) {
+  #calendar-container > div {
+    border: none !important;
+    border-bottom: 1px solid var(--border-color, #2d3142) !important;
+  }
+  #calendar-container > div:last-child {
+    border-bottom: none !important;
+  }
+  .calendar-hero .card-body {
+    min-height: auto;
+  }
+}
+
+/* Expand/collapse smooth transitions */
+.calendar-banner-card, .calendar-day-expanded {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.calendar-day-expanded {
+  opacity: 0;
+}
+
+.calendar-day-expanded[style*="display: block"] {
+  opacity: 1;
+}

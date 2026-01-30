@@ -1,4 +1,4 @@
-__version__ = "3.1.0"
+__version__ = "3.1.1"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -1047,11 +1047,7 @@ def index():
                          sonarr_stats=sonarr_stats,
                          SONARR_URL=sonarr_url,
                          SONARR_API_KEY=sonarr_preferences['SONARR_API_KEY'],
-                         JELLYSEERR_URL=JELLYSEERR_URL,  # ← ADD
-                         OVERSEERR_URL=OVERSEERR_URL,    # ← ADD
-                         JELLYFIN_URL=os.getenv('JELLYFIN_URL'),  # ← ADD
-                         TAUTULLI_URL=os.getenv('TAUTULLI_URL'),  # ← ADD
-                         PLEX_URL=os.getenv('PLEX_URL'),          # ← ADD
+                         
                          current_rule=request.args.get('rule', list(config['rules'].keys())[0] if config['rules'] else 'default'))
 
 # Add new API route for real-time stats updates
@@ -1451,22 +1447,18 @@ def inject_service_urls():
     
     # Iterate over environment variables to find those ending with _URL
     for key, value in os.environ.items():
-        if key.endswith('_URL') and value:
-            # Extract service ID (e.g., 'SONARR' from 'SONARR_URL')
-            service_id = key[:-len('_URL')].lower()
+        if key.endswith('_URL') and value.strip():  # skip empty values
+            service_id = key[:-4].lower()  # remove _URL
             
-            # Get name: Use corresponding _NAME variable, default_names, or capitalize service_id
-            name_key = f'{key[:-len("_URL")]}_NAME'
+            name_key = f"{key[:-4]}_NAME"
             service_name = os.getenv(name_key, default_names.get(service_id, service_id.capitalize()))
             
-            # Get icon: Use corresponding _ICON variable, default_icons, or generic icon
-            icon_key = f'{key[:-len("_URL")]}_ICON'
+            icon_key = f"{key[:-4]}_ICON"
             service_icon = os.getenv(icon_key, default_icons.get(service_id, 'fas fa-link'))
             
-            # Add to services dictionary
             services[service_id] = {
                 'name': service_name,
-                'url': value,
+                'url': value.strip(),
                 'icon': service_icon
             }
     
@@ -1895,6 +1887,7 @@ def update_global_settings():
         cleanup_interval_hours = data.get('cleanup_interval_hours', 6)
         dry_run_mode = data.get('dry_run_mode', False)
         auto_assign_new_series = data.get('auto_assign_new_series', False)
+        protect_pilot = data.get('protect_pilot', False)  # NEW: Protect S01E01
         
         # NEW: Notification settings
         notifications_enabled = data.get('notifications_enabled', False)
@@ -1910,6 +1903,7 @@ def update_global_settings():
             'cleanup_interval_hours': int(cleanup_interval_hours),
             'dry_run_mode': bool(dry_run_mode),
             'auto_assign_new_series': bool(auto_assign_new_series),
+            'protect_pilot': bool(protect_pilot),  # NEW: Save pilot protection setting
             
             # NEW: Save notification settings
             'notifications_enabled': bool(notifications_enabled),
@@ -2806,13 +2800,28 @@ def process_sonarr_webhook():
                 updated_tags.append(tag_id)
         
         if removed:
-            update_payload = series.copy()
-            update_payload['tags'] = updated_tags  # All should be integers now
-            resp = requests.put(f"{SONARR_URL}/api/v3/series", headers=headers, json=update_payload)
-            if resp.ok:
-                app.logger.info(f"Removed control tag(s): {removed}")
+            # Get fresh series data from Sonarr
+            series_resp = requests.get(
+                f"{SONARR_URL}/api/v3/series/{series_id}",
+                headers=headers
+            )
+            
+            if series_resp.ok:
+                update_payload = series_resp.json()
+                update_payload['tags'] = updated_tags
+                
+                resp = requests.put(
+                    f"{SONARR_URL}/api/v3/series",
+                    headers=headers,
+                    json=update_payload
+                )
+                
+                if resp.ok:
+                    app.logger.info(f"Removed control tag(s): {removed}")
+                else:
+                    app.logger.error(f"Tag removal failed: {resp.text}")
             else:
-                app.logger.error(f"Tag removal failed: {resp.text}")
+                app.logger.error(f"Failed to fetch series data: {series_resp.status_code}")
         
         try:
             episeerr_utils.check_and_cancel_unmonitored_downloads()

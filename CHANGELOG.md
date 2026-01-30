@@ -6,8 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+Still a bug that ceates 2 searches in sonarr when adding a series to sonarr with default tag but it is harmless. looking into it.  Workaround is dont use the default tag, just use the episeerr_rulename you want
 
+Planning to move or duplicate the series management table in the rules tab 
 ## [Released]
+v3.1.1
+Minor changes and fixes
+
+Added the ability to alwats save pilot episodes.  You can make it global for all series or per rule
 
 Episeerr v3.1 - Dashboard, Rules & UI Fixes
 New Features
