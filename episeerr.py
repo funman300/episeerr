@@ -1134,6 +1134,7 @@ def create_rule():
             'grace_unwatched': grace_unwatched,
             'dormant_days': dormant_days,
             'grace_scope': grace_scope,
+            'keep_pilot': 'keep_pilot' in request.form,
             'series': {},
             'dry_run': False
         }
@@ -1203,7 +1204,8 @@ def edit_rule(rule_name):
             'grace_watched': grace_watched,
             'grace_unwatched': grace_unwatched,
             'dormant_days': dormant_days,
-            'grace_scope': grace_scope
+            'grace_scope': grace_scope,
+            'keep_pilot': 'keep_pilot' in request.form
         })
         
         # Handle default rule setting
@@ -1909,7 +1911,7 @@ def update_global_settings():
         cleanup_interval_hours = data.get('cleanup_interval_hours', 6)
         dry_run_mode = data.get('dry_run_mode', False)
         auto_assign_new_series = data.get('auto_assign_new_series', False)
-        protect_pilot = data.get('protect_pilot', False)  # NEW: Protect S01E01
+        
         
         # NEW: Notification settings
         notifications_enabled = data.get('notifications_enabled', False)
@@ -1925,7 +1927,6 @@ def update_global_settings():
             'cleanup_interval_hours': int(cleanup_interval_hours),
             'dry_run_mode': bool(dry_run_mode),
             'auto_assign_new_series': bool(auto_assign_new_series),
-            'protect_pilot': bool(protect_pilot),  # NEW: Save pilot protection setting
             
             # NEW: Save notification settings
             'notifications_enabled': bool(notifications_enabled),

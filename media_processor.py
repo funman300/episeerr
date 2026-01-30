@@ -1496,11 +1496,7 @@ def load_global_settings():
                 save_global_settings(settings)
                 logger.info("✓ Migrated global_settings.json - added dry_run_mode: true")
             
-            # MIGRATION: Add protect_pilot if missing (default to False)
-            if 'protect_pilot' not in settings:
-                settings['protect_pilot'] = False
-                save_global_settings(settings)
-                logger.info("✓ Migrated global_settings.json - added protect_pilot: false")
+            
             
             return settings
         else:
@@ -1510,7 +1506,7 @@ def load_global_settings():
                 'cleanup_interval_hours': 6,
                 'dry_run_mode': True,
                 'auto_assign_new_series': False,
-                'protect_pilot': False,  # Don't delete S01E01 (pilot episode)
+                
                 'notifications_enabled': False,
                 'discord_webhook_url': '',
                 'episeerr_url': 'http://localhost:5002'
@@ -1629,7 +1625,7 @@ def is_anchor_episode(episode, series_id=None):
     - Manual unmonitor operations
     
     Currently anchored:
-    - S01E01 (pilot episode) - IF global setting 'protect_pilot' is enabled OR rule-level 'keep_pilot' is enabled
+    - S01E01 (pilot episode) - IF rule-level 'keep_pilot' is enabled
     
     Args:
         episode: Episode dict with 'seasonNumber' and 'episodeNumber'
@@ -1647,14 +1643,9 @@ def is_anchor_episode(episode, series_id=None):
     if not is_pilot:
         return False
     
-    # PRIORITY 1: Check global pilot protection (highest priority)
-    global_settings = load_global_settings()
-    protect_pilot_global = global_settings.get('protect_pilot', False)
     
-    if protect_pilot_global:
-        return True
     
-    # PRIORITY 2: Check rule-based pilot protection
+    # PRIORITY 1: Check rule-based pilot protection
     if series_id is not None:
         from episeerr import load_config, get_rule_for_series
         config = load_config()

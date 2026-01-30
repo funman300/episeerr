@@ -66,13 +66,7 @@
                                     </label>
                                 </div>
                                 
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="protectPilot" name="protect_pilot">
-                                    <label class="form-check-label" for="protectPilot">
-                                        <strong><i class="fas fa-shield-alt me-1"></i>Protect Pilot Episodes (S01E01)</strong>
-                                        <small class="text-muted d-block">Never delete pilot episodes - keep for rewatching from the beginning</small>
-                                    </label>
-                                </div>
+                                
                             </div>
                         </div>
 
@@ -300,8 +294,7 @@ async function loadGlobalSettings() {
                 globalSettings.dry_run_mode || false;
             document.getElementById('autoAssignNewSeries').checked = 
                 globalSettings.auto_assign_new_series || false;
-            document.getElementById('protectPilot').checked =           // ADD THIS
-                globalSettings.protect_pilot || false;                  // ADD THIS
+           
             
             // Notification fields
             document.getElementById('notifications_enabled').checked = 
@@ -333,7 +326,7 @@ async function saveGlobalSettings(event) {
         cleanup_interval_hours: parseInt(formData.get('cleanup_interval_hours')) || 6,
         dry_run_mode: formData.has('dry_run_mode'),
         auto_assign_new_series: formData.has('auto_assign_new_series'),
-        protect_pilot: formData.has('protect_pilot'),              // ADD THIS
+        
         notifications_enabled: formData.has('notifications_enabled'),
         discord_webhook_url: formData.get('discord_webhook_url') || '',
         episeerr_url: formData.get('episeerr_url') || 'http://localhost:5002'
