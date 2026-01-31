@@ -8,7 +8,8 @@
 ---
 
 ## [Released]
-
+## [3.1.3] - 2026-01-31
+fixed mobile layout
 ## [3.1.2] - 2026-01-30
 
 ### New Features
