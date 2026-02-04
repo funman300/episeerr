@@ -18,6 +18,7 @@
             <div class="row">
                 <div class="col-md-4">
                     <a href="#overview" class="btn btn-outline-primary btn-sm w-100 mb-2">Overview</a>
+                    <a href="#setup-page" class="btn btn-outline-success btn-sm w-100 mb-2">Setup Page (New!)</a>
                     <a href="#getting-started" class="btn btn-outline-success btn-sm w-100 mb-2">Getting Started</a>
                     <a href="#rules" class="btn btn-outline-primary btn-sm w-100 mb-2">Rules System</a>
                 </div>
@@ -27,6 +28,7 @@
                     <a href="#workflows" class="btn btn-outline-primary btn-sm w-100 mb-2">Workflows</a>
                 </div>
                 <div class="col-md-4">
+                    <a href="#webhooks" class="btn btn-outline-info btn-sm w-100 mb-2">Webhook Setup</a>
                     <a href="#tag-management" class="btn btn-outline-success btn-sm w-100 mb-2">Tag Management</a>
                     <a href="#auto-assign" class="btn btn-outline-info btn-sm w-100 mb-2">Auto-Assign</a>
                     <a href="#troubleshooting" class="btn btn-outline-primary btn-sm w-100 mb-2">Troubleshooting</a>
@@ -34,12 +36,12 @@
             </div>
         </div>
     </div>
-        <div class="alert alert-info mb-3">
-        <h5>📚 Detailed Documentation Available</h5>
-        <p class="mb-2">For deep dives and step-by-step guides:</p>
+        <div class="alert alert-success mb-3">
+        <h5>🎉 New in v3.2.0</h5>
         <ul class="mb-0">
-            <li><a href="https://github.com/Vansmak/episeerr/blob/main/README.md" target="_blank">Documentation Hub</a></li>
-            
+            <li><strong>Setup Page:</strong> Configure everything via GUI at <a href="/setup">/setup</a> - no .env file needed!</li>
+            <li><strong>Emby Support:</strong> Full webhook integration for viewing automation</li>
+            <li><strong>Quick Links:</strong> Auto-populated sidebar links to your services</li>
         </ul>
     </div>
     <!-- Overview -->
@@ -120,6 +122,128 @@
                 <div class="col-md-4"></div>
                 <div class="col-md-4"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Setup Page Section (NEW!) -->
+    <div class="card mb-3" id="setup-page">
+        <div class="card-header bg-success text-white">
+            <h4 class="mb-0"><i class="fas fa-cog me-2"></i>Setup Page - Configure Services</h4>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-success">
+                <h5><i class="fas fa-sparkles me-2"></i>New in v3.2.0: GUI Configuration</h5>
+                <p class="mb-0">No more manual .env file editing! Configure everything through the web interface.</p>
+            </div>
+
+            <h5 class="mt-4">Accessing Setup Page</h5>
+            <p><strong>URL:</strong> <code>http://your-server:5002/setup</code></p>
+            <p>Or click <strong>"Setup"</strong> in the sidebar</p>
+
+            <h5 class="mt-4">Required Services</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card border-primary mb-3">
+                        <div class="card-header bg-primary text-white">
+                            <i class="fas fa-tv me-2"></i>Sonarr
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Required for:</strong> All features</p>
+                            <p><strong>You need:</strong></p>
+                            <ul class="mb-0">
+                                <li>Sonarr URL (e.g., <code>http://sonarr:8989</code>)</li>
+                                <li>API Key from Sonarr → Settings → General</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card border-primary mb-3">
+                        <div class="card-header bg-primary text-white">
+                            <i class="fas fa-film me-2"></i>TMDB
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Required for:</strong> Episode selection</p>
+                            <p><strong>You need:</strong></p>
+                            <ul class="mb-0">
+                                <li>TMDB API Read Access Token</li>
+                                <li>Get one free at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org/settings/api</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-4">Optional Services (For Automation)</h5>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card border-info mb-3">
+                        <div class="card-header bg-info text-white">
+                            <i class="fas fa-play me-2"></i>Media Server
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Choose one:</strong></p>
+                            <ul>
+                                <li><strong>Jellyfin</strong> - Real-time or polling</li>
+                                <li><strong>Emby</strong> - Polling mode</li>
+                                <li><strong>Plex</strong> - Via Tautulli</li>
+                            </ul>
+                            <p class="mb-0"><strong>Enables:</strong> Viewing automation (next episode on watch)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-info mb-3">
+                        <div class="card-header bg-info text-white">
+                            <i class="fas fa-chart-bar me-2"></i>Tautulli
+                        </div>
+                        <div class="card-body">
+                            <p><strong>For Plex users</strong></p>
+                            <p>Tautulli bridges Plex viewing data to Episeerr</p>
+                            <p class="mb-0"><strong>Enables:</strong> Viewing automation with Plex</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-info mb-3">
+                        <div class="card-header bg-info text-white">
+                            <i class="fas fa-inbox me-2"></i>Request Integration
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Choose one:</strong></p>
+                            <ul>
+                                <li>Overseerr</li>
+                                <li>Jellyseerr</li>
+                            </ul>
+                            <p class="mb-0"><strong>Enables:</strong> Automatic episode selection for new requests</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-4">Setup Page Features</h5>
+            <ul>
+                <li><i class="fas fa-check-circle text-success me-2"></i><strong>Test Connections:</strong> Verify URLs and API keys before saving</li>
+                <li><i class="fas fa-check-circle text-success me-2"></i><strong>Quick Links:</strong> Auto-populate sidebar links to configured services</li>
+                <li><i class="fas fa-check-circle text-success me-2"></i><strong>Database Storage:</strong> Configuration persists across container restarts</li>
+                <li><i class="fas fa-check-circle text-success me-2"></i><strong>No .env needed:</strong> Fresh installs can configure everything via GUI</li>
+                <li><i class="fas fa-check-circle text-success me-2"></i><strong>Migration Support:</strong> Existing .env values appear as defaults</li>
+            </ul>
+
+            <div class="alert alert-info mt-4">
+                <h6><i class="fas fa-info-circle me-2"></i>Configuration Priority</h6>
+                <p class="mb-0">Database configuration takes priority over .env files. You can use both (database overrides .env), but we recommend configuring everything through the GUI for easier management.</p>
+            </div>
+
+            <h5 class="mt-4">After Setup</h5>
+            <ol>
+                <li>Configure your services on the Setup page</li>
+                <li>Test each connection (green checkmark = success)</li>
+                <li>Save configuration</li>
+                <li>Check Quick Links in sidebar - they should auto-populate</li>
+                <li>Set up webhooks (see <a href="#webhooks">Webhook Setup</a> section below)</li>
+                <li>Create your first rule!</li>
+            </ol>
         </div>
     </div>
 

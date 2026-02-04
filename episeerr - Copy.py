@@ -1,4 +1,4 @@
-__version__ = "3.2.0"
+__version__ = "3.1.3"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -326,7 +326,7 @@ def save_service_config(service):
                         data.get('sonarr-url'),
                         data.get('sonarr-apikey'))
             # Auto-add to quick links
-            auto_add_quick_link('Sonarr', data.get('sonarr-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/sonarr.png')
+            auto_add_quick_link('Sonarr', data.get('sonarr-url'), 'fas fa-tv')
         
         elif service == 'jellyfin':
             config = {
@@ -342,7 +342,7 @@ def save_service_config(service):
                         data.get('jellyfin-apikey'),
                         config)
             # Auto-add to quick links
-            auto_add_quick_link('Jellyfin', data.get('jellyfin-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyfin.png')
+            auto_add_quick_link('Jellyfin', data.get('jellyfin-url'), 'fas fa-film')
         
         elif service == 'emby':
             config = {
@@ -355,21 +355,21 @@ def save_service_config(service):
                         data.get('emby-apikey'),
                         config)
             # Auto-add to quick links
-            auto_add_quick_link('Emby', data.get('emby-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/emby.png')
+            auto_add_quick_link('Emby', data.get('emby-url'), 'fas fa-film')
         
         elif service == 'tautulli':
             save_service('tautulli', 'default',
                         data.get('tautulli-url'),
                         data.get('tautulli-apikey'))
             # Auto-add to quick links
-            auto_add_quick_link('Tautulli', data.get('tautulli-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/tautulli.png')
+            auto_add_quick_link('Tautulli', data.get('tautulli-url'), 'fas fa-chart-line')
         
         elif service == 'jellyseerr':
             save_service('jellyseerr', 'default',
                         data.get('jellyseerr-url'),
                         data.get('jellyseerr-apikey'))
             # Auto-add to quick links
-            auto_add_quick_link('Jellyseerr', data.get('jellyseerr-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyseerr.png')
+            auto_add_quick_link('Jellyseerr', data.get('jellyseerr-url'), 'fas fa-ticket-alt')
         
         elif service == 'tmdb':
             save_service('tmdb', 'default',
@@ -455,7 +455,7 @@ def handle_emby_webhook():
         episode_number = item.get('IndexNumber')
         runtime_ticks = item.get('RunTimeTicks', 0)
         position_ticks = playback_info.get('PositionTicks', 0)
-        session_id = session.get('Id', '')  # Use Session.Id - Emby API doesn't populate PlayState.PlaySessionId
+        session_id = session.get('Id', '')  # Use Session.Id - Emby API doesn't populate PlayState.PlaySessionId  
         user_name = user.get('Name', 'Unknown')
 
         # Bonus: Emby includes Sonarr ID directly — skips name-based lookup
@@ -4098,8 +4098,8 @@ def handle_jellyfin_webhook():
             # Clean up progress tracking
             try:
                 from media_processor import cleanup_jellyfin_tracking
-                # cleanup_jellyfin_tracking()  # DISABLED: Clears shared set used by Emby polling
-                app.logger.debug("Tracking cleanup skipped (shared with Emby)")
+                cleanup_jellyfin_tracking()
+                app.logger.debug("Cleaned up PlaybackProgress tracking")
             except Exception as e:
                 app.logger.debug(f"No tracking to clean: {e}")
             

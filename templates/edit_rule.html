@@ -67,7 +67,7 @@
                                         <div class="col-md-6" id="keep_count_container">
                                             <label for="keep_count" class="form-label">Count</label>
                                             <input type="number" class="form-control" id="keep_count" name="keep_count" 
-                                                   min="0" value="{{ rule.get('keep_count', 1) }}" required>
+       min="0" value="{{ rule.get('keep_count') or 0 }}">
                                             <div class="form-text">0 = Keep nothing (immediate delete)</div>
                                         </div>
                                     </div>
@@ -302,7 +302,7 @@ function toggleKeepCount() {
     } else {
         keepCountContainer.style.display = 'block';
         keepCountInput.required = true;
-        if (!keepCountInput.value) keepCountInput.value = '1';
+        if (keepCountInput.value === '') keepCountInput.value = '0';
     }
     
     updateExplanation(keepType, keepCountInput.value || 0, 'keep_explanation');

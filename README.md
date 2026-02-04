@@ -57,14 +57,10 @@ Episeerr gives you **three independent features** for TV episode management:
 **Get running in 5 minutes:**
 
 ```bash
-# 1. Create docker-compose.yml
+# 1. Create docker-compose.yml (minimal setup)
 services:
   episeerr:
     image: vansmak/episeerr:latest
-    environment:
-      - SONARR_URL=http://your-sonarr:8989
-      - SONARR_API_KEY=your_api_key
-      - TMDB_API_KEY=your_tmdb_key
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
@@ -76,17 +72,25 @@ services:
 # 2. Start container
 docker-compose up -d
 
-# 3. Open http://your-server:5002
-# 4. Create a rule, add a series, start watching!
+# 3. Open http://your-server:5002/setup
+# 4. Configure Sonarr, TMDB, and optional services
+# 5. Create a rule, add a series, start watching!
 ```
 
-**That's it!** Basic episode management is ready.
+**That's it!** No `.env` file needed - configure everything via the GUI.
 
 **For automation:** [Set up webhooks](#webhook-setup) ⬇️
 
 ---
 
 ## Installation
+
+### Two Ways to Configure:
+
+1. **GUI Setup (Recommended)** - Use `/setup` page, no `.env` file needed
+2. **Environment Variables** - Traditional `.env` file (still supported)
+
+---
 
 ### Docker Compose (Recommended)
 
@@ -114,20 +118,39 @@ services:
       - TAUTULLI_API_KEY=your_tautulli_key
       
       # Option 2: Jellyfin (choose one mode below)
-      - JELLYFIN_URL=http://your-jellyfin:8096
-      - JELLYFIN_API_KEY=your_jellyfin_api_key
-      - JELLYFIN_USER_ID=your_username  # REQUIRED
-      
-      # Jellyfin Mode 1: Real-time (recommended)
-      - JELLYFIN_TRIGGER_MIN=50.0
-      - JELLYFIN_TRIGGER_MAX=55.0
-      
-      # Jellyfin Mode 2: Polling (comment out Mode 1, use this)
+      environment:
+      # --- Jellyfin: uncomment Option A OR Option B, not both ---
+      #
+      # Option A: Real-time (Jellyfin sends PlaybackProgress webhooks)
+      #   Configure in Jellyfin: http://<episeerr>:5002/jellyfin-webhook
+      #   Notification type: PlaybackProgress
+      #
+      # - JELLYFIN_URL=http://your-jellyfin:8096
+      # - JELLYFIN_API_KEY=your_jellyfin_api_key
+      # - JELLYFIN_USER_ID=your_username
+      # - JELLYFIN_TRIGGER_MIN=50.0
+      # - JELLYFIN_TRIGGER_MAX=55.0
+      #
+      # Option B: Polling (Jellyfin sends PlaybackStart, Episeerr polls /Sessions)
+      #   Configure in Jellyfin: http://<episeerr>:5002/jellyfin-webhook
+      #   Notification type: PlaybackStart
+      #
+      # - JELLYFIN_URL=http://your-jellyfin:8096
+      # - JELLYFIN_API_KEY=your_jellyfin_api_key
+      # - JELLYFIN_USER_ID=your_username
       # - JELLYFIN_TRIGGER_PERCENTAGE=50.0
       # - JELLYFIN_POLL_INTERVAL=900
-      
-      # Jellyfin Mode 3: On-stop (comment out Mode 1, use this)
-      # - JELLYFIN_TRIGGER_PERCENTAGE=50.0
+
+      # --- Emby: uncomment to enable ---
+      #   Configure in Emby: User Prefs → Notifications → Webhooks
+      #   URL: http://<episeerr>:5002/emby-webhook
+      #   Events: playback.start, playback.stop
+      #
+      # - EMBY_URL=http://your-emby:8096
+      # - EMBY_API_KEY=your_emby_api_key
+      # - EMBY_USER_ID=your_username
+      # - EMBY_TRIGGER_PERCENTAGE=50.0
+      # - EMBY_POLL_INTERVAL=900
       
       # ============================================
       # OPTIONAL - For Request Integration
@@ -221,13 +244,42 @@ Create `/boot/config/plugins/community.applications/private/episeerr/my-episeerr
 
 ---
 
+### GUI Setup Page (v3.2.0+)
+
+**The easiest way to configure Episeerr** - no `.env` file needed!
+
+**Access:** `http://your-server:5002/setup`
+
+**Configure:**
+1. **Sonarr** - URL and API key (required)
+2. **TMDB** - API Read Access Token (required)
+3. **Media Server** - Choose Jellyfin, Emby, or Plex/Tautulli (optional)
+4. **Overseerr/Jellyseerr** - Request integration (optional)
+
+**Features:**
+- ✅ Test connections before saving
+- ✅ Configuration stored in database
+- ✅ Auto-populate Quick Links in sidebar
+- ✅ No container restart needed
+- ✅ Works alongside `.env` files (database takes priority)
+
+**Migration from .env:**
+1. Open `/setup` page
+2. Your existing `.env` values appear as defaults
+3. Save to migrate to database
+4. Delete `.env` file when ready
+
+---
+
 ### Environment Variables
+
+**Note:** As of v3.2.0, environment variables are **optional**. You can configure everything via the `/setup` page GUI. Environment variables still work for backward compatibility and can be used alongside database configuration (database takes priority).
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `SONARR_URL` | ✅ Yes | Sonarr base URL (e.g., `http://sonarr:8989`) |
-| `SONARR_API_KEY` | ✅ Yes | Sonarr API key (Settings → General) |
-| `TMDB_API_KEY` | ✅ Yes | TMDB **Read Access Token** ([Get one free](https://www.themoviedb.org/settings/api)) |
+| `SONARR_URL` | ❌ Optional* | Sonarr base URL (e.g., `http://sonarr:8989`) |
+| `SONARR_API_KEY` | ❌ Optional* | Sonarr API key (Settings → General) |
+| `TMDB_API_KEY` | ❌ Optional* | TMDB **Read Access Token** ([Get one free](https://www.themoviedb.org/settings/api)) |
 | `TAUTULLI_URL` | ❌ Optional | For Plex viewing automation |
 | `TAUTULLI_API_KEY` | ❌ Optional | Tautulli API key |
 | `JELLYFIN_URL` | ❌ Optional | For Jellyfin viewing automation |
@@ -236,6 +288,9 @@ Create `/boot/config/plugins/community.applications/private/episeerr/my-episeerr
 | `JELLYSEERR_URL` | ❌ Optional | For request integration |
 | `JELLYSEERR_API_KEY` | ❌ Optional | Jellyseerr API key |
 
+| `EMBY_USER_ID` | ⚠️ Required if using emby | Your EMBY username |
+| `EMBY_URL` | ❌ Optional | For request integration |
+| `EMBY_API_KEY` | ❌ Optional | EMBY API key |
 **⚠️ Important Notes:**
 - TMDB requires the **Read Access Token**, not the API key v3
 - Jellyfin **requires** `JELLYFIN_USER_ID` to be set to your username
@@ -282,7 +337,22 @@ docker logs episeerr | grep "Received Sonarr webhook"
 
 **Enables:** Next episode ready when you watch
 
-**Setup:**
+**Configuration:**
+
+**Option 1: Setup Page (Recommended) - v3.2.0+**
+1. Go to `http://your-episeerr:5002/setup`
+2. Scroll to **Tautulli** section
+3. Enter Tautulli URL and API Key
+4. Click **Test Connection** to verify
+5. **Save**
+
+**Option 2: Environment Variables**
+```yaml
+- TAUTULLI_URL=http://your-tautulli:8181
+- TAUTULLI_API_KEY=your_tautulli_api_key
+```
+
+**Webhook Setup:**
 
 1. **Tautulli** → Settings → Notification Agents → Add → Webhook
 
@@ -334,16 +404,27 @@ docker logs episeerr | grep "Received webhook"
 
 **Enables:** Next episode ready when you watch
 
-Episeerr supports **three modes** for Jellyfin - choose what works best:
+Episeerr supports **two modes** for Jellyfin — pick one:
 
-#### **Mode 1: Real-Time (Recommended)**
+**Configuration (for both modes):**
 
-Processes immediately at 50-55% progress.
+**Option 1: Setup Page (Recommended) - v3.2.0+**
+1. Go to `http://your-episeerr:5002/setup`
+2. Scroll to **Jellyfin** section
+3. Choose your mode and enter settings accordingly
+4. Click **Test Connection** to verify
+5. **Save**
 
-**Setup:**
+**Option 2: Environment Variables** - See each mode below for specific variables
 
+---
+
+#### **Mode A: Real-Time (Recommended)**
+
+Jellyfin sends a webhook on every progress update. Episeerr fires once when progress lands in the 50–55% window. No polling needed.
+
+**Webhook Setup:**
 1. **Jellyfin** → Dashboard → Plugins → Webhooks → Add Generic Destination
-
 2. **Configure:**
    - **Webhook Name:** Episeerr Episode Tracking
    - **Webhook URL:** `http://your-episeerr:5002/jellyfin-webhook`
@@ -351,10 +432,9 @@ Processes immediately at 50-55% progress.
    - **User Filter:** Your username (recommended)
    - **Item Type:** Episodes
    - **Send All Properties:** ✅ Enabled
-
 3. **Save**
 
-**Environment Variables:**
+**Environment Variables (if not using Setup Page):**
 ```yaml
 - JELLYFIN_URL=http://your-jellyfin:8096
 - JELLYFIN_API_KEY=your_api_key
@@ -362,8 +442,8 @@ Processes immediately at 50-55% progress.
 - JELLYFIN_TRIGGER_MIN=50.0
 - JELLYFIN_TRIGGER_MAX=55.0
 ```
-<img width="738" height="1046" alt="image" src="https://github.com/user-attachments/assets/8fb610e8-ca62-4113-be7c-b7a1aedcae0c" />
 
+<img width="738" height="1046" alt="image" src="https://github.com/user-attachments/assets/8fb610e8-ca62-4113-be7c-b7a1aedcae0c" />
 <img width="794" height="879" alt="image" src="https://github.com/user-attachments/assets/7027be3a-3b75-407e-86e4-06a4c7280960" />
 
 ```
@@ -374,67 +454,102 @@ Processes immediately at 50-55% progress.
 
 ---
 
-#### **Mode 2: Polling**
+#### **Mode B: Polling**
 
-Checks progress every 15 minutes.
+Jellyfin sends a webhook on session start. Episeerr then polls the Jellyfin `/Sessions` API every 15 minutes until the trigger percentage is hit. Useful if PlaybackProgress webhooks are unreliable on your setup.
 
-**Setup:**
-
+**Webhook Setup:**
 1. **Jellyfin** → Dashboard → Plugins → Webhooks → Add Generic Destination
-
 2. **Configure:**
    - **Webhook URL:** `http://your-episeerr:5002/jellyfin-webhook`
-   - **Notification Type:** Select "Session Start" AND "Playback Stop"
+   - **Notification Type:** Select **"Session Start"**
    - **User Filter:** Your username
    - **Item Type:** Episodes
 
-**Environment Variables:**
+**Environment Variables (if not using Setup Page):**
 ```yaml
 - JELLYFIN_URL=http://your-jellyfin:8096
 - JELLYFIN_API_KEY=your_api_key
 - JELLYFIN_USER_ID=your_username  # REQUIRED
 - JELLYFIN_TRIGGER_PERCENTAGE=50.0
-- JELLYFIN_POLL_INTERVAL=900  # 15 minutes
-```
-
----
-
-#### **Mode 3: On-Stop**
-
-Processes when you stop watching (if >= 50%).
-
-**Setup:**
-
-1. **Jellyfin** → Dashboard → Plugins → Webhooks → Add Generic Destination
-
-2. **Configure:**
-   - **Webhook URL:** `http://your-episeerr:5002/jellyfin-webhook`
-   - **Notification Type:** Select ONLY **"Playback Stop"**
-   - **User Filter:** Your username
-   - **Item Type:** Episodes
-
-**Environment Variables:**
-```yaml
-- JELLYFIN_URL=http://your-jellyfin:8096
-- JELLYFIN_API_KEY=your_api_key
-- JELLYFIN_USER_ID=your_username  # REQUIRED
-- JELLYFIN_TRIGGER_PERCENTAGE=50.0
+- JELLYFIN_POLL_INTERVAL=900  # seconds (15 minutes)
 ```
 
 ---
 
 **Which Jellyfin mode should you use?**
 
-| Mode | Best For | Processing | Webhooks |
-|------|----------|------------|----------|
-| **Real-Time** | Most users | Immediate | More |
-| **Polling** | Unreliable webhooks | 15-min delay | Fewer |
-| **On-Stop** | Minimal traffic | When you stop | Fewest |
+| Option | Best For | Processing | Jellyfin Webhooks Needed |
+|--------|----------|------------|--------------------------|
+| **A: Real-Time** | Most users | Immediate at 50–55% | PlaybackProgress (continuous) |
+| **B: Polling** | Unreliable progress webhooks | Up to 15-min delay | Session Start (one-shot) |
 
 **Test it:**
 ```bash
 # Watch an episode past 50% and check logs
 docker logs episeerr | grep "Processing Jellyfin"
+```
+
+---
+
+### 4. Emby Webhook (For Viewing Automation)
+
+**Enables:** Next episode ready when you watch
+
+Emby doesn't send continuous progress webhooks like Jellyfin's PlaybackProgress, so Episeerr uses **polling only**. On `playback.start`, Episeerr spawns a background thread that queries the Emby `/Sessions` API every 15 minutes until your watch progress hits the trigger threshold. This handles autoplay correctly — if E1 finishes and E2 auto-starts without a `playback.stop` firing for E1, the poll already caught E1 at 50% and triggered the next episode search.
+
+**Configuration:**
+
+**Option 1: Setup Page (Recommended) - v3.2.0+**
+1. Go to `http://your-episeerr:5002/setup`
+2. Scroll to **Emby** section
+3. Enter:
+   - Emby URL (e.g., `http://emby:8096`)
+   - API Key (from Emby → Settings → Advanced → Security)
+   - Username (must match the user watching content)
+   - Trigger Percentage (default: 50.0%)
+   - Poll Interval (default: 900 seconds / 15 minutes)
+4. Click **Test Connection** to verify
+5. **Save**
+
+**Option 2: Environment Variables**
+```yaml
+- EMBY_URL=http://your-emby:8096
+- EMBY_API_KEY=your_emby_api_key
+- EMBY_USER_ID=your_username  # REQUIRED — must match the Emby user
+- EMBY_TRIGGER_PERCENTAGE=50.0
+- EMBY_POLL_INTERVAL=900  # seconds (15 minutes)
+```
+
+**Webhook Setup:**
+1. **Emby** → User Preferences (top-right avatar) → Notifications → Webhooks → Add Webhook
+2. **Configure:**
+   - **Webhook Name:** Episeerr Episode Tracking
+   - **Webhook URL:** `http://your-episeerr:5002/emby-webhook`
+   - **Events:** Enable **"playback.start"** and **"playback.stop"**
+   - *(No item type filter in Emby — it sends all events; Episeerr filters to Episodes internally)*
+3. **Save**
+
+> **Note:** The webhook is configured per-user in Emby, not server-wide like Jellyfin's plugin. Make sure you're configuring it for the user account that watches content.
+
+**Test it:**
+```bash
+# Watch an episode past 50% and check logs
+docker logs episeerr | grep "Processing Emby"
+```
+
+**How it works:**
+
+| Event | What Episeerr Does |
+|-------|-------------------|
+| `playback.start` | Starts polling `/Sessions` for this session every `POLL_INTERVAL` seconds |
+| Poll hits `TRIGGER_PERCENTAGE` | Fires episode processing, marks session as handled |
+| `playback.stop` | Stops the polling thread. If already processed by poll, skips. If not yet hit threshold, checks final position one last time. |
+
+**Test it:**
+```bash
+# Watch an episode past 50% and check logs
+docker logs episeerr | grep "Processing Emby"
 ```
 
 ---
@@ -804,7 +919,10 @@ docker logs episeerr | grep "Received.*webhook" | tail -20
 - Sonarr: `http://episeerr:5002/sonarr-webhook`
 - Tautulli: `http://episeerr:5002/webhook`
 - Jellyfin: `http://episeerr:5002/jellyfin-webhook`
+- Emby: `http://episeerr:5002/emby-webhook`
 - Jellyseerr: `http://episeerr:5002/seerr-webhook`
+
+> **Configuration:** Use the `/setup` page to configure services with URLs and API keys (recommended), or use environment variables.
 
 ---
 

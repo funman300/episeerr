@@ -20,10 +20,18 @@ def get_sonarr_config():
     from episeerr_utils import normalize_url
     
     service = get_service('sonarr', 'default')
-    if service:
+    if service and service.get('url') and service.get('api_key'):
         return normalize_url(service['url']), service['api_key']
-    # Fallback to env
-    return os.getenv('SONARR_URL'), os.getenv('SONARR_API_KEY')
+    
+    # Fallback to env with empty string defaults
+    url = os.getenv('SONARR_URL', '')
+    api_key = os.getenv('SONARR_API_KEY', '')
+    
+    if not url or not api_key:
+        logger.debug("Sonarr not configured")
+        return '', ''
+    
+    return normalize_url(url), api_key
 
 def get_jellyfin_config():
     """Get Jellyfin config from database or env"""
@@ -31,10 +39,18 @@ def get_jellyfin_config():
     from episeerr_utils import normalize_url
     
     service = get_service('jellyfin', 'default')
-    if service:
+    if service and service.get('url') and service.get('api_key'):
         return normalize_url(service['url']), service['api_key']
-    # Fallback to env
-    return os.getenv('JELLYFIN_URL'), os.getenv('JELLYFIN_API_KEY')
+    
+    # Fallback to env with empty string defaults
+    url = os.getenv('JELLYFIN_URL', '')
+    api_key = os.getenv('JELLYFIN_API_KEY', '')
+    
+    if not url or not api_key:
+        logger.debug("Jellyfin not configured")
+        return '', ''
+    
+    return normalize_url(url), api_key
 
 def get_tautulli_config():
     """Get Tautulli config from database or env"""
@@ -42,19 +58,45 @@ def get_tautulli_config():
     from episeerr_utils import normalize_url
     
     service = get_service('tautulli', 'default')
-    if service:
+    if service and service.get('url') and service.get('api_key'):
         return normalize_url(service['url']), service['api_key']
-    # Fallback to env
-    return os.getenv('TAUTULLI_URL'), os.getenv('TAUTULLI_API_KEY')
+    
+    # Fallback to env with empty string defaults
+    url = os.getenv('TAUTULLI_URL', '')
+    api_key = os.getenv('TAUTULLI_API_KEY', '')
+    
+    if not url or not api_key:
+        logger.debug("Tautulli not configured")
+        return '', ''
+    
+    return normalize_url(url), api_key
 
 # Load configurations
 SONARR_URL, SONARR_API_KEY = get_sonarr_config()
 JELLYFIN_URL, JELLYFIN_API_KEY = get_jellyfin_config()
 TAUTULLI_URL, TAUTULLI_API_KEY = get_tautulli_config()
 
-# SABnzbd still uses env (not in setup page yet)
-SABNZBD_URL = os.getenv('SABNZBD_URL')
-SABNZBD_API_KEY = os.getenv('SABNZBD_API_KEY')
+def get_sabnzbd_config():
+    """Get SABnzbd config from database or env"""
+    from settings_db import get_service
+    from episeerr_utils import normalize_url
+    
+    service = get_service('sabnzbd', 'default')
+    if service and service.get('url') and service.get('api_key'):
+        return normalize_url(service['url']), service['api_key']
+    
+    # Fallback to env with empty string defaults
+    url = os.getenv('SABNZBD_URL', '')
+    api_key = os.getenv('SABNZBD_API_KEY', '')
+    
+    if not url or not api_key:
+        logger.debug("SABnzbd not configured")
+        return '', ''
+    
+    return normalize_url(url) if url else '', api_key
+
+# SABnzbd configuration
+SABNZBD_URL, SABNZBD_API_KEY = get_sabnzbd_config()
 
 def get_series_banner(series_id):
     """Get banner URL from Sonarr for series"""
@@ -84,17 +126,6 @@ def calendar_data():
         from datetime import datetime, timedelta
         import os
         import json
-        
-        # Check if Sonarr is configured
-        if not SONARR_URL or not SONARR_API_KEY:
-            return jsonify({
-                'success': False,
-                'error': 'Sonarr not configured',
-                'message': 'Please configure Sonarr in the setup page',
-                'configured': False,
-                'upcoming': [],
-                'downloaded': []
-            })
         
         today = datetime.now()
         week_ahead = today + timedelta(days=7)
@@ -282,72 +313,47 @@ def dashboard_stats():
         
         # Sonarr stats
         if SONARR_URL and SONARR_API_KEY:
-            try:
-                headers = {'X-Api-Key': SONARR_API_KEY}
-                
-                # Get series count
-                series_response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers, timeout=10)
-                series_response.raise_for_status()
-                series_data = series_response.json()
-                
-                # Get queue
-                queue_response = requests.get(f"{SONARR_URL}/api/v3/queue", headers=headers, timeout=10)
-                queue_response.raise_for_status()
-                queue_data = queue_response.json()
-                
-                total_episodes = sum(s.get('statistics', {}).get('episodeFileCount', 0) for s in series_data)
-                total_size = sum(s.get('statistics', {}).get('sizeOnDisk', 0) for s in series_data)
-                
-                stats['sonarr'] = {
-                    'series_count': len(series_data),
-                    'episode_count': total_episodes,
-                    'size_on_disk': total_size,
-                    'size_gb': round(total_size / (1024**3), 2),
-                    'queue_count': queue_data.get('totalRecords', 0),
-                    'configured': True
-                }
-            except Exception as e:
-                logger.error(f"Error fetching Sonarr stats: {e}")
-                stats['sonarr'] = {
-                    'configured': True,
-                    'error': True,
-                    'error_message': str(e)
-                }
-        else:
-            stats['sonarr'] = {'configured': False}
+            headers = {'X-Api-Key': SONARR_API_KEY}
+            
+            # Get series count
+            series_response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers, timeout=10)
+            series_data = series_response.json()
+            
+            # Get queue
+            queue_response = requests.get(f"{SONARR_URL}/api/v3/queue", headers=headers, timeout=10)
+            queue_data = queue_response.json()
+            
+            total_episodes = sum(s.get('statistics', {}).get('episodeFileCount', 0) for s in series_data)
+            total_size = sum(s.get('statistics', {}).get('sizeOnDisk', 0) for s in series_data)
+            
+            stats['sonarr'] = {
+                'series_count': len(series_data),
+                'episode_count': total_episodes,
+                'size_on_disk': total_size,
+                'size_gb': round(total_size / (1024**3), 2),
+                'queue_count': queue_data.get('totalRecords', 0)
+            }
         
         # SABnzbd stats
         if SABNZBD_URL and SABNZBD_API_KEY:
-            try:
-                sab_response = requests.get(
-                    f"{SABNZBD_URL}/api",
-                    params={
-                        'mode': 'queue',
-                        'output': 'json',
-                        'apikey': SABNZBD_API_KEY
-                    },
-                    timeout=10
-                )
-                sab_response.raise_for_status()
-                sab_data = sab_response.json()
-                
-                queue = sab_data.get('queue', {})
-                stats['sabnzbd'] = {
-                    'queue_count': queue.get('noofslots', 0),
-                    'speed': queue.get('speed', '0 B/s'),
-                    'size_left': queue.get('sizeleft', '0 B'),
-                    'paused': queue.get('paused', False),
-                    'configured': True
-                }
-            except Exception as e:
-                logger.error(f"Error fetching SABnzbd stats: {e}")
-                stats['sabnzbd'] = {
-                    'configured': True,
-                    'error': True,
-                    'error_message': str(e)
-                }
-        else:
-            stats['sabnzbd'] = {'configured': False}
+            sab_response = requests.get(
+                f"{SABNZBD_URL}/api",
+                params={
+                    'mode': 'queue',
+                    'output': 'json',
+                    'apikey': SABNZBD_API_KEY
+                },
+                timeout=10
+            )
+            sab_data = sab_response.json()
+            
+            queue = sab_data.get('queue', {})
+            stats['sabnzbd'] = {
+                'queue_count': queue.get('noofslots', 0),
+                'speed': queue.get('speed', '0 B/s'),
+                'size_left': queue.get('sizeleft', '0 B'),
+                'paused': queue.get('paused', False)
+            }
         
         # Episeerr stats
         from episeerr import load_config

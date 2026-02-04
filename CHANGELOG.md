@@ -4,10 +4,37 @@
 
 ### Planned
 - Additional UI improvements
+- integrating other services like sabnzbd, torrent apps, prowlarr, (for dashboard)  radarr - (movies tab)
 
 ---
 
 ## [Released]
+
+v3.2.0 - 2025-02-04
+🎉 New Features
+
+Setup Page: Configure services via GUI at /setup - no more manual .env editing
+Emby Support: Full webhook integration for viewing automation (joins Jellyfin, Plex/Tautulli)
+Quick Links: Auto-populated sidebar links to configured services
+
+✨ Improvements
+
+Database Configuration: All service settings stored in database with .env fallback for backward compatibility
+No .env Required: Fresh installations can configure everything through the web UI
+Graceful Degradation: Dashboard adapts when services aren't configured - no crashes
+
+🔧 Technical
+
+Helper functions return empty strings instead of None when services unconfigured
+API routes check service availability before making requests
+Setup page validates URLs and API keys before saving
+
+🔄 Migration
+
+Existing .env files continue to work - no breaking changes
+Database takes priority over .env when both present
+Use /setup page to migrate from .env to database configuration
+
 ## [3.1.3] - 2026-01-31
 fixed mobile layout
 ## [3.1.2] - 2026-01-30

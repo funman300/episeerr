@@ -4,8 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
     
-    env_file:
-      - .env
+    #env_file:
+      #- .env
     volumes:
       - ./logs:/app/logs
       - ./config:/app/config

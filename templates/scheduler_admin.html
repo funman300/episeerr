@@ -1,11 +1,21 @@
 <!-- templates/scheduler_admin.html - Enhanced with global storage gate -->
 {% extends "base.html" %}
 
-{% block title %}Scheduler Admin - OCDarr{% endblock %}
+{% block title %}Admin - Episeerr{% endblock %}
 
 
 {% block content %}
 <div class="container-fluid">
+    <!-- Note about Setup -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Looking for service connections?</strong> Configure Sonarr, Jellyfin, Emby, and other external services on the <a href="{{ url_for('setup') }}" class="alert-link">Setup page</a>.
+            </div>
+        </div>
+    </div>
+    
     <div class="row">
         <!-- Global Settings Card -->
         <div class="col-md-12 mb-4">

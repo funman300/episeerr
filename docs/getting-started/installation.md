@@ -31,24 +31,39 @@ services:
       - SONARR_API_KEY=your_sonarr_api_key
       - TMDB_API_KEY=your_tmdb_read_access_token
       
-      # Optional - Jellyfin (auto-detects mode from env vars)
-      - JELLYFIN_URL=http://your-jellyfin:8096
-      - JELLYFIN_API_KEY=your_api_key
-      - JELLYFIN_USER_ID=your_username  # Required
-
-      # Mode 1: Real-time (recommended)
-      - JELLYFIN_TRIGGER_MIN=50.0
-      - JELLYFIN_TRIGGER_MAX=55.0
-
-      # Mode 2: Polling (comment out Mode 1, use these)
+      
+      # --- Jellyfin: uncomment Option A OR Option B, not both ---
+      #
+      # Option A: Real-time (Jellyfin sends PlaybackProgress webhooks)
+      #   Configure in Jellyfin: http://<episeerr>:5002/jellyfin-webhook
+      #   Notification type: PlaybackProgress
+      #
+      # - JELLYFIN_URL=http://your-jellyfin:8096
+      # - JELLYFIN_API_KEY=your_jellyfin_api_key
+      # - JELLYFIN_USER_ID=your_username
+      # - JELLYFIN_TRIGGER_MIN=50.0
+      # - JELLYFIN_TRIGGER_MAX=55.0
+      #
+      # Option B: Polling (Jellyfin sends PlaybackStart, Episeerr polls /Sessions)
+      #   Configure in Jellyfin: http://<episeerr>:5002/jellyfin-webhook
+      #   Notification type: PlaybackStart
+      #
+      # - JELLYFIN_URL=http://your-jellyfin:8096
+      # - JELLYFIN_API_KEY=your_jellyfin_api_key
+      # - JELLYFIN_USER_ID=your_username
       # - JELLYFIN_TRIGGER_PERCENTAGE=50.0
       # - JELLYFIN_POLL_INTERVAL=900
 
-      # Mode 3: On-stop (comment out Mode 1, use this)
-      # - JELLYFIN_TRIGGER_PERCENTAGE=50.0
-
-      ## On-stop mode uses JELLYFIN_TRIGGER_PERCENTAGE
-      **Note:** System auto-detects which mode based on env vars. No manual disable needed.
+      # --- Emby: uncomment to enable ---
+      #   Configure in Emby: User Prefs → Notifications → Webhooks
+      #   URL: http://<episeerr>:5002/emby-webhook
+      #   Events: playback.start, playback.stop
+      #
+      # - EMBY_URL=http://your-emby:8096
+      # - EMBY_API_KEY=your_emby_api_key
+      # - EMBY_USER_ID=your_username
+      # - EMBY_TRIGGER_PERCENTAGE=50.0
+      # - EMBY_POLL_INTERVAL=900
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
