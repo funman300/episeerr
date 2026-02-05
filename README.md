@@ -76,7 +76,7 @@ docker-compose up -d
 # 4. Configure Sonarr, TMDB, and optional services
 # 5. Create a rule, add a series, start watching!
 ```
-
+**Restart container for changes to take effect**
 **That's it!** No `.env` file needed - configure everything via the GUI.
 
 **For automation:** [Set up webhooks](#webhook-setup) ⬇️
@@ -251,7 +251,7 @@ Create `/boot/config/plugins/community.applications/private/episeerr/my-episeerr
 **Access:** `http://your-server:5002/setup`
 
 **Configure:**
-1. **Sonarr** - URL and API key (required)
+1. **Sonarr** - URL and API key (required) **Initial setup Restart container for changes to take effect**
 2. **TMDB** - API Read Access Token (required)
 3. **Media Server** - Choose Jellyfin, Emby, or Plex/Tautulli (optional)
 4. **Overseerr/Jellyseerr** - Request integration (optional)
@@ -297,6 +297,57 @@ Create `/boot/config/plugins/community.applications/private/episeerr/my-episeerr
 - All URLs should NOT have trailing slashes
 
 ---
+Dashboard Integrations
+Overview
+Episeerr's beta plugin system allows you to connect additional services that display statistics on your dashboard. Services are configured through the Setup page and automatically appear once configured.
+Available Integrations
+
+Example, Radarr: Movie library management
+
+Displays total movies and storage usage
+Shows monitored vs total counts
+
+
+
+Setup Process
+
+Navigate to Setup: Go to the Setup page (/setup)
+Find Integration: Scroll to "Dashboard Integrations" section
+Configure Service:
+
+URL: Full service URL including http:// or https://
+API Key: Found in service settings (usually under Settings > General)
+
+
+Test Connection: Click "Test" button to verify
+Save: Click "Save" to store configuration
+Restart: Restart the Episeerr container
+Verify: Check Dashboard for new statistics pill
+Quick Link: Service link automatically appears in sidebar
+
+Important Notes
+
+Container restart required after initial configuration
+Configuration persists across restarts
+Services can be reconfigured at any time through Setup page
+Invalid configurations won't crash the dashboard - they simply won't display
+
+Creating Custom Integrations
+Advanced users can create custom integrations for any service with an API:
+
+Copy Template: Start with /integrations/_INTEGRATION_TEMPLATE.py
+Customize: Fill in service details, API calls, and widget configuration
+Save: Name file yourservice.py (no underscore prefix)
+Restart: Restart container to load new integration
+Configure: Service automatically appears in Setup page
+
+The template includes extensive documentation and examples for:
+
+Media library services (similar to Radarr)
+Download clients (qBittorrent, Transmission, etc.)
+Indexers and search services (Prowlarr, Jackett, etc.)
+Custom services with unique requirements
+
 
 ## Webhook Setup
 

@@ -1,4 +1,4 @@
-__version__ = "3.2.0"
+__version__ = "3.3.0"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -28,6 +28,8 @@ from settings_db import (
     update_service_test_result, get_all_services,
     set_setting, get_setting
 )
+# Import plugin system
+from integrations import get_integration, get_all_integrations
 
 app = Flask(__name__)
 app.register_blueprint(dashboard_bp)
@@ -98,18 +100,39 @@ formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(message)s')
 stream_handler.setFormatter(formatter)
 app.logger.addHandler(stream_handler)
 
+def reload_module_configs():
+    """Reload configuration in all modules after saving to database"""
+    try:
+        import importlib
+        import sonarr_utils
+        import media_processor
+        from routes import dashboard
+        
+        # Reload the modules to pick up new database config
+        importlib.reload(sonarr_utils)
+        importlib.reload(media_processor)
+        importlib.reload(dashboard)
+        
+        app.logger.info("Reloaded module configurations from database")
+    except Exception as e:
+        app.logger.error(f"Failed to reload module configs: {e}")
+
 def auto_add_quick_link(name, url, icon):
     """Automatically add a service to quick links if it doesn't exist"""
     from settings_db import get_all_quick_links, add_quick_link
     
-    # Check if link already exists
+    # Check if link already exists (by URL, not just name)
     existing_links = get_all_quick_links()
-    existing_names = [link['name'].lower() for link in existing_links]
     
-    # Only add if not already present
-    if name.lower() not in existing_names:
-        add_quick_link(name, url, icon)
-        app.logger.info(f"Auto-added {name} to quick links")
+    # Check both by name AND url to avoid duplicates
+    for link in existing_links:
+        if link['name'].lower() == name.lower() or link['url'] == url:
+            app.logger.debug(f"Quick link for {name} already exists, skipping")
+            return  # Already exists, don't add
+    
+    # Add new link
+    add_quick_link(name, url, icon)
+    app.logger.info(f"Auto-added {name} to quick links")
 
 @app.before_request
 def check_first_run():
@@ -129,7 +152,7 @@ def check_first_run():
 @app.route('/setup')
 def setup():
     """Service setup page"""
-    # Get all service configurations
+    # Get all service configurations (existing)
     sonarr = get_service('sonarr', 'default')
     jellyfin = get_service('jellyfin', 'default')
     emby = get_service('emby', 'default')
@@ -137,7 +160,18 @@ def setup():
     jellyseerr = get_service('jellyseerr', 'default')
     tmdb = get_service('tmdb', 'default')
     
-    # Check if setup is complete (Sonarr + at least one media server)
+    # NEW: Get integration configurations
+    integration_configs = {}
+    for integration in get_all_integrations():
+        config = get_service(integration.service_name, 'default')
+        integration_configs[integration.service_name] = {
+            'connected': config is not None,
+            'url': config['url'] if config else None,
+            'apikey': config['api_key'] if config else None,
+            'integration': integration  # Pass the integration object too
+        }
+    
+    # Check if setup is complete
     setup_complete = (sonarr and (jellyfin or emby or tautulli))
     
     # Quick links
@@ -169,20 +203,40 @@ def setup():
         jellyseerr_url=jellyseerr['url'] if jellyseerr else None,
         jellyseerr_apikey=jellyseerr['api_key'] if jellyseerr else None,
         tmdb_connected=tmdb is not None,
-        tmdb_apikey=tmdb['api_key'] if tmdb else None
+        tmdb_apikey=tmdb['api_key'] if tmdb else None,
+        # NEW: Pass integration configs
+        integrations=get_all_integrations(),
+        integration_configs=integration_configs,
+        quick_links=quick_links
     )
 
 @app.route('/api/test-connection/<service>', methods=['POST'])
 def test_connection(service):
     """Test connection to a service"""
-    print(f"\n[TEST CONNECTION] Service: {service}")
-    print(f"[TEST CONNECTION] Content-Type: {request.headers.get('Content-Type')}")
-    print(f"[TEST CONNECTION] Raw data: {request.data}")
-    
     data = request.json
-    print(f"[TEST CONNECTION] Parsed JSON: {data}")
     
     try:
+        # NEW: Check if it's a plugin integration FIRST
+        integration = get_integration(service)
+        if integration:
+            url = data.get(f'{service}-url')
+            api_key = data.get(f'{service}-apikey')
+            
+            if not url or not api_key:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'URL and API key are required'
+                }), 400
+            
+            # Call the integration's test method
+            success, message = integration.test_connection(url, api_key)
+            
+            if success:
+                update_service_test_result(service, 'default', 'success')
+                return jsonify({'status': 'success', 'message': message})
+            else:
+                update_service_test_result(service, 'default', 'failed')
+                return jsonify({'status': 'error', 'message': message}), 400
         if service == 'sonarr':
             url = data.get('sonarr-url')
             api_key = data.get('sonarr-apikey')
@@ -274,11 +328,18 @@ def test_connection(service):
                     'status': 'success',
                     'message': 'TMDB API key is valid'
                 })
-        
+            else:
+                update_service_test_result('tmdb', 'default', 'failed')  # Add this
+                return jsonify({
+                    'status': 'error',
+                    'message': f'TMDB returned status {response.status_code}'  # Fixed!
+                }), 400
+            
+        # If we get here, service wasn't recognized or connection failed
         update_service_test_result(service, 'default', 'failed')
         return jsonify({
             'status': 'error',
-            'message': f'Connection failed: {response.status_code}'
+            'message': f'Service {service} not configured or connection failed'
         }), 400
     
     except requests.exceptions.Timeout:
@@ -321,12 +382,42 @@ def save_service_config(service):
     data = request.json
     
     try:
+        # NEW: Check if it's a plugin integration FIRST
+        integration = get_integration(service)
+        if integration:
+            url = data.get(f'{service}-url')
+            api_key = data.get(f'{service}-apikey')
+            
+            if not url or not api_key:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'URL and API key are required'
+                }), 400
+            
+            # Save to database
+            save_service(service, 'default', url, api_key)
+            
+            # Call integration's on_save hook (adds to quick links)
+            integration.on_save(url, api_key)
+            
+            # Reload configs so they work immediately
+            reload_module_configs()  # ← ADD THIS LINE
+            
+            return jsonify({
+                'status': 'success',
+                'message': f'{integration.display_name} saved successfully'
+            })
         if service == 'sonarr':
             save_service('sonarr', 'default', 
                         data.get('sonarr-url'),
                         data.get('sonarr-apikey'))
             # Auto-add to quick links
             auto_add_quick_link('Sonarr', data.get('sonarr-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/sonarr.png')
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Sonarr saved successfully. Please restart the container for changes to take effect.'
+            })
         
         elif service == 'jellyfin':
             config = {
@@ -375,6 +466,9 @@ def save_service_config(service):
             save_service('tmdb', 'default',
                         'https://api.themoviedb.org',
                         data.get('tmdb-apikey'))
+        
+        # Reload configs so they work immediately (for Sonarr, Jellyfin, etc.)
+        reload_module_configs()  # ← ADD THIS LINE
         
         return jsonify({
             'status': 'success',

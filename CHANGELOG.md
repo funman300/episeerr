@@ -4,11 +4,41 @@
 
 ### Planned
 - Additional UI improvements
-- integrating other services like sabnzbd, torrent apps, prowlarr, (for dashboard)  radarr - (movies tab)
+
 
 ---
 
 ## [Released]
+v3.3.0 - 2025-02-05
+🔌 Plugin System **consider this feature beta***
+
+Dashboard Integrations: Connect additional services to display stats on dashboard
+
+Auto-discovery system - drop in integration file and restart
+Integrated setup in Setup page with connection testing
+Automatic quick links generation when services are configured
+
+
+Initial Integrations: Radarr Sabnzbd and Prowlarr support included
+Extensible: Template provided for creating custom integrations (integrations/_INTEGRATION_TEMPLATE.py)
+
+✨ Improvements
+
+Simplified setup flow - configure services through web UI with instant validation
+Dashboard pills auto-generate from configured integrations
+Quick links automatically appear in sidebar when services are connected
+
+📝 Setup Notes
+
+First-time setup: Restart container after configuring services for changes to take effect
+Configuration persists across restarts once set
+Existing configurations remain compatible
+
+🔧 Technical
+
+Plugin architecture with base class and standardized methods
+Metadata-driven UI generation (no template editing required)
+Database storage for all service configurations
 
 v3.2.0 - 2025-02-04
 🎉 New Features

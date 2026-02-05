@@ -1,0 +1,435 @@
+# integrations/_INTEGRATION_TEMPLATE.py
+"""
+Integration Template for Episeerr
+==================================
+
+⚠️ IMPORTANT: This file starts with underscore (_) so it won't be loaded as an integration!
+
+To create a new integration:
+1. Copy this file
+2. Rename it WITHOUT the underscore (e.g., lidarr.py, qbittorrent.py)
+3. Fill in the sections below
+4. Restart Episeerr
+
+Your integration will automatically appear in:
+- Setup page (for configuration)
+- Dashboard (if you enable the widget)
+- Quick links (if configured)
+"""
+
+from integrations.base import ServiceIntegration
+from typing import Dict, Any, Optional, Tuple
+import requests
+
+
+class YourServiceIntegration(ServiceIntegration):
+    """
+    Integration for [Your Service Name]
+    
+    Replace "YourService" with your actual service name (e.g., LidarrIntegration)
+    """
+    
+    # ==========================================
+    # REQUIRED: Basic Service Information
+    # ==========================================
+    
+    @property
+    def service_name(self) -> str:
+        """
+        Internal identifier (lowercase, no spaces)
+        Used in config keys, API endpoints, HTML IDs
+        
+        Examples: 'lidarr', 'qbittorrent', 'prowlarr'
+        """
+        return 'yourservice'
+    
+    @property
+    def display_name(self) -> str:
+        """
+        Human-readable name shown in UI
+        
+        Examples: 'Lidarr', 'qBittorrent', 'Prowlarr'
+        """
+        return 'Your Service'
+    
+    @property
+    def icon(self) -> str:
+        """
+        Icon URL (preferably from CDN)
+        
+        Find icons at: https://github.com/walkxcode/dashboard-icons
+        Format: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/{service}.png
+        """
+        return 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/yourservice.png'
+    
+    @property
+    def description(self) -> str:
+        """
+        Short description shown in setup page
+        
+        Examples: 
+        - 'Music library management and stats'
+        - 'Torrent client statistics'
+        - 'Indexer management'
+        """
+        return 'Brief description of what this integration provides'
+    
+    @property
+    def category(self) -> str:
+        """
+        Integration category
+        
+        Options:
+        - 'dashboard': Shows stats on dashboard (Radarr, Lidarr, qBittorrent)
+        - 'notification': Sends notifications (Discord, Telegram, Pushover)
+        - 'utility': Other functionality
+        """
+        return 'dashboard'
+    
+    @property
+    def default_port(self) -> int:
+        """
+        Default port for this service
+        
+        Common ports:
+        - Lidarr: 8686
+        - Readarr: 8787
+        - Prowlarr: 9696
+        - qBittorrent: 8080
+        - Transmission: 9091
+        """
+        return 8080
+    
+    # ==========================================
+    # REQUIRED: Connection Testing
+    # ==========================================
+    
+    def test_connection(self, url: str, api_key: str) -> Tuple[bool, str]:
+        """
+        Test if we can connect to the service
+        
+        Args:
+            url: Full service URL (e.g., 'http://localhost:8686')
+            api_key: API key for authentication
+        
+        Returns:
+            Tuple of (success: bool, message: str)
+            
+        Examples:
+            return True, "Connected to Lidarr v1.2.3"
+            return False, "Connection failed: Invalid API key"
+        """
+        try:
+            # Example: Test connection using service API
+            headers = {'X-Api-Key': api_key}
+            response = requests.get(
+                f'{url}/api/v1/system/status',  # Adjust endpoint for your service
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                version = data.get('version', 'unknown')
+                return True, f"Connected to {self.display_name} v{version}"
+            elif response.status_code == 401:
+                return False, "Authentication failed - check API key"
+            else:
+                return False, f"Connection failed with status {response.status_code}"
+                
+        except requests.exceptions.Timeout:
+            return False, "Connection timeout - check URL and network"
+        except requests.exceptions.ConnectionError:
+            return False, "Cannot reach service - check URL and that service is running"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+    
+    # ==========================================
+    # REQUIRED: Dashboard Statistics
+    # ==========================================
+    
+    def get_dashboard_stats(self, url: str, api_key: str) -> Dict[str, Any]:
+        """
+        Fetch statistics to display on dashboard
+        
+        Args:
+            url: Service URL
+            api_key: API key for authentication
+        
+        Returns:
+            Dictionary with stats. Must include:
+            - configured: bool (always True if this is called)
+            - Any other fields you want to display
+        
+        Return whatever makes sense for YOUR service!
+        The fields you return here will be used in get_dashboard_widget() template.
+        """
+        try:
+            headers = {'X-Api-Key': api_key}
+            
+            # Example: Fetch stats from service API
+            response = requests.get(
+                f'{url}/api/v1/status',  # Adjust endpoint
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Return whatever stats make sense for your service
+                # These field names are up to you!
+                return {
+                    'configured': True,
+                    'some_count': data.get('count', 0),
+                    'some_status': data.get('status', 'unknown')
+                }
+            else:
+                return {
+                    'configured': True,
+                    'error': f'HTTP {response.status_code}'
+                }
+            
+        except Exception as e:
+            return {
+                'configured': True,
+                'error': str(e)
+            }
+    
+    # ==========================================
+    # REQUIRED: Dashboard Widget Configuration
+    # ==========================================
+    
+    def get_dashboard_widget(self) -> Dict[str, Any]:
+        """
+        ⚠️ REQUIRED FOR DASHBOARD DISPLAY ⚠️
+        
+        Define how this service appears on the dashboard pill.
+        Without this returning enabled=True, nothing shows on dashboard!
+        
+        The 'template' field uses {field_name} syntax to reference 
+        fields from get_dashboard_stats() return value.
+        
+        Icon classes (Font Awesome 6):
+        - fas fa-music (music)
+        - fas fa-video (video)
+        - fas fa-book (books)
+        - fas fa-download (downloads)
+        - fas fa-search (search)
+        - fas fa-server (servers)
+        
+        Icon colors:
+        - text-primary (blue)
+        - text-success (green)
+        - text-info (cyan)
+        - text-warning (yellow)
+        - text-danger (red)
+        
+        See examples below!
+        """
+        return {
+            'enabled': True,  # Set to False to hide from dashboard
+            'pill': {
+                'icon': 'fas fa-circle',  # Choose icon
+                'icon_color': 'text-info',  # Choose color
+                'template': '{some_count} items',  # Must match get_dashboard_stats() fields
+                'fields': ['some_count']  # List all fields used in template
+            }
+        }
+    
+    # ==========================================
+    # OPTIONAL: Custom Setup Fields
+    # ==========================================
+    
+    def get_setup_fields(self) -> list:
+        """
+        Optional: Override this only if you need different fields than URL + API Key
+        
+        Return None to use the default (URL and API Key fields)
+        """
+        return None
+
+
+# ==========================================
+# REQUIRED: Export Integration Instance
+# ==========================================
+
+integration = YourServiceIntegration()
+
+
+# ==========================================
+# REAL-WORLD EXAMPLES
+# ==========================================
+"""
+Pick the example closest to your service type and adapt it!
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 1: Media Library (*arr apps - Lidarr, Readarr, etc.)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Best for: Apps that manage collections of items with storage
+
+def get_dashboard_stats(self, url, api_key):
+    try:
+        headers = {'X-Api-Key': api_key}
+        
+        # Get items (artists, books, comics, etc.)
+        response = requests.get(f'{url}/api/v1/artist', headers=headers, timeout=10)
+        items = response.json() if response.status_code == 200 else []
+        
+        # Calculate stats
+        total = len(items)
+        size_gb = sum(item.get('statistics', {}).get('sizeOnDisk', 0) for item in items) / (1024**3)
+        
+        return {
+            'configured': True,
+            'total_items': total,
+            'size_gb': round(size_gb, 1)
+        }
+    except Exception as e:
+        return {'configured': True, 'error': str(e)}
+
+def get_dashboard_widget(self):
+    return {
+        'enabled': True,
+        'pill': {
+            'icon': 'fas fa-music',  # or fa-book, fa-image
+            'icon_color': 'text-success',
+            'template': '{total_items} artists ({size_gb} GB)',
+            'fields': ['total_items', 'size_gb']
+        }
+    }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 2: Download Client (qBittorrent, Transmission, etc.)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Best for: Active download monitoring with speed stats
+
+def get_dashboard_stats(self, url, api_key):
+    try:
+        response = requests.get(
+            f'{url}/api/v2/torrents/info',
+            headers={'X-Api-Key': api_key},
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            torrents = response.json()
+            active = [t for t in torrents if t.get('state') in ['downloading', 'uploading']]
+            
+            # Speed in MB/s
+            dl_speed = sum(t.get('dlspeed', 0) for t in torrents) / (1024**2)
+            
+            return {
+                'configured': True,
+                'active': len(active),
+                'total': len(torrents),
+                'speed_mb': round(dl_speed, 1)
+            }
+        return {'configured': True, 'error': 'Failed to fetch'}
+    except Exception as e:
+        return {'configured': True, 'error': str(e)}
+
+def get_dashboard_widget(self):
+    return {
+        'enabled': True,
+        'pill': {
+            'icon': 'fas fa-download',
+            'icon_color': 'text-info',
+            'template': '{active}/{total} active (↓{speed_mb} MB/s)',
+            'fields': ['active', 'total', 'speed_mb']
+        }
+    }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 3: Indexer/Search (Prowlarr, Jackett, etc.)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Best for: Services managing multiple sources/indexers
+
+def get_dashboard_stats(self, url, api_key):
+    try:
+        headers = {'X-Api-Key': api_key}
+        response = requests.get(f'{url}/api/v1/indexer', headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            indexers = response.json()
+            enabled = sum(1 for idx in indexers if idx.get('enable', False))
+            
+            return {
+                'configured': True,
+                'total': len(indexers),
+                'enabled': enabled
+            }
+        return {'configured': True, 'error': 'Failed to fetch'}
+    except Exception as e:
+        return {'configured': True, 'error': str(e)}
+
+def get_dashboard_widget(self):
+    return {
+        'enabled': True,
+        'pill': {
+            'icon': 'fas fa-search',
+            'icon_color': 'text-warning',
+            'template': '{enabled}/{total} indexers',
+            'fields': ['enabled', 'total']
+        }
+    }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 4: Simple Status (Services with limited APIs)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Best for: Just showing online/offline status
+
+def get_dashboard_stats(self, url, api_key):
+    try:
+        response = requests.get(f'{url}/health', timeout=10)
+        status = 'online' if response.status_code == 200 else 'offline'
+        
+        return {
+            'configured': True,
+            'status': status
+        }
+    except Exception as e:
+        return {'configured': True, 'status': 'error'}
+
+def get_dashboard_widget(self):
+    return {
+        'enabled': True,
+        'pill': {
+            'icon': 'fas fa-circle',
+            'icon_color': 'text-success',
+            'template': '{status}',
+            'fields': ['status']
+        }
+    }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KEY POINTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ get_dashboard_stats() returns any fields you want
+   - No strict format beyond 'configured': True
+   - Name your fields whatever makes sense
+
+✅ get_dashboard_widget() template uses {field_name} syntax
+   - Fields must match what you return in get_dashboard_stats()
+   - Keep it simple - show what users care about
+
+✅ Start simple, add complexity later
+   - Get test_connection() working first
+   - Add basic stats
+   - Polish the display
+
+❌ Don't use this for complex visualizations
+   - Dashboard pills are for quick stats only
+   - If you need charts/graphs, this isn't the right tool
+   - Use dedicated dashboarding solutions (Grafana, etc.)
+"""

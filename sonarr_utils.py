@@ -51,7 +51,7 @@ def get_emby_settings():
 
 # Configuration settings - DB first, fallback to .env
 SONARR_URL, SONARR_API_KEY = get_sonarr_settings()
-MAX_SHOWS_ITEMS = int(os.getenv('MAX_SHOWS_ITEMS', 24))
+#MAX_SHOWS_ITEMS = int(os.getenv('MAX_SHOWS_ITEMS', 24))
 
 # Setup logging
 logger = logging.getLogger()
@@ -62,6 +62,8 @@ def load_preferences():
     Load preferences for Sonarr configuration.
     Returns a dictionary containing Sonarr URL and API key.
     """
+    # Fetch fresh from database each time
+    SONARR_URL, SONARR_API_KEY = get_sonarr_settings()
     return {'SONARR_URL': SONARR_URL, 'SONARR_API_KEY': SONARR_API_KEY}
 
 def get_series_list(preferences):

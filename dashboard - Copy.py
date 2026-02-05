@@ -53,6 +53,10 @@ SONARR_URL, SONARR_API_KEY = get_sonarr_config()
 JELLYFIN_URL, JELLYFIN_API_KEY = get_jellyfin_config()
 TAUTULLI_URL, TAUTULLI_API_KEY = get_tautulli_config()
 
+# SABnzbd still uses env (not in setup page yet)
+SABNZBD_URL = os.getenv('SABNZBD_URL')
+SABNZBD_API_KEY = os.getenv('SABNZBD_API_KEY')
+
 
 def get_series_banner(series_id):
     """Get banner URL from Sonarr for series"""
@@ -272,24 +276,7 @@ def calendar_data():
             'downloaded': []
         }), 500
 
-@dashboard_bp.route('/api/dashboard/integrations')
-def dashboard_integrations():
-    """Get metadata for all integrations (for auto-generating UI)"""
-    from integrations import get_all_integrations
-    
-    integrations_data = []
-    for integration in get_all_integrations():
-        integrations_data.append({
-            'service_name': integration.service_name,
-            'display_name': integration.display_name,
-            'icon': integration.icon,
-            'widget': integration.get_dashboard_widget()
-        })
-    
-    return jsonify({
-        'success': True,
-        'integrations': integrations_data
-    })
+
 
 @dashboard_bp.route('/api/dashboard/stats')
 def dashboard_stats():
@@ -333,7 +320,38 @@ def dashboard_stats():
         else:
             stats['sonarr'] = {'configured': False}
         
-        
+        # SABnzbd stats
+        if SABNZBD_URL and SABNZBD_API_KEY:
+            try:
+                sab_response = requests.get(
+                    f"{SABNZBD_URL}/api",
+                    params={
+                        'mode': 'queue',
+                        'output': 'json',
+                        'apikey': SABNZBD_API_KEY
+                    },
+                    timeout=10
+                )
+                sab_response.raise_for_status()
+                sab_data = sab_response.json()
+                
+                queue = sab_data.get('queue', {})
+                stats['sabnzbd'] = {
+                    'queue_count': queue.get('noofslots', 0),
+                    'speed': queue.get('speed', '0 B/s'),
+                    'size_left': queue.get('sizeleft', '0 B'),
+                    'paused': queue.get('paused', False),
+                    'configured': True
+                }
+            except Exception as e:
+                logger.error(f"Error fetching SABnzbd stats: {e}")
+                stats['sabnzbd'] = {
+                    'configured': True,
+                    'error': True,
+                    'error_message': str(e)
+                }
+        else:
+            stats['sabnzbd'] = {'configured': False}
         
         # Auto-collect stats from all integrations (plugins)
         for integration in get_all_integrations():
