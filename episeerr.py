@@ -1,4 +1,4 @@
-__version__ = "3.3.0"
+__version__ = "3.3.1"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -3783,15 +3783,26 @@ def handle_episode_grab(json_data):
             else:
                 downloads = []
             
-            downloads.append(download_event)
-            
             # Auto-cleanup: keep only last 7 days
             cutoff = datetime.now() - timedelta(days=7)
             downloads = [
                 d for d in downloads 
                 if datetime.fromisoformat(d['timestamp']) > cutoff
             ]
-            
+
+            # Remove any existing entry for this episode before adding new one
+            episode_key = (download_event['series_id'], download_event['season'], download_event['episode'])
+            downloads = [
+                d for d in downloads 
+                if (d['series_id'], d['season'], d['episode']) != episode_key
+            ]
+
+            # Add new download at the front
+            downloads.insert(0, download_event)
+
+            # Keep only 50 most recent (optional limit)
+            downloads = downloads[:50]
+
             with open(downloads_file, 'w') as f:
                 json.dump(downloads, f, indent=2)
                 

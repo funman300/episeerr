@@ -9,6 +9,10 @@
 ---
 
 ## [Released]
+v3.3.1 - 2025-02-06
+cosmetic fixes
+removed duplicate recently downloaded on dashboard
+
 v3.3.0 - 2025-02-05
 🔌 Plugin System **consider this feature beta***
 

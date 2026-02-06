@@ -54,11 +54,8 @@ JELLYSEERR_API_KEY=your_jellyseerr_key
 OVERSEERR_URL=http://your-overseerr:5055
 OVERSEERR_API_KEY=your_overseerr_key
       
-# Optional - Tag creation (defaults to false)
-EPISEERR_AUTO_CREATE_TAGS=false
-      
 
-LOG_PATH=logs/app.log
-FLASK_DEBUG=false
+
+
 
 
