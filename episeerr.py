@@ -1,4 +1,4 @@
-__version__ = "3.3.1"
+__version__ = "3.3.2"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -21,6 +21,7 @@ import requests
 import episeerr_utils
 from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID, normalize_url
 import pending_deletions
+from logging_config import main_logger as logger
 from dashboard import dashboard_bp
 import media_processor
 from settings_db import (
@@ -73,32 +74,6 @@ os.makedirs(os.path.dirname(LAST_PROCESSED_FILE), exist_ok=True)
 LAST_PROCESSED_JELLYFIN_EPISODES = {}
 LAST_PROCESSED_LOCK = Lock()
 
-# Setup logging
-log_file = os.getenv('LOG_PATH', os.path.join(os.getcwd(), 'logs', 'app.log'))
-log_level = logging.INFO
-os.makedirs(os.path.dirname(log_file), exist_ok=True)
-
-file_handler = RotatingFileHandler(
-    log_file,
-    maxBytes=1*1024*1024,
-    backupCount=2,
-    encoding='utf-8'
-)
-file_handler.setLevel(log_level)
-file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(file_formatter)
-
-logging.basicConfig(
-    level=log_level,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[file_handler]
-)
-
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.DEBUG if os.getenv('FLASK_DEBUG', 'false').lower() == 'true' else logging.INFO)
-formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(message)s')
-stream_handler.setFormatter(formatter)
-app.logger.addHandler(stream_handler)
 
 def reload_module_configs():
     """Reload configuration in all modules after saving to database"""

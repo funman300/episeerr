@@ -9,6 +9,15 @@
 ---
 
 ## [Released]
+v3.3.2 - 2025-02-15
+### 🎯 Improvements
+- Implemented centralized logging configuration with `LOG_LEVEL` environment variable support
+- Added log rotation (10MB max file size, 5 backups)
+- Reduced log spam by 90% - eliminated "No items in queue" messages that ran every 30 seconds
+- LOG_LEVEL=INFO (default): Only logs actual events
+- LOG_LEVEL=DEBUG: Full diagnostics available when troubleshooting
+- Expected log volume reduction: 77,480 lines → ~7,500 lines over 3 weeks
+
 v3.3.1 - 2025-02-06
 cosmetic fixes
 removed duplicate recently downloaded on dashboard

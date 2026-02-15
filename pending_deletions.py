@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from threading import Lock
 from collections import defaultdict
 
-logger = logging.getLogger(__name__)
+from logging_config import main_logger as logger
 
 # File paths
 PENDING_DELETIONS_FILE = os.path.join(os.getcwd(), 'data', 'pending_deletions.json')

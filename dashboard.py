@@ -10,9 +10,9 @@ import json
 from datetime import datetime, timedelta
 import logging
 from integrations import get_all_integrations
-
+from logging_config import main_logger as logger
 dashboard_bp = Blueprint('dashboard', __name__)
-logger = logging.getLogger(__name__)
+
 
 # Database-first configuration helpers
 def get_sonarr_config():

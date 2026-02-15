@@ -102,6 +102,8 @@ services:
     image: vansmak/episeerr:latest
     container_name: episeerr
     environment:
+      
+      - LOG_LEVEL=INFO  # Optional - defaults to INFO if not set
       # ============================================
       # REQUIRED
       # ============================================
@@ -118,7 +120,7 @@ services:
       - TAUTULLI_API_KEY=your_tautulli_key
       
       # Option 2: Jellyfin (choose one mode below)
-      environment:
+      
       # --- Jellyfin: uncomment Option A OR Option B, not both ---
       #
       # Option A: Real-time (Jellyfin sends PlaybackProgress webhooks)

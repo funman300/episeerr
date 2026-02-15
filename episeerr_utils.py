@@ -8,6 +8,7 @@ import logging
 import threading
 import re
 from logging.handlers import RotatingFileHandler
+from logging_config import main_logger as logger
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -63,31 +64,6 @@ def get_emby_settings():
 
 # In modified_episeerr.py
 REQUESTS_DIR = os.path.join(os.getcwd(), 'requests')
-# Create logs directory in the current working directory
-log_dir = os.path.join(os.getcwd(), 'logs')
-os.makedirs(log_dir, exist_ok=True)
-log_file = os.path.join(log_dir, 'episeerr.log')# Create logger
-logger = logging.getLogger("episeerr")
-logger.setLevel(logging.DEBUG)
-# Clear any existing handlers
-logger.handlers.clear()
-# Create rotating file handler
-file_handler = RotatingFileHandler(
-    log_file, 
-    maxBytes=10*1024*1024,  # 10 MB
-    backupCount=1,  # Keep one backup file
-    encoding='utf-8'
-)
-file_handler.setLevel(logging.DEBUG)
-file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(file_formatter)
-# Create console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(file_formatter)
-# Add handlers to logger
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
 
 
 # Sonarr connection details - DB first, fallback to .env
@@ -1272,9 +1248,6 @@ def check_and_cancel_unmonitored_downloads():
         queue = queue_response.json().get('records', [])
         logger.info(f"Total queue items: {len(queue)}")
         
-        if len(queue) == 0:
-            logger.info("No items in queue to process")
-            return
             
         # Track cancelled items
         cancelled_count = 0

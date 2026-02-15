@@ -16,4 +16,5 @@ services:
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
     
