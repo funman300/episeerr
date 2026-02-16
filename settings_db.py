@@ -245,49 +245,81 @@ def get_jellyfin_config() -> Optional[Dict[str, Any]]:
     """Get Jellyfin config from DB or env"""
     service = get_service('jellyfin', 'default')
     if service and service.get('config'):
-        return {
-            'url': service['url'],
-            'api_key': service['api_key'],
-            'user_id': service['config'].get('user_id'),
-            'method': service['config'].get('method', 'progress'),
-            'trigger_min': service['config'].get('trigger_min', 50.0),
-            'trigger_max': service['config'].get('trigger_max', 55.0),
-            'poll_interval': service['config'].get('poll_interval', 900)
-        }
+        config = service['config']
+        method = config.get('method', 'polling')  # Default to polling mode
+        
+        # Handle both old (trigger_min/max) and new (trigger_percent) field names
+        if method == 'polling':
+            trigger_percent = config.get('trigger_percentage', config.get('trigger_percent', 50.0))
+            return {
+                'url': service['url'],
+                'api_key': service['api_key'],
+                'user_id': config.get('user_id'),
+                'method': 'polling',
+                'poll_interval': config.get('poll_interval', 900),
+                'trigger_percentage': trigger_percent,
+                'trigger_percent': trigger_percent  # Alias for backward compat
+            }
+        else:  # progress mode
+            return {
+                'url': service['url'],
+                'api_key': service['api_key'],
+                'user_id': config.get('user_id'),
+                'method': 'progress',
+                'trigger_min': config.get('trigger_min', 50.0),
+                'trigger_max': config.get('trigger_max', 55.0)
+            }
     
     # Fallback to env
     if os.getenv('JELLYFIN_URL'):
-        return {
+        method = 'progress' if os.getenv('JELLYFIN_TRIGGER_MIN') else 'polling'
+        base_config = {
             'url': os.getenv('JELLYFIN_URL'),
             'api_key': os.getenv('JELLYFIN_API_KEY'),
             'user_id': os.getenv('JELLYFIN_USER_ID'),
-            'method': 'progress' if os.getenv('JELLYFIN_TRIGGER_MIN') else 'polling',
-            'trigger_min': float(os.getenv('JELLYFIN_TRIGGER_MIN', '50.0')),
-            'trigger_max': float(os.getenv('JELLYFIN_TRIGGER_MAX', '55.0')),
-            'poll_interval': int(os.getenv('JELLYFIN_POLL_INTERVAL', '900'))
+            'method': method
         }
+        
+        if method == 'polling':
+            base_config.update({
+                'poll_interval': int(os.getenv('JELLYFIN_POLL_INTERVAL', '900')),
+                'trigger_percentage': float(os.getenv('JELLYFIN_TRIGGER_PERCENTAGE', os.getenv('JELLYFIN_TRIGGER_PERCENT', '50.0')))
+            })
+        else:
+            base_config.update({
+                'trigger_min': float(os.getenv('JELLYFIN_TRIGGER_MIN', '50.0')),
+                'trigger_max': float(os.getenv('JELLYFIN_TRIGGER_MAX', '55.0'))
+            })
+        
+        return base_config
     return None
 
 def get_emby_config() -> Optional[Dict[str, Any]]:
     """Get Emby config from DB or env"""
     service = get_service('emby', 'default')
     if service and service.get('config'):
+        config = service['config']
+        # Handle both trigger_percentage and trigger_percent field names
+        trigger = config.get('trigger_percentage', config.get('trigger_percent', 50.0))
         return {
             'url': service['url'],
             'api_key': service['api_key'],
-            'user_id': service['config'].get('user_id'),
-            'poll_interval': service['config'].get('poll_interval', 900),
-            'trigger_percentage': service['config'].get('trigger_percentage', 50.0)
+            'user_id': config.get('user_id'),
+            'poll_interval': config.get('poll_interval', 900),
+            'trigger_percentage': trigger,
+            'trigger_percent': trigger  # Alias for backward compat
         }
     
     # Fallback to env
     if os.getenv('EMBY_URL'):
+        trigger = float(os.getenv('EMBY_TRIGGER_PERCENTAGE', os.getenv('EMBY_TRIGGER_PERCENT', '50.0')))
         return {
             'url': os.getenv('EMBY_URL'),
             'api_key': os.getenv('EMBY_API_KEY'),
             'user_id': os.getenv('EMBY_USER_ID'),
             'poll_interval': int(os.getenv('EMBY_POLL_INTERVAL', '900')),
-            'trigger_percentage': float(os.getenv('EMBY_TRIGGER_PERCENTAGE', '50.0'))
+            'trigger_percentage': trigger,
+            'trigger_percent': trigger
         }
     return None
 
