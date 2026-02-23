@@ -4,7 +4,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import logging
 from episeerr_utils import normalize_url
-from logging_config import main_logger as logger
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -54,7 +54,7 @@ SONARR_URL, SONARR_API_KEY = get_sonarr_settings()
 #MAX_SHOWS_ITEMS = int(os.getenv('MAX_SHOWS_ITEMS', 24))
 
 # Setup logging
-
+logger = logging.getLogger()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def load_preferences():

@@ -1,41 +1,34 @@
 # Changelog
 
-## [Unreleased]
+## [Unreleased / Dev]
 
-### Planned
-- Additional UI improvements
+### v3.3.4 - 2025-02-22
+- **Always Have** — new rule parameter with expression syntax for episodes that should always be present and protected from cleanup
+  - Expression examples: `s1` (full season), `s1e1` (pilot), `s1, s*e1` (showcase — season 1 + first ep of every other season), `s1-3` (season range)
+  - Processes on rule assignment (new series or reassignment) — monitors and searches matching episodes
+  - Protected from Grace and Keep cleanup; only Dormant overrides it
+  - Works alongside Get/Keep/Grace independently
+- **Series page selection** — list icon on every poster (grid) and table row launches the selection flow for any existing series; grab specific seasons/episodes or just change the rule without touching Sonarr tags
+- **Plex integration** — watchlist sync, now-playing widget
+  - TV shows added to Plex watchlist create a pending selection request
+  - Movies go straight to Radarr
+  - Optional movie cleanup: delete from Radarr after watched + grace period
+  - Sync settings integrated into existing Plex Save button on Setup page
+- **Plex/Spotify now-playing widgets** on dashboard
+- **Rule picker on selection page** — dropdown pre-selects the show's current rule; Apply to reassign only (no processing), or pick episodes manually and still assign a rule for ongoing management
+- **Plex token helper script** (`get_plex_token.py`)
 
+### Fixes
+- Rule reassignment now removes series from old rule before adding to new one
+- Rule assignment is purely additive — never unmonitors or deletes existing episodes when reassigning
+- Duplicate pending request check — reuses existing request if series already queued
+- Cancel on selection page deletes the pending request before navigating back
+- Stat pills unassigned count no longer goes negative when stale config entries exist for deleted series
+- After selection flow, lands on Rules page instead of index
+- Plex watchlist fetch includes `includeGuids=1` for TMDB/TVDB ID resolution
+- Watchlist sync skips shows already in Episeerr config or with pending selection requests
 
----
-
-## [Released] v3.3.3 - 2025-02-15
-
-### 🎯 Improvements
-- **Jellyfin Detection Method Overhaul**: Changed default from PlaybackProgress (webhook spam) to Webhook-Triggered Polling for better performance
-  - Added dual detection mode UI with clear explanations
-  - Polling mode: webhook fires on playback start, then polls only that session every 15 min
-  - Progress mode: real-time webhook spam (advanced users only)
-  - Added webhook setup instructions for both modes
-- **Emby Polling Improvements**: Increased default poll interval from 5 seconds to 900 seconds (15 min) to prevent server overload
-  - Added minimum enforcement: 300 seconds (5 min)
-  - Updated UI descriptions to clarify webhook-triggered polling workflow
-- **Database Optimization**: Form handler now only saves method-specific fields instead of all fields regardless of mode
-- **Three Processing Paths**: Polling catches threshold during checks, PlaybackStop acts as safety net for edge cases, session end handles natural cleanup
-
-### 🔧 Technical Changes
-- Updated `save_service_config()` to read `jellyfin-method` field and save conditionally based on selected mode
-- Enhanced `get_jellyfin_config()` and `get_emby_config()` to handle field name variations for backward compatibility
-- Added JavaScript toggle for Jellyfin detection method settings visibility
-- Setup route now passes `jellyfin_method` variable to template for proper form state restoration
-v3.3.2 - 2025-02-15
-### 🎯 Improvements
-- Implemented centralized logging configuration with `LOG_LEVEL` environment variable support
-- Added log rotation (10MB max file size, 5 backups)
-- Reduced log spam by 90% - eliminated "No items in queue" messages that ran every 30 seconds
-- LOG_LEVEL=INFO (default): Only logs actual events
-- LOG_LEVEL=DEBUG: Full diagnostics available when troubleshooting
-- Expected log volume reduction: 77,480 lines → ~7,500 lines over 3 weeks
-
+## [Released]
 v3.3.1 - 2025-02-06
 cosmetic fixes
 removed duplicate recently downloaded on dashboard

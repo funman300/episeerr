@@ -8,9 +8,8 @@ import logging
 import threading
 import re
 from logging.handlers import RotatingFileHandler
-from logging_config import main_logger as logger
 from dotenv import load_dotenv
-
+from logging_config import main_logger as logger
 # Load environment variables
 load_dotenv()
 
@@ -64,6 +63,7 @@ def get_emby_settings():
 
 # In modified_episeerr.py
 REQUESTS_DIR = os.path.join(os.getcwd(), 'requests')
+
 
 
 # Sonarr connection details - DB first, fallback to .env
@@ -1248,6 +1248,9 @@ def check_and_cancel_unmonitored_downloads():
         queue = queue_response.json().get('records', [])
         logger.info(f"Total queue items: {len(queue)}")
         
+        if len(queue) == 0:
+            logger.info("No items in queue to process")
+            return
             
         # Track cancelled items
         cancelled_count = 0

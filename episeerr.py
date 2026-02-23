@@ -1,4 +1,4 @@
-__version__ = "3.3.3"
+__version__ = "3.3.4"
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import subprocess
 import os
@@ -21,7 +21,6 @@ import requests
 import episeerr_utils
 from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID, normalize_url
 import pending_deletions
-from logging_config import main_logger as logger
 from dashboard import dashboard_bp
 import media_processor
 from settings_db import (
@@ -29,11 +28,16 @@ from settings_db import (
     update_service_test_result, get_all_services,
     set_setting, get_setting
 )
+from logging_config import main_logger as logger
 # Import plugin system
 from integrations import get_integration, get_all_integrations
-
+from integrations import register_integration_blueprints
 app = Flask(__name__)
+
+register_integration_blueprints(app)
 app.register_blueprint(dashboard_bp)
+
+
 
 # Load environment variables
 load_dotenv()
@@ -81,39 +85,50 @@ def reload_module_configs():
         import importlib
         import sonarr_utils
         import media_processor
-        from routes import dashboard
         
         # Reload the modules to pick up new database config
         importlib.reload(sonarr_utils)
         importlib.reload(media_processor)
-        importlib.reload(dashboard)
         
         app.logger.info("Reloaded module configurations from database")
     except Exception as e:
         app.logger.error(f"Failed to reload module configs: {e}")
 
-def auto_add_quick_link(name, url, icon):
-    """Automatically add a service to quick links if it doesn't exist"""
-    from settings_db import get_all_quick_links, add_quick_link
+def auto_add_quick_link(name, url, icon, open_in_iframe=False):
+    """Automatically add or update a service quick link"""
+    from settings_db import get_all_quick_links, add_quick_link, delete_quick_link
     
-    # Check if link already exists (by URL, not just name)
+    # Check if link already exists (by URL)
     existing_links = get_all_quick_links()
     
-    # Check both by name AND url to avoid duplicates
+    # Normalize URLs for comparison
+    normalized_url = url.rstrip('/').lower()
+    
     for link in existing_links:
-        if link['name'].lower() == name.lower() or link['url'] == url:
-            app.logger.debug(f"Quick link for {name} already exists, skipping")
-            return  # Already exists, don't add
+        link_url = link['url'].rstrip('/').lower()
+        
+        if link_url == normalized_url:
+            app.logger.debug(f"Quick link for {name} already exists (ID: {link['id']})")
+            
+            # UPDATE: Check if open_in_iframe setting changed
+            if link.get('open_in_iframe') != open_in_iframe:
+                # Need to update the quick link with new iframe setting
+                delete_quick_link(link['id'])
+                new_id = add_quick_link(name, url, icon, open_in_iframe)
+                app.logger.info(f"Updated quick link {name} - iframe: {open_in_iframe} (ID: {new_id})")
+            
+            return  # Already exists (and updated if needed)
     
     # Add new link
-    add_quick_link(name, url, icon)
-    app.logger.info(f"Auto-added {name} to quick links")
+    add_quick_link(name, url, icon, open_in_iframe)
+    app.logger.info(f"Auto-added {name} to quick links - iframe: {open_in_iframe}")
 
 @app.before_request
 def check_first_run():
     # Skip check for setup page itself, static files, and API routes
     if request.endpoint in ['setup', 'static', 'test_connection', 'save_service_config', 
-                            'manage_quick_links', 'delete_quick_link_route', 'handle_emby_webhook']:
+                            'manage_quick_links', 'delete_quick_link_route', 'handle_emby_webhook',
+                            'iframe_view', 'services_sidebar', 'iframe_service_view']:  # ADD THESE TWO
         return
     
     # Check if Sonarr is configured (required service)
@@ -135,15 +150,58 @@ def setup():
     jellyseerr = get_service('jellyseerr', 'default')
     tmdb = get_service('tmdb', 'default')
     
-    # NEW: Get integration configurations
+        # NEW: Get integration configurations with guaranteed fields
     integration_configs = {}
     for integration in get_all_integrations():
         config = get_service(integration.service_name, 'default')
+        
+        # Force fallback fields — ignore whatever get_setup_fields() returns for now
+        setup_fields = [
+            {
+                'name': 'url',
+                'label': 'Service URL',
+                'type': 'url',
+                'placeholder': f'http://localhost:{getattr(integration, "default_port", 80)}',
+                'required': True,
+                'help': 'Full base URL including http(s):// and port'
+            },
+            {
+                'name': 'apikey',
+                'label': 'API Key / Token',
+                'type': 'text',
+                'placeholder': 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+                'required': True,
+                'help': f'From {integration.display_name} settings'
+            }
+        ]
+        
+        # If the integration actually defines custom fields, use them instead
+        try:
+            custom = integration.get_setup_fields()
+            if isinstance(custom, list) and len(custom) > 0:
+                setup_fields = custom
+                print(f"Using CUSTOM fields for {integration.service_name} ({len(custom)} fields)")
+            else:
+                print(f"Using FALLBACK fields for {integration.service_name} (2 fields)")
+        except Exception as e:
+            print(f"Error reading custom fields for {integration.service_name}: {e} — using fallback")
+        
+        # Pre-fill values — flatten everything into one dict
+        saved_values = {}
+        if config:
+            saved_values['url'] = config.get('url')
+            saved_values['apikey'] = config.get('api_key')
+            # Merge any old-style config dict
+            if isinstance(config.get('config'), dict):
+                saved_values.update(config['config'])
+        
         integration_configs[integration.service_name] = {
             'connected': config is not None,
-            'url': config['url'] if config else None,
-            'apikey': config['api_key'] if config else None,
-            'integration': integration  # Pass the integration object too
+            'url': saved_values.get('url'),
+            'apikey': saved_values.get('apikey'),
+            'integration': integration,
+            'setup_fields': setup_fields,
+            'saved_values': saved_values  # for template pre-fill
         }
     
     # Check if setup is complete
@@ -166,13 +224,11 @@ def setup():
         jellyfin_trigger_min=jellyfin['config'].get('trigger_min', 50.0) if jellyfin and jellyfin.get('config') else 50.0,
         jellyfin_trigger_max=jellyfin['config'].get('trigger_max', 55.0) if jellyfin and jellyfin.get('config') else 55.0,
         jellyfin_poll_interval=jellyfin['config'].get('poll_interval', 900) if jellyfin and jellyfin.get('config') else 900,
-        jellyfin_trigger_percent=jellyfin['config'].get('trigger_percentage', 50.0) if jellyfin and jellyfin.get('config') else 50.0,
-        emby_connected=emby is not None,
+        jellyfin_trigger_percent=jellyfin['config'].get('trigger_percentage', 50.0) if jellyfin and jellyfin.get('config') else 50.0,emby_connected=emby is not None,
         emby_url=emby['url'] if emby else None,
         emby_apikey=emby['api_key'] if emby else None,
         emby_userid=emby['config'].get('user_id') if emby and emby.get('config') else None,
-        emby_poll_interval=emby['config'].get('poll_interval', 900) if emby and emby.get('config') else 900,
-        emby_trigger_percent=emby['config'].get('trigger_percentage', 50.0) if emby and emby.get('config') else 50.0,
+        emby_poll_interval=emby['config'].get('poll_interval', 900) if emby and emby.get('config') else 900,emby_trigger_percent=emby['config'].get('trigger_percentage', 50.0) if emby and emby.get('config') else 50.0,
         tautulli_connected=tautulli is not None,
         tautulli_url=tautulli['url'] if tautulli else None,
         tautulli_apikey=tautulli['api_key'] if tautulli else None,
@@ -181,296 +237,343 @@ def setup():
         jellyseerr_apikey=jellyseerr['api_key'] if jellyseerr else None,
         tmdb_connected=tmdb is not None,
         tmdb_apikey=tmdb['api_key'] if tmdb else None,
-        # NEW: Pass integration configs
         integrations=get_all_integrations(),
         integration_configs=integration_configs,
         quick_links=quick_links
     )
 
+# Replace test_connection in episeerr.py with this version:
+
 @app.route('/api/test-connection/<service>', methods=['POST'])
 def test_connection(service):
-    """Test connection to a service"""
     data = request.json
     
+    # Try integration first
+    integration = get_integration(service)
+    if integration:
+        try:
+            # Extract ALL fields prefixed with {service}-
+            integration_data = {}
+            for key, value in data.items():
+                if key.startswith(f'{service}-'):
+                    field_name = key[len(f'{service}-'):]
+                    integration_data[field_name] = value.strip() if isinstance(value, str) else value
+            
+            # Smart field detection
+            url = (integration_data.get('url') or 
+                   integration_data.get('service_url') or 
+                   integration_data.get('base_url') or
+                   '')
+            
+            api_key = (integration_data.get('apikey') or 
+                       integration_data.get('api_key') or 
+                       integration_data.get('token') or
+                       integration_data.get('key') or
+                       integration_data.get('path') or
+                       '')
+            
+            if api_key:  # Only test if we have an API key
+                success, message = integration.test_connection(url, api_key)
+                
+                if success:
+                    update_service_test_result(service, 'default', 'success')
+                    return jsonify({'status': 'success', 'message': message or 'Connection successful'})
+                else:
+                    update_service_test_result(service, 'default', 'failed')
+                    return jsonify({'status': 'error', 'message': message or 'Connection failed'}), 400
+        except Exception as e:
+            app.logger.error(f"Integration test error for {service}: {e}")
+            # Fall through to legacy handlers
+    
+    # Legacy service handlers (keep existing code for sonarr, jellyfin, etc.)
     try:
-        # NEW: Check if it's a plugin integration FIRST
-        integration = get_integration(service)
-        if integration:
-            url = data.get(f'{service}-url')
-            api_key = data.get(f'{service}-apikey')
-            
-            if not url or not api_key:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'URL and API key are required'
-                }), 400
-            
-            # Call the integration's test method
-            success, message = integration.test_connection(url, api_key)
-            
-            if success:
-                update_service_test_result(service, 'default', 'success')
-                return jsonify({'status': 'success', 'message': message})
-            else:
-                update_service_test_result(service, 'default', 'failed')
-                return jsonify({'status': 'error', 'message': message}), 400
         if service == 'sonarr':
             url = data.get('sonarr-url')
             api_key = data.get('sonarr-apikey')
-            print(f"[TEST CONNECTION] Sonarr URL: {url}")
-            print(f"[TEST CONNECTION] API Key present: {bool(api_key)}")
             
             if not url or not api_key:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'URL and API key are required'
-                }), 400
+                return jsonify({'status': 'error', 'message': 'URL and API key are required'}), 400
             
             response = requests.get(f"{url}/api/v3/system/status", 
                                   headers={'X-Api-Key': api_key}, timeout=10)
-            print(f"[TEST CONNECTION] Response status: {response.status_code}")
+            response.raise_for_status()
             
-            if response.ok:
-                system_status = response.json()
-                update_service_test_result('sonarr', 'default', 'success')
-                return jsonify({
-                    'status': 'success',
-                    'message': f"Connected to Sonarr v{system_status.get('version', 'unknown')}"
-                })
-            else:
-                return jsonify({
-                    'status': 'error',
-                    'message': f'Sonarr returned status {response.status_code}: {response.text[:200]}'
-                }), 400
-        
-        elif service == 'jellyfin':
-            url = data.get('jellyfin-url')
-            api_key = data.get('jellyfin-apikey')
-            response = requests.get(f"{url}/System/Info", 
-                                  headers={'X-Emby-Token': api_key}, timeout=10)
-            if response.ok:
-                info = response.json()
-                update_service_test_result('jellyfin', 'default', 'success')
-                return jsonify({
-                    'status': 'success',
-                    'message': f"Connected to Jellyfin v{info.get('Version', 'unknown')}"
-                })
-        
-        elif service == 'emby':
-            url = data.get('emby-url')
-            api_key = data.get('emby-apikey')
-            response = requests.get(f"{url}/System/Info", 
-                                  headers={'X-Emby-Token': api_key}, timeout=10)
-            if response.ok:
-                info = response.json()
-                update_service_test_result('emby', 'default', 'success')
-                return jsonify({
-                    'status': 'success',
-                    'message': f"Connected to Emby v{info.get('Version', 'unknown')}"
-                })
+            update_service_test_result('sonarr', 'default', 'success')
+            return jsonify({'status': 'success', 'message': 'Connected to Sonarr successfully'})
         
         elif service == 'tautulli':
             url = data.get('tautulli-url')
             api_key = data.get('tautulli-apikey')
-            response = requests.get(f"{url}/api/v2", 
-                                  params={'apikey': api_key, 'cmd': 'get_server_info'}, timeout=10)
-            if response.ok:
-                result = response.json()
-                if result.get('response', {}).get('result') == 'success':
-                    update_service_test_result('tautulli', 'default', 'success')
-                    return jsonify({
-                        'status': 'success',
-                        'message': 'Connected to Tautulli successfully'
-                    })
-        
-        elif service == 'jellyseerr':
-            url = data.get('jellyseerr-url')
-            api_key = data.get('jellyseerr-apikey')
-            response = requests.get(f"{url}/api/v1/status", 
-                                  headers={'X-Api-Key': api_key}, timeout=10)
-            if response.ok:
-                update_service_test_result('jellyseerr', 'default', 'success')
-                return jsonify({
-                    'status': 'success',
-                    'message': 'Connected to Jellyseerr/Overseerr successfully'
-                })
-        
-        elif service == 'tmdb':
-            api_key = data.get('tmdb-apikey')
-            response = requests.get('https://api.themoviedb.org/3/configuration',
-                                  headers={'Authorization': f'Bearer {api_key}'}, timeout=10)
-            if response.ok:
-                update_service_test_result('tmdb', 'default', 'success')
-                return jsonify({
-                    'status': 'success',
-                    'message': 'TMDB API key is valid'
-                })
-            else:
-                update_service_test_result('tmdb', 'default', 'failed')  # Add this
-                return jsonify({
-                    'status': 'error',
-                    'message': f'TMDB returned status {response.status_code}'  # Fixed!
-                }), 400
             
-        # If we get here, service wasn't recognized or connection failed
-        update_service_test_result(service, 'default', 'failed')
-        return jsonify({
-            'status': 'error',
-            'message': f'Service {service} not configured or connection failed'
-        }), 400
-    
-    except requests.exceptions.Timeout:
-        print(f"[TEST CONNECTION] Timeout error")
-        update_service_test_result(service, 'default', 'failed')
-        return jsonify({
-            'status': 'error',
-            'message': 'Connection timeout - check URL and network'
-        }), 400
-    
-    except requests.exceptions.ConnectionError as e:
-        print(f"[TEST CONNECTION] Connection error: {e}")
-        update_service_test_result(service, 'default', 'failed')
-        return jsonify({
-            'status': 'error',
-            'message': f'Cannot reach server at {data.get(f"{service}-url", "URL")} - check URL and network'
-        }), 400
-    
-    except requests.exceptions.RequestException as e:
-        print(f"[TEST CONNECTION] Request error: {e}")
-        update_service_test_result(service, 'default', 'failed')
-        return jsonify({
-            'status': 'error',
-            'message': f'Request error: {str(e)}'
-        }), 400
-    
+            if not url or not api_key:
+                return jsonify({'status': 'error', 'message': 'URL and API key are required'}), 400
+            
+            response = requests.get(f"{url}/api/v2",
+                                  params={'apikey': api_key, 'cmd': 'get_server_info'},
+                                  timeout=10)
+            response.raise_for_status()
+            
+            update_service_test_result('tautulli', 'default', 'success')
+            return jsonify({'status': 'success', 'message': 'Connected to Tautulli successfully'})
+        
+        elif service == 'jellyfin':
+            url = data.get('jellyfin-url')
+            api_key = data.get('jellyfin-apikey')
+            
+            if not url or not api_key:
+                return jsonify({'status': 'error', 'message': 'URL and API key are required'}), 400
+            
+            response = requests.get(f"{url}/System/Info",
+                                  headers={'X-Emby-Token': api_key},
+                                  timeout=10)
+            response.raise_for_status()
+            
+            update_service_test_result('jellyfin', 'default', 'success')
+            return jsonify({'status': 'success', 'message': 'Connected to Jellyfin successfully'})
+        
+        # Add other legacy services as needed...
+        
+        else:
+            return jsonify({'status': 'error', 'message': f'Unknown service: {service}'}), 400
+            
     except Exception as e:
-        print(f"[TEST CONNECTION] Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
+        app.logger.error(f"Test connection error for {service}: {e}")
         update_service_test_result(service, 'default', 'failed')
-        return jsonify({
-            'status': 'error',
-            'message': f'Error: {str(e)}'
-        }), 400
+        return jsonify({'status': 'error', 'message': f'Connection failed: {str(e)}'}), 400
+
+# Replace save_service_config in episeerr.py with this:
+
+# Replace save_service_config in episeerr.py:
 
 @app.route('/api/save-service/<service>', methods=['POST'])
 def save_service_config(service):
-    """Save service configuration"""
     data = request.json
     
-    try:
-        # NEW: Check if it's a plugin integration FIRST
-        integration = get_integration(service)
-        if integration:
-            url = data.get(f'{service}-url')
-            api_key = data.get(f'{service}-apikey')
+    # Try integration first
+    integration = get_integration(service)
+    if integration:
+        try:
+            # Extract ALL fields prefixed with {service}-
+            integration_data = {}
+            for key, value in data.items():
+                if key.startswith(f'{service}-'):
+                    field_name = key[len(f'{service}-'):]
+                    integration_data[field_name] = value.strip() if isinstance(value, str) else value
             
-            if not url or not api_key:
+            # Smart field detection
+            url = (integration_data.get('url') or 
+                   integration_data.get('service_url') or 
+                   integration_data.get('base_url') or 
+                   '')
+            
+            api_key = (integration_data.get('apikey') or 
+                       integration_data.get('api_key') or 
+                       integration_data.get('token') or
+                       integration_data.get('key') or
+                       integration_data.get('path') or
+                       '')
+            
+            # Check if we got any data at all
+            if not integration_data:
+                # No integration fields found, this might be a legacy service
+                # Fall through to legacy handlers
+                pass
+            elif not api_key:
+                # Integration data exists but no API key - this is an error
                 return jsonify({
                     'status': 'error',
-                    'message': 'URL and API key are required'
+                    'message': 'API key/token/path is required'
                 }), 400
-            
-            # Save to database
-            save_service(service, 'default', url, api_key)
-            
-            # Call integration's on_save hook (adds to quick links)
-            integration.on_save(url, api_key)
-            
-            # Reload configs so they work immediately
-            reload_module_configs()  # ← ADD THIS LINE
-            
+            else:
+                # We have valid integration data - save it
+                # Normalize field names for storage
+                normalized_data = integration_data.copy()
+                if 'apikey' in normalized_data and 'api_key' not in normalized_data:
+                    normalized_data['api_key'] = normalized_data['apikey']
+                elif 'api_key' in normalized_data and 'apikey' not in normalized_data:
+                    normalized_data['apikey'] = normalized_data['api_key']
+                
+                # Allow integration to reshape data before saving (e.g. nest sync fields)
+                if hasattr(integration, 'preprocess_save_data'):
+                    integration.preprocess_save_data(normalized_data)
+
+                # Save to database
+                save_service(
+                    service_type=service,  # Changed from service_name
+                    name='default',        # Changed from instance
+                    url=url,
+                    api_key=api_key,
+                    config=normalized_data
+                )
+                
+                # Auto-add/update quick links if URL provided
+                if url and url.startswith('http'):
+                    try:
+                        # Get the open_in_iframe setting from normalized_data
+                        open_in_iframe = normalized_data.get('open_in_iframe', False)
+                        
+                        auto_add_quick_link(
+                            integration.display_name,
+                            url,
+                            integration.icon,
+                            open_in_iframe  # Pass the iframe setting
+                        )
+                    except Exception as e:
+                        app.logger.warning(f"Failed to add/update quick link: {e}")
+                
+                reload_module_configs()
+
+                # Allow integration to react post-save (e.g. start/stop scheduler)
+                if hasattr(integration, 'on_after_save'):
+                    integration.on_after_save(normalized_data)
+
+                return jsonify({
+                    'status': 'success',
+                    'message': f'{integration.display_name} saved successfully'
+                })
+                
+        except Exception as e:
+            app.logger.error(f"Integration save error for {service}: {e}")
             return jsonify({
-                'status': 'success',
-                'message': f'{integration.display_name} saved successfully'
-            })
+                'status': 'error',
+                'message': f'Error saving: {str(e)}'
+            }), 500
+    
+    # Legacy service handlers (if no integration found or integration had no data)
+    try:
         if service == 'sonarr':
-            save_service('sonarr', 'default', 
-                        data.get('sonarr-url'),
-                        data.get('sonarr-apikey'))
-            # Auto-add to quick links
-            auto_add_quick_link('Sonarr', data.get('sonarr-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/sonarr.png')
+            url = data.get('sonarr-url')
+            apikey = data.get('sonarr-apikey')
+            open_in_iframe = data.get('sonarr-open_in_iframe', False)
+
+            if not url or not apikey:
+                return jsonify({'status': 'error', 'message': 'URL and API key required'}), 400
+            
+            save_service('sonarr', 'default', url, apikey)
+            auto_add_quick_link('Sonarr', url, 
+                              'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/sonarr.png', open_in_iframe)
             
             return jsonify({
                 'status': 'success',
-                'message': 'Sonarr saved successfully. Please restart the container for changes to take effect.'
+                'message': 'Sonarr saved successfully'
             })
         
         elif service == 'jellyfin':
-            method = data.get('jellyfin-method', 'polling')  # Default to polling mode
+            url = data.get('jellyfin-url')
+            apikey = data.get('jellyfin-apikey')
+            open_in_iframe = data.get('jellyfin-open_in_iframe', False)
+            if not url or not apikey:
+                return jsonify({'status': 'error', 'message': 'URL and API key required'}), 400
             
-            # Base config fields common to both methods
+            method = data.get('jellyfin-method', 'polling')  # Changed: read 'jellyfin-method' and default to 'polling'
+            
             config = {
                 'user_id': data.get('jellyfin-userid'),
                 'method': method
             }
             
-            # Add method-specific fields
+            # Only save relevant fields based on method
             if method == 'polling':
-                # Webhook-triggered polling mode
                 config.update({
                     'poll_interval': int(data.get('jellyfin-poll-interval', 900)),
                     'trigger_percentage': float(data.get('jellyfin-trigger-percent', 50.0))
                 })
-            else:  # method == 'progress'
-                # Real-time PlaybackProgress mode
+            else:  # progress
                 config.update({
                     'trigger_min': float(data.get('jellyfin-trigger-min', 50.0)),
                     'trigger_max': float(data.get('jellyfin-trigger-max', 55.0))
                 })
             
-            save_service('jellyfin', 'default',
-                        data.get('jellyfin-url'),
-                        data.get('jellyfin-apikey'),
-                        config)
-            # Auto-add to quick links
-            auto_add_quick_link('Jellyfin', data.get('jellyfin-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyfin.png')
+            save_service('jellyfin', 'default', url, apikey, config)
+            auto_add_quick_link('Jellyfin', url,
+                              'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyfin.png', open_in_iframe)
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Jellyfin saved successfully'
+            })
         
         elif service == 'emby':
+            url = data.get('emby-url')
+            apikey = data.get('emby-apikey')
+            open_in_iframe = data.get('emby-open_in_iframe', False)
+
+            if not url or not apikey:
+                return jsonify({'status': 'error', 'message': 'URL and API key required'}), 400
+            
             config = {
                 'user_id': data.get('emby-userid'),
-                'poll_interval': int(data.get('emby-poll-interval', 900)),
+                'poll_interval': int(data.get('emby-poll-interval', 5)),
                 'trigger_percentage': float(data.get('emby-trigger-percent', 50.0))
             }
-            save_service('emby', 'default',
-                        data.get('emby-url'),
-                        data.get('emby-apikey'),
-                        config)
-            # Auto-add to quick links
-            auto_add_quick_link('Emby', data.get('emby-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/emby.png')
+            save_service('emby', 'default', url, apikey, config)
+            auto_add_quick_link('Emby', url,
+                              'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/emby.png', open_in_iframe)
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Emby saved successfully'
+            })
         
         elif service == 'tautulli':
-            save_service('tautulli', 'default',
-                        data.get('tautulli-url'),
-                        data.get('tautulli-apikey'))
-            # Auto-add to quick links
-            auto_add_quick_link('Tautulli', data.get('tautulli-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/tautulli.png')
+            url = data.get('tautulli-url')
+            apikey = data.get('tautulli-apikey')
+            open_in_iframe = data.get('tautulli-open_in_iframe', False)
+
+            if not url or not apikey:
+                return jsonify({'status': 'error', 'message': 'URL and API key required'}), 400
+            
+            save_service('tautulli', 'default', url, apikey)
+            auto_add_quick_link('Tautulli', url,
+                              'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/tautulli.png', open_in_iframe)
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Tautulli saved successfully'
+            })
         
         elif service == 'jellyseerr':
-            save_service('jellyseerr', 'default',
-                        data.get('jellyseerr-url'),
-                        data.get('jellyseerr-apikey'))
-            # Auto-add to quick links
-            auto_add_quick_link('Jellyseerr', data.get('jellyseerr-url'), 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyseerr.png')
+            url = data.get('jellyseerr-url')
+            apikey = data.get('jellyseerr-apikey')
+            open_in_iframe = data.get('jellyseerr-open_in_iframe', False)
+
+            if not url or not apikey:
+                return jsonify({'status': 'error', 'message': 'URL and API key required'}), 400
+            
+            save_service('jellyseerr', 'default', url, apikey)
+            auto_add_quick_link('Jellyseerr', url,
+                              'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyseerr.png', open_in_iframe)
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Jellyseerr saved successfully'
+            })
         
         elif service == 'tmdb':
-            save_service('tmdb', 'default',
-                        'https://api.themoviedb.org',
-                        data.get('tmdb-apikey'))
+            apikey = data.get('tmdb-apikey')
+            
+            if not apikey:
+                return jsonify({'status': 'error', 'message': 'API key required'}), 400
+            
+            save_service('tmdb', 'default', '', apikey)
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'TMDB saved successfully'
+            })
         
-        # Reload configs so they work immediately (for Sonarr, Jellyfin, etc.)
-        reload_module_configs()  # ← ADD THIS LINE
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Settings saved successfully'
-        })
-    
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': f'Unknown service: {service}'
+            }), 400
+            
     except Exception as e:
+        app.logger.error(f"Save service error for {service}: {e}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
-        }), 400
+            'message': f'Error saving: {str(e)}'
+        }), 500
 
 @app.route('/api/quick-links', methods=['GET', 'POST'])
 def manage_quick_links():
@@ -486,9 +589,133 @@ def manage_quick_links():
         link_id = add_quick_link(
             data.get('name'),
             data.get('url'),
-            data.get('icon', 'fas fa-link')
+            data.get('icon', 'fas fa-link'),
+            data.get('open_in_iframe', False)  # NEW: Accept iframe flag
         )
         return jsonify({'status': 'success', 'id': link_id})
+
+# 2. ADD this NEW route after delete_quick_link_route (around line 586)
+
+@app.route('/iframe/<int:service_id>')
+def iframe_view(service_id):
+    """Display a service in an iframe"""
+    from settings_db import get_quick_link_by_id
+    
+    service = get_quick_link_by_id(service_id)
+    
+    if not service:
+        return "Service not found", 404
+    
+    if not service.get('open_in_iframe'):
+        # If not configured for iframe, redirect to external URL
+        return redirect(service['url'])
+    
+    return render_template('iframe_view.html', service=service)
+
+
+@app.route('/api/services-sidebar')
+def services_sidebar():
+    """Get all configured services for sidebar display with iframe settings
+    Also auto-manages quick links for integrations"""
+    from settings_db import get_service, get_all_quick_links, add_quick_link, delete_quick_link
+    from integrations import get_all_integrations
+    
+    services = []
+    existing_links = get_all_quick_links()
+    integration_urls = set()
+    
+    # Get all integrations
+    for integration in get_all_integrations():
+        config = get_service(integration.service_name, 'default')
+        if config:  # Only include if configured
+            # Check if open_in_iframe is in config
+            open_in_iframe = False
+            if config.get('config'):
+                open_in_iframe = config['config'].get('open_in_iframe', False)
+            
+            service_url = config['url'].rstrip('/')
+            integration_urls.add(service_url.lower())
+            
+            # Check if a quick link already exists for this service
+            existing_link = None
+            for link in existing_links:
+                if link['url'].rstrip('/').lower() == service_url.lower():
+                    existing_link = link
+                    break
+            
+            if existing_link:
+                # Use the existing quick link ID
+                services.append({
+                    'id': existing_link['id'],
+                    'name': integration.display_name,
+                    'url': config['url'],
+                    'icon': integration.icon,
+                    'service_type': integration.service_name,
+                    'open_in_iframe': open_in_iframe
+                })
+            else:
+                # Auto-create a quick link for this integration
+                link_id = add_quick_link(
+                    name=integration.display_name,
+                    url=config['url'],
+                    icon=integration.icon,
+                    open_in_iframe=open_in_iframe
+                )
+                
+                services.append({
+                    'id': link_id,
+                    'name': integration.display_name,
+                    'url': config['url'],
+                    'icon': integration.icon,
+                    'service_type': integration.service_name,
+                    'open_in_iframe': open_in_iframe
+                })
+                
+                app.logger.info(f"Auto-created quick link for {integration.display_name}")
+    
+    # Clean up orphaned quick links that match integration URLs but service is no longer configured
+    for link in existing_links:
+        link_url = link['url'].rstrip('/').lower()
+        # If this link's URL matches an integration URL but wasn't processed above, delete it
+        # (This happens when you unconfigure a service)
+        if link_url in integration_urls:
+            # Check if this link was included in services
+            found = False
+            for service in services:
+                if service.get('id') == link['id']:
+                    found = True
+                    break
+            
+            if not found:
+                # Orphaned integration link - remove it
+                delete_quick_link(link['id'])
+                app.logger.info(f"Removed orphaned quick link: {link['name']}")
+    
+    return jsonify({'status': 'success', 'services': services})
+
+@app.route('/iframe-service/<service_type>')
+def iframe_service_view(service_type):
+    """Display a configured service in an iframe"""
+    from settings_db import get_service
+    
+    service = get_service(service_type, 'default')
+    
+    if not service:
+        return "Service not found", 404
+    
+    # Check if this service is configured for iframe
+    open_in_iframe = False
+    if service.get('config'):
+        open_in_iframe = service['config'].get('open_in_iframe', False)
+    
+    if not open_in_iframe:
+        # If not configured for iframe, redirect to external URL
+        return redirect(service['url'])
+    
+    return render_template('iframe_view.html', service={
+        'name': service_type.replace('_', ' ').title(),
+        'url': service['url']
+    })
 
 @app.route('/api/quick-links/<int:link_id>', methods=['DELETE'])
 def delete_quick_link_route(link_id):
@@ -1669,7 +1896,12 @@ def documentation():
 
 @app.route('/')
 def index():
-    """Main rules management page."""
+    """Redirect to dashboard as main page."""
+    return redirect(url_for('dashboard.dashboard'))
+
+@app.route('/series')  # or whatever you want to call it
+def series_management():  # Changed from index to avoid confusion
+    """Main series/rules management page."""
     config = load_config()
     all_series = get_sonarr_series()
     sonarr_stats = get_sonarr_stats()
@@ -1693,7 +1925,6 @@ def index():
                          sonarr_stats=sonarr_stats,
                          SONARR_URL=sonarr_url,
                          SONARR_API_KEY=sonarr_preferences['SONARR_API_KEY'],
-                         
                          current_rule=request.args.get('rule', list(config['rules'].keys())[0] if config['rules'] else 'default'))
 
 # Add new API route for real-time stats updates
@@ -1759,6 +1990,7 @@ def create_rule():
             'dormant_days': dormant_days,
             'grace_scope': grace_scope,
             'keep_pilot': 'keep_pilot' in request.form,
+            'always_have': request.form.get('always_have', '').strip(),
             'series': {},
             'dry_run': False
         }
@@ -1829,7 +2061,8 @@ def edit_rule(rule_name):
             'grace_unwatched': grace_unwatched,
             'dormant_days': dormant_days,
             'grace_scope': grace_scope,
-            'keep_pilot': 'keep_pilot' in request.form
+            'keep_pilot': 'keep_pilot' in request.form,
+            'always_have': request.form.get('always_have', '').strip()
         })
         
         # Handle default rule setting
@@ -2008,11 +2241,20 @@ def assign_rules():
             target_series_dict[series_id] = {'activity_date': None}  # New series
     
     save_config(config)
-    
+
+    # Process always_have for newly assigned series (additive only - never unmonitors)
+    rule_always_have = config['rules'][rule_name].get('always_have', '')
+    if rule_always_have:
+        for sid in series_ids:
+            try:
+                media_processor.process_always_have(int(sid), rule_always_have)
+            except Exception as e:
+                app.logger.error(f"always_have processing failed for series {sid}: {e}")
+
     # NEW STEP 4: Sync tags to Sonarr
     tag_sync_success = 0
     tag_sync_failed = 0
-    
+
     for series_id in series_ids:
         try:
             success = episeerr_utils.sync_rule_tag_to_sonarr(int(series_id), rule_name)
@@ -2254,10 +2496,12 @@ def series_stats():
     try:
         config = load_config()
         all_series = get_sonarr_series()
+        all_series_ids = set(str(s['id']) for s in all_series)
         rules_mapping = {}
         for rule_name, details in config['rules'].items():
             for series_id in details.get('series', {}):
-                rules_mapping[str(series_id)] = rule_name
+                if str(series_id) in all_series_ids:  # ignore stale config entries
+                    rules_mapping[str(series_id)] = rule_name
         stats = {
             'total_series': len(all_series),
             'assigned_series': len(rules_mapping),
@@ -2266,7 +2510,8 @@ def series_stats():
             'rule_breakdown': {}
         }
         for rule_name, details in config['rules'].items():
-            stats['rule_breakdown'][rule_name] = len(details.get('series', {}))
+            count = sum(1 for sid in details.get('series', {}) if str(sid) in all_series_ids)
+            stats['rule_breakdown'][rule_name] = count
         return jsonify(stats)
     except Exception as e:
         app.logger.error(f"Error getting series stats: {str(e)}")
@@ -2859,6 +3104,101 @@ def episeerr_index():
     
     return render_template('episeerr_index.html', deletions=deletion_summary)
 
+@app.route('/api/send-to-selection/<int:series_id>')
+def send_to_selection(series_id):
+    """Create a pending selection request for a Sonarr series and redirect to season selection."""
+    try:
+        # Check if a pending request already exists for this series — reuse it if so
+        os.makedirs(REQUESTS_DIR, exist_ok=True)
+        for filename in os.listdir(REQUESTS_DIR):
+            if not filename.endswith('.json'):
+                continue
+            try:
+                with open(os.path.join(REQUESTS_DIR, filename), 'r') as f:
+                    existing = json.load(f)
+                if str(existing.get('series_id')) == str(series_id) and existing.get('tmdb_id'):
+                    config = load_config()
+                    current_rule = ''
+                    for rule_name_iter, rule_data in config.get('rules', {}).items():
+                        if str(series_id) in rule_data.get('series', {}):
+                            current_rule = rule_name_iter
+                            break
+                    app.logger.info(f"Reusing existing pending request for series {series_id}")
+                    return redirect(url_for('select_seasons', tmdb_id=existing['tmdb_id'], current_rule=current_rule))
+            except Exception:
+                continue
+
+        sonarr_preferences = sonarr_utils.load_preferences()
+        headers = {
+            'X-Api-Key': sonarr_preferences['SONARR_API_KEY'],
+            'Content-Type': 'application/json'
+        }
+        sonarr_url = sonarr_preferences['SONARR_URL']
+
+        # Get series info from Sonarr
+        resp = requests.get(f"{sonarr_url}/api/v3/series/{series_id}", headers=headers, timeout=10)
+        if not resp.ok:
+            return render_template('error.html', message=f"Could not find series in Sonarr (ID: {series_id})")
+
+        series = resp.json()
+        series_title = series.get('title', 'Unknown')
+        tvdb_id = series.get('tvdbId')
+        tmdb_id = series.get('tmdbId')  # Sonarr v4+ provides this
+
+        # Look up TMDB ID via TMDB find-by-external-id if Sonarr didn't give us one
+        if not tmdb_id and tvdb_id:
+            try:
+                find_result = get_tmdb_endpoint(f"find/{tvdb_id}", {'external_source': 'tvdb_id'})
+                tv_results = (find_result or {}).get('tv_results', [])
+                if tv_results:
+                    tmdb_id = tv_results[0]['id']
+                else:
+                    search_results = search_tv_shows(series_title)
+                    if (search_results or {}).get('results'):
+                        tmdb_id = search_results['results'][0]['id']
+            except Exception as e:
+                app.logger.error(f"Error finding TMDB ID for {series_title}: {e}")
+
+        if not tmdb_id:
+            return render_template('error.html', message=f"Could not determine TMDB ID for \"{series_title}\"")
+
+        # Create a selection request file (same format as the Sonarr webhook handler)
+        request_id = f"sonarr-select-{series_id}-{int(time.time())}"
+        pending_request = {
+            "id": request_id,
+            "series_id": series_id,
+            "title": series_title,
+            "needs_season_selection": True,
+            "tmdb_id": tmdb_id,
+            "tvdb_id": tvdb_id,
+            "source": "sonarr",
+            "source_name": "Sonarr Episode Selection",
+            "needs_attention": True,
+            "jellyseerr_request_id": None,
+            "created_at": int(time.time())
+        }
+        os.makedirs(REQUESTS_DIR, exist_ok=True)
+        with open(os.path.join(REQUESTS_DIR, f"{request_id}.json"), 'w') as f:
+            json.dump(pending_request, f, indent=2)
+
+        app.logger.info(f"✓ Created manual selection request for {series_title} (TMDB: {tmdb_id})")
+
+        # Find which rule this series is currently assigned to
+        config = load_config()
+        current_rule = ''
+        series_id_str = str(series_id)
+        for rule_name_iter, rule_data in config.get('rules', {}).items():
+            if series_id_str in rule_data.get('series', {}):
+                current_rule = rule_name_iter
+                break
+
+        return redirect(url_for('select_seasons', tmdb_id=tmdb_id, current_rule=current_rule))
+
+    except Exception as e:
+        app.logger.error(f"Error in send_to_selection for series {series_id}: {e}")
+        return render_template('error.html', message=f"Error: {str(e)}")
+
+
 @app.route('/select-seasons/<tmdb_id>')
 def select_seasons(tmdb_id):
     """Show season selection page."""
@@ -2878,7 +3218,6 @@ def select_seasons(tmdb_id):
             'seasons': []
         }
         
-        # Add seasons (skip season 0 - specials)
         for season in show_data.get('seasons', []):
             if season.get('season_number', 0) > 0:
                 formatted_show['seasons'].append({
@@ -2886,13 +3225,211 @@ def select_seasons(tmdb_id):
                     'episodeCount': season.get('episode_count', '?')
                 })
         
-        return render_template('season_selection.html', 
-                             show=formatted_show, 
-                             tmdb_id=tmdb_id)
-    
+        # NEW: Load available rules for the rule picker
+        config = load_config()
+        rules = []
+        default_rule = config.get('default_rule')
+        for rule_name, rule_data in config.get('rules', {}).items():
+            rules.append({
+                'name': rule_name,
+                'is_default': rule_name == default_rule,
+                'get_type': rule_data.get('get_type', 'episodes'),
+                'get_count': rule_data.get('get_count', 1),
+                'description': f"{rule_data.get('get_type', 'episodes')} × {rule_data.get('get_count', 1)}"
+            })
+        
+        current_rule = request.args.get('current_rule', '')
+
+        # Look up the pending request ID for this tmdb_id so the template can delete it on cancel
+        request_id = ''
+        try:
+            for filename in os.listdir(REQUESTS_DIR):
+                if not filename.endswith('.json'):
+                    continue
+                try:
+                    with open(os.path.join(REQUESTS_DIR, filename), 'r') as f:
+                        req_data = json.load(f)
+                    if str(req_data.get('tmdb_id')) == str(tmdb_id):
+                        request_id = req_data.get('id', '')
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        return render_template('season_selection.html',
+                            show=formatted_show,
+                            tmdb_id=tmdb_id,
+                            rules=rules,
+                            default_rule=default_rule,
+                            current_rule=current_rule,
+                            request_id=request_id)
+
     except Exception as e:
         app.logger.error(f"Error in select_seasons: {str(e)}", exc_info=True)
         return render_template('error.html', message=f"Error loading season selection: {str(e)}")
+
+@app.route('/api/apply-rule-to-selection', methods=['POST'])
+def apply_rule_to_selection():
+
+
+    try:
+        tmdb_id = request.form.get('tmdb_id')
+        rule_name = request.form.get('rule_name')
+        
+        if not tmdb_id or not rule_name:
+            return redirect(url_for('rules_page'))
+        
+        # Find the pending request to get series_id
+        series_id = None
+        request_id = None
+        request_file_path = None
+        
+        for filename in os.listdir(REQUESTS_DIR):
+            if filename.endswith('.json'):
+                filepath = os.path.join(REQUESTS_DIR, filename)
+                try:
+                    with open(filepath, 'r') as f:
+                        request_data = json.load(f)
+                        if str(request_data.get('tmdb_id')) == str(tmdb_id):
+                            series_id = request_data.get('series_id')
+                            request_id = request_data.get('id')
+                            request_file_path = filepath
+                            break
+                except Exception:
+                    continue
+        
+        if not series_id:
+            return redirect(url_for('rules_page'))
+
+        config = load_config()
+
+        if rule_name not in config.get('rules', {}):
+            return redirect(url_for('rules_page'))
+        
+        # Remove series from any rule it was previously in
+        series_id_str = str(series_id)
+        for rname, rdata in config['rules'].items():
+            if rname != rule_name and series_id_str in rdata.get('series', {}):
+                del rdata['series'][series_id_str]
+                app.logger.info(f"✓ Removed series {series_id} from rule '{rname}'")
+
+        # Assign series to the chosen rule
+        target_rule = config['rules'][rule_name]
+        target_rule.setdefault('series', {})
+        target_rule['series'][series_id_str] = {'activity_date': None}
+        save_config(config)
+
+        _rule_cfg = config['rules'][rule_name]
+        _always_have = _rule_cfg.get('always_have', '')
+        _request_source = request_data.get('source', '')
+        _rule_headers = {'X-Api-Key': SONARR_API_KEY}
+
+        # always_have: monitor matching episodes (additive, never unmonitors)
+        if _always_have:
+            try:
+                media_processor.process_always_have(series_id, _always_have)
+            except Exception as e:
+                app.logger.error(f"always_have processing failed for series {series_id}: {e}")
+
+        # For new shows (not a series_page reassignment) also run get_type/get_count monitoring
+        if _request_source != 'series_page':
+            try:
+                _get_type = _rule_cfg.get('get_type', 'episodes')
+                _get_count = _rule_cfg.get('get_count', 1)
+                _action_option = _rule_cfg.get('action_option', 'monitor')
+
+                _eps_resp = requests.get(
+                    f"{SONARR_URL}/api/v3/episode?seriesId={series_id}",
+                    headers=_rule_headers
+                )
+                if _eps_resp.ok:
+                    _all_eps = _eps_resp.json()
+                    _starting_season = 1
+                    _season_eps = sorted(
+                        [ep for ep in _all_eps if ep.get('seasonNumber') == _starting_season],
+                        key=lambda x: x.get('episodeNumber', 0)
+                    )
+
+                    _to_monitor = []
+                    if _get_type == 'all':
+                        _to_monitor = [ep['id'] for ep in _all_eps if ep.get('seasonNumber', 0) >= _starting_season]
+                    elif _get_type == 'seasons':
+                        _n = _get_count or 1
+                        _to_monitor = [
+                            ep['id'] for ep in _all_eps
+                            if _starting_season <= ep.get('seasonNumber', 0) < (_starting_season + _n)
+                        ]
+                    else:  # episodes
+                        _n = _get_count or 1
+                        _to_monitor = [ep['id'] for ep in _season_eps[:_n]]
+
+                    if _to_monitor:
+                        _mon_resp = requests.put(
+                            f"{SONARR_URL}/api/v3/episode/monitor",
+                            headers=_rule_headers,
+                            json={"episodeIds": _to_monitor, "monitored": True}
+                        )
+                        if _mon_resp.ok:
+                            app.logger.info(
+                                f"Monitored {len(_to_monitor)} episodes (get_type={_get_type}) "
+                                f"for series {series_id}"
+                            )
+                            if _action_option == 'search':
+                                _srch_resp = requests.post(
+                                    f"{SONARR_URL}/api/v3/command",
+                                    headers=_rule_headers,
+                                    json={"name": "EpisodeSearch", "episodeIds": _to_monitor}
+                                )
+                                if _srch_resp.ok:
+                                    app.logger.info(f"Triggered episode search for series {series_id}")
+                                else:
+                                    app.logger.error(f"Episode search failed: {_srch_resp.text}")
+                        else:
+                            app.logger.error(f"Failed to monitor episodes: {_mon_resp.text}")
+            except Exception as e:
+                app.logger.error(f"get_type monitoring failed for series {series_id}: {e}")
+
+        # Sync the rule tag to Sonarr
+        try:
+            episeerr_utils.sync_rule_tag_to_sonarr(series_id, rule_name)
+            app.logger.info(f"✓ Synced tag episeerr_{rule_name} for series {series_id}")
+        except Exception as e:
+            app.logger.error(f"Tag sync failed: {e}")
+        
+        # Clean up the pending request file
+        if request_file_path and os.path.exists(request_file_path):
+            try:
+                os.remove(request_file_path)
+                app.logger.info(f"✓ Removed pending request {request_id}")
+            except Exception:
+                pass
+        
+        # Remove episeerr_select tag (keep rule tag)
+        try:
+            tag_resp = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers)
+            if tag_resp.ok:
+                tag_map = {t['label'].lower(): t['id'] for t in tag_resp.json()}
+                select_tag_id = tag_map.get('episeerr_select')
+                
+                if select_tag_id:
+                    series_resp = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers)
+                    if series_resp.ok:
+                        series_data = series_resp.json()
+                        current_tags = series_data.get('tags', [])
+                        if select_tag_id in current_tags:
+                            current_tags.remove(select_tag_id)
+                            series_data['tags'] = current_tags
+                            requests.put(f"{SONARR_URL}/api/v3/series", headers=headers, json=series_data)
+        except Exception as e:
+            app.logger.debug(f"Tag cleanup: {e}")
+        
+        app.logger.info(f"Applied rule '{rule_name}' to {request_data.get('title', 'series')}")
+        return redirect(url_for('rules_page'))
+
+    except Exception as e:
+        app.logger.error(f"Error applying rule to selection: {e}", exc_info=True)
+        return redirect(url_for('rules_page'))
 
 @app.route('/select-episodes/<tmdb_id>')
 def select_episodes(tmdb_id):
@@ -2957,11 +3494,13 @@ def select_episodes(tmdb_id):
         
         app.logger.info(f"Rendering episode selection with selected_seasons: {selected_seasons}")
         
-        return render_template('episode_selection.html', 
-                             show=formatted_show, 
-                             request_id=request_id,
-                             series_id=series_id,
-                             selected_seasons=selected_seasons)
+        selected_rule = request.args.get('rule', None)
+        return render_template('episode_selection.html',
+        show=formatted_show,
+        request_id=request_id,
+        series_id=series_id,
+        selected_seasons=selected_seasons,
+        selected_rule=selected_rule)
     
     except Exception as e:
         app.logger.error(f"Error in select_episodes: {str(e)}", exc_info=True)
@@ -2989,13 +3528,13 @@ def process_episode_selection():
                     os.remove(request_file)
                     app.logger.info(f"Cancelled and removed request {request_id}")
             
-            return redirect(url_for('episeerr_index', message="Request cancelled"))
+            return redirect(url_for('rules_page'))
         
         elif action == 'process':
             # Load request data
             request_file = os.path.join(REQUESTS_DIR, f"{request_id}.json")
             if not os.path.exists(request_file):
-                return redirect(url_for('episeerr_index', message="Error: Request not found"))
+                return redirect(url_for('rules_page'))
             
             with open(request_file, 'r') as f:
                 request_data = json.load(f)
@@ -3003,7 +3542,7 @@ def process_episode_selection():
             series_id = request_data['series_id']
             
             if not episodes:
-                return redirect(url_for('episeerr_index', message="Error: No episodes selected"))
+                return redirect(url_for('rules_page'))
             
             app.logger.info(f"DEBUG: Processing {len(episodes)} episodes: {episodes}")
             
@@ -3028,7 +3567,7 @@ def process_episode_selection():
                     continue
             
             if not episodes_by_season:
-                return redirect(url_for('episeerr_index', message="Error: No valid episodes found"))
+                return redirect(url_for('rules_page'))
             
             app.logger.info(f"Processing multi-season selection for series {series_id}: {episodes_by_season}")
             
@@ -3058,6 +3597,32 @@ def process_episode_selection():
                     failed_seasons.append(season_number)
                     app.logger.error(f"✗ Failed to process Season {season_number}")
             
+            # ── NEW: Assign series to rule after episode processing ──
+            selected_rule = request.form.get('selected_rule')
+            if not selected_rule:
+                config = load_config()
+                selected_rule = config.get('default_rule', 'default')
+            
+            if selected_rule:
+                config = load_config()
+                if selected_rule in config.get('rules', {}):
+                    series_id_str = str(series_id)
+                    target = config['rules'][selected_rule]
+                    target.setdefault('series', {})
+                    
+                    if series_id_str not in target['series']:
+                        target['series'][series_id_str] = {'activity_date': None}
+                        save_config(config)
+                        app.logger.info(f"✓ Assigned series {series_id} to rule '{selected_rule}'")
+                    
+                    try:
+                        episeerr_utils.sync_rule_tag_to_sonarr(series_id, selected_rule)
+                    except Exception as e:
+                        app.logger.error(f"Rule tag sync failed: {e}")
+                else:
+                    app.logger.warning(f"Selected rule '{selected_rule}' not found in config")
+            # ── END NEW ──────────────────────────────────────────────
+            
             # Clean up request file
             try:
                 os.remove(request_file)
@@ -3066,20 +3631,14 @@ def process_episode_selection():
                 app.logger.error(f"Error removing request file: {str(e)}")
             
             # Prepare result message
-            if failed_seasons:
-                message = f"Processed {total_processed} episodes. Failed seasons: {failed_seasons}"
-                return redirect(url_for('episeerr_index', message=message))
-            else:
-                seasons_list = list(episodes_by_season.keys())
-                message = f"Successfully processed {total_processed} episodes across {len(seasons_list)} seasons"
-                return redirect(url_for('episeerr_index', message=message))
-        
+            return redirect(url_for('rules_page'))
+
         else:
-            return redirect(url_for('episeerr_index', message="Invalid action"))
-            
+            return redirect(url_for('rules_page'))
+
     except Exception as e:
         app.logger.error(f"Error processing episode selection: {str(e)}", exc_info=True)
-        return redirect(url_for('episeerr_index', message="An error occurred while processing episodes"))
+        return redirect(url_for('rules_page'))
 
 @app.route('/api/tmdb/season/<tmdb_id>/<season_number>')
 def get_tmdb_season(tmdb_id, season_number):
@@ -3558,7 +4117,15 @@ def process_sonarr_webhook():
             get_type = rule_config.get('get_type', 'episodes')
             get_count = rule_config.get('get_count', 1)
             action_option = rule_config.get('action_option', 'monitor')
-            
+
+            # Process always_have FIRST (additive on top of get_type, runs after unmonitor)
+            always_have = rule_config.get('always_have', '')
+            if always_have:
+                try:
+                    media_processor.process_always_have(series_id, always_have)
+                except Exception as e:
+                    app.logger.error(f"always_have processing failed for series {series_id}: {e}")
+
             app.logger.info(f"Executing rule '{assigned_rule}' with get_type '{get_type}', get_count '{get_count}' starting from Season {starting_season}")
             
             # Get all episodes for the series

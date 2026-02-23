@@ -70,6 +70,20 @@
                                     <small class="text-muted">Settings → General → API Key</small>
                                 </div>
                             </div>
+                            
+                            <!-- Iframe Option -->
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="sonarr-open_in_iframe" name="sonarr-open_in_iframe">
+                                    <label class="form-check-label" for="sonarr-open_in_iframe">
+                                        Open in Episeerr sidebar (iframe)
+                                    </label>
+                                    <small class="form-text text-muted d-block">
+                                        When checked, this service will open inside Episeerr instead of a new tab
+                                    </small>
+                                </div>
+                            </div>
+                            
                             <div class="d-flex justify-content-between">
                                 <button type="button" class="btn btn-secondary" onclick="testConnection('sonarr')">
                                     <i class="fas fa-plug me-1"></i>Test Connection
@@ -202,6 +216,19 @@
                                 </div>
                             </div>
                             
+                            <!-- Iframe Option -->
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="jellyfin-open_in_iframe" name="jellyfin-open_in_iframe">
+                                    <label class="form-check-label" for="jellyfin-open_in_iframe">
+                                        Open in Episeerr sidebar (iframe)
+                                    </label>
+                                    <small class="form-text text-muted d-block">
+                                        When checked, this service will open inside Episeerr instead of a new tab
+                                    </small>
+                                </div>
+                            </div>
+                            
                             <div class="d-flex justify-content-between">
                                 <button type="button" class="btn btn-secondary" onclick="testConnection('jellyfin')">
                                     <i class="fas fa-plug me-1"></i>Test
@@ -217,7 +244,6 @@
             </div>
         </div>
     </div>
-
     <!-- Emby -->
     <div class="row mb-3">
         <div class="col-12">
@@ -267,26 +293,36 @@
                                             <label for="emby-poll-interval" class="form-label">Poll Interval (seconds)</label>
                                             <input type="number" class="form-control" id="emby-poll-interval" name="emby-poll-interval"
                                                    value="{{ emby_poll_interval or '900' }}" min="300" step="60">
-                                            <small class="text-muted">Recommended: 900 (15 min). Min: 300 (5 min)</small>
+                                                    <small class="text-muted">Recommended: 900 (15 min). Min: 300 (5 min)</small>
                                         </div>
                                         <div class="col-md-6 mb-2">
                                             <label for="emby-trigger-percent" class="form-label">Trigger %</label>
                                             <input type="number" class="form-control" id="emby-trigger-percent" name="emby-trigger-percent"
                                                    value="{{ emby_trigger_percent or '50.0' }}" step="0.1" min="0" max="100">
                                         </div>
-                                    </div>
-                                    
-                                    <div class="alert alert-info mt-3 mb-0">
+                                        <div class="alert alert-info mt-3 mb-0">
                                         <small><strong>Webhook Setup:</strong><br>
                                         In Emby → Settings → Webhooks:<br>
                                         • Enable: <code>playback.start</code> and <code>playback.stop</code><br>
                                         &nbsp;&nbsp;→ Start fires once, triggers polling every 15 min until threshold<br>
                                         &nbsp;&nbsp;→ Stop is a safety net - checks final % in case polling hasn't caught it yet<br>
                                         • URL: <code>http://&lt;episeerr-ip&gt;:5002/emby-webhook</code></small>
+                                    
                                     </div>
                                 </div>
                             </div>
-                            
+                            <!-- Iframe Option -->
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="emby-open_in_iframe" name="emby-open_in_iframe">
+                                    <label class="form-check-label" for="emby-open_in_iframe">
+                                        Open in Episeerr sidebar (iframe)
+                                    </label>
+                                    <small class="form-text text-muted d-block">
+                                        When checked, this service will open inside Episeerr instead of a new tab
+                                    </small>
+                                </div>
+                            </div>
                             <div class="d-flex justify-content-between">
                                 <button type="button" class="btn btn-secondary" onclick="testConnection('emby')">
                                     <i class="fas fa-plug me-1"></i>Test
@@ -338,7 +374,18 @@
                                            placeholder="API Key" value="{{ tautulli_apikey or '' }}">
                                 </div>
                             </div>
-                            
+                            <!-- Iframe Option -->
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="tautulli-open_in_iframe" name="tautulli-open_in_iframe">
+                                    <label class="form-check-label" for="tautulli-open_in_iframe">
+                                        Open in Episeerr sidebar (iframe)
+                                    </label>
+                                    <small class="form-text text-muted d-block">
+                                        When checked, this service will open inside Episeerr instead of a new tab
+                                    </small>
+                                </div>
+                            </div>
                             <div class="d-flex justify-content-between">
                                 <button type="button" class="btn btn-secondary" onclick="testConnection('tautulli')">
                                     <i class="fas fa-plug me-1"></i>Test
@@ -397,7 +444,18 @@
                                            placeholder="API Key" value="{{ jellyseerr_apikey or '' }}">
                                 </div>
                             </div>
-                            
+                            <!-- Iframe Option -->
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="jellyseerr-open_in_iframe" name="jellyseerr-open_in_iframe">
+                                    <label class="form-check-label" for="jellyseerr-open_in_iframe">
+                                        Open in Episeerr sidebar (iframe)
+                                    </label>
+                                    <small class="form-text text-muted d-block">
+                                        When checked, this service will open inside Episeerr instead of a new tab
+                                    </small>
+                                </div>
+                            </div>
                             <div class="d-flex justify-content-between">
                                 <button type="button" class="btn btn-secondary" onclick="testConnection('jellyseerr')">
                                     <i class="fas fa-plug me-1"></i>Test
@@ -490,19 +548,41 @@
                     <div class="card-body">
                         <form id="{{ integration.service_name }}-form">
                             <div class="row">
-                                {% for field in integration.setup_fields %}
+                                {% for field in integration_configs[integration.service_name].setup_fields %}
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">{{ field.label }}</label>
                                     <input type="{{ field.type }}" 
                                         class="form-control"
                                         name="{{ integration.service_name }}-{{ field.name }}"
-                                        value="{{ integration_configs[integration.service_name].get(field.name, '') }}"
+                                        value="{{ integration_configs[integration.service_name].saved_values.get(field.name, '') | default('') }}"
                                         placeholder="{{ field.placeholder }}"
                                         {% if field.required %}required{% endif %}>
                                     {% if field.help %}<small class="text-muted">{{ field.help }}</small>{% endif %}
                                 </div>
                                 {% endfor %}
                             </div>
+                            
+                            <!-- Iframe Option -->
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input type="checkbox" 
+                                        class="form-check-input" 
+                                        id="{{ integration.service_name }}-open_in_iframe" 
+                                        name="{{ integration.service_name }}-open_in_iframe"
+                                        {% if integration_configs[integration.service_name].saved_values.get('open_in_iframe') %}checked{% endif %}>
+                                    <label class="form-check-label" for="{{ integration.service_name }}-open_in_iframe">
+                                        Open in Episeerr sidebar (iframe)
+                                    </label>
+                                    <small class="form-text text-muted d-block">
+                                        When checked, this service will open inside Episeerr instead of a new tab
+                                    </small>
+                                </div>
+                            </div>
+                            
+                            {% if integration.get_custom_setup_html is defined %}
+                                {{ integration.get_custom_setup_html(integration_configs[integration.service_name].saved_values) | safe }}
+                            {% endif %}
+                            
                             <div class="d-flex justify-content-between">
                                 <button type="button" class="btn btn-secondary" onclick="testConnection('{{ integration.service_name }}')">
                                     <i class="fas fa-plug me-1"></i>Test Connection
@@ -617,6 +697,17 @@
                                 Browse icons at <a href="https://github.com/walkxcode/dashboard-icons/tree/main/png" target="_blank">github.com/walkxcode/dashboard-icons</a>
                             </small>
                         </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="link-open-in-iframe" name="open_in_iframe">
+                                <label class="form-check-label" for="link-open-in-iframe">
+                                    Open in Episeerr sidebar (iframe)
+                                </label>
+                                <small class="form-text text-muted d-block">
+                                    When checked, this link will open inside Episeerr instead of a new tab
+                                </small>
+                            </div>
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -660,7 +751,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Set initial state based on saved value
+        // Set initial state
         const savedMethod = '{{ jellyfin_method }}' || 'polling';
         if (savedMethod === 'progress') {
             progressRadio.checked = true;
@@ -728,7 +819,8 @@ function addCustomLink() {
     const data = {
         name: formData.get('name'),
         url: formData.get('url'),
-        icon: formData.get('icon') || 'fas fa-link'
+        icon: formData.get('icon') || 'fas fa-link',
+        open_in_iframe: document.getElementById('link-open-in-iframe').checked
     };
     
     fetch('/api/quick-links', {
