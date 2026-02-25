@@ -7,19 +7,19 @@
   <!-- Slim Stats Bar -->
     <div class="row mb-3">
     <div class="col-12">
-        <div class="d-flex flex-wrap gap-3 justify-content-start align-items-center" id="stats-pills-container">
+        <div class="d-flex flex-wrap gap-2 justify-content-start align-items-center" id="stats-pills-container">
         <!-- Sonarr (Core - Always Visible) -->
-        <div class="stat-pill flex-grow-1 flex-md-grow-0 bg-dark border border-secondary rounded-pill px-4 py-3 text-center text-md-start">
-            <img src="https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/sonarr.png" class="me-2" style="width: 20px; height: 20px;">
+        <div class="stat-pill flex-grow-1 flex-md-grow-0 bg-dark border border-secondary rounded-pill px-3 py-2 px-md-4 py-md-3 text-center text-md-start" style="font-size: 0.82rem;">
+            <img src="https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/sonarr.png" class="me-1" style="width: 16px; height: 16px;">
             <strong id="sonarr-series">--</strong>
-            <small class="text-muted ms-2" id="sonarr-size">(-- GB)</small>
-            <small class="text-muted ms-2">•</small>
+            <small class="text-muted ms-1" id="sonarr-size">(-- GB)</small>
+            <small class="text-muted ms-1">•</small>
             <small class="text-muted ms-1"><strong id="episodes-count">--</strong> eps</small>
         </div>
 
         <!-- Sonarr Queue (Core - Always Visible) -->
-        <div class="stat-pill flex-grow-1 flex-md-grow-0 bg-dark border border-secondary rounded-pill px-4 py-3 text-center text-md-start">
-            <i class="fas fa-list me-2 text-info"></i>
+        <div class="stat-pill flex-grow-1 flex-md-grow-0 bg-dark border border-secondary rounded-pill px-3 py-2 px-md-4 py-md-3 text-center text-md-start" style="font-size: 0.82rem;">
+            <i class="fas fa-list me-1 text-info"></i>
             <strong id="sonarr-queue">--</strong>
         </div>
 
@@ -242,12 +242,12 @@ function loadIntegrations() {
                 
                 // Create pill element
                 const pill = document.createElement('div');
-                pill.className = 'stat-pill flex-grow-1 flex-md-grow-0 bg-dark border border-secondary rounded-pill px-4 py-3 text-center text-md-start';
+                pill.className = 'stat-pill flex-grow-1 flex-md-grow-0 bg-dark border border-secondary rounded-pill px-3 py-2 px-md-4 py-md-3 text-center text-md-start';
+                pill.style.cssText = 'display:none; font-size: 0.82rem;';
                 pill.id = `${integration.service_name}-pill`;
-                pill.style.display = 'none';  // Hidden until stats load
                 
                 pill.innerHTML = `
-                    <img src="${integration.icon}" class="me-2" style="width: 20px; height: 20px;" onerror="this.style.display='none'">
+                    <img src="${integration.icon}" class="me-1" style="width: 16px; height: 16px;" onerror="this.style.display='none'">
                     <span id="${integration.service_name}-content">--</span>
                 `;
                 

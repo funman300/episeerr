@@ -50,6 +50,23 @@ else
 fi
 echo "=================================================="
 
+# Ensure correct branch before anything runs
+if [ "$IS_TEST" = false ]; then
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        echo "❌ Error: Not in a git repository"
+        exit 1
+    fi
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    if [ "$CURRENT_BRANCH" != "main" ]; then
+        echo "⚠️  On branch '$CURRENT_BRANCH' — switching to main..."
+        if ! git checkout main; then
+            echo "❌ Error: Could not switch to main branch"
+            exit 1
+        fi
+        echo "✅ Now on main"
+    fi
+fi
+
 # Step 1: Git operations (SKIP if test mode)
 if [ "$IS_TEST" = false ]; then
     echo ""

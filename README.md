@@ -20,6 +20,9 @@ This project started as scratching my own itch - I wanted more granular series m
   - [Docker Compose](#docker-compose-recommended)
   - [Unraid](#unraid)
   - [Environment Variables](#environment-variables)
+- [Plex Watchlist Sync](#plex-watchlist-sync)
+  - [Setup](#setup)
+  - [Getting Your Plex Token](#getting-your-plex-token)
 - [Webhook Setup](#webhook-setup)
   - [Sonarr](#1-sonarr-webhook-required)
   - [Tautulli (Plex)](#2-tautulli-webhook-for-viewing-automation)
@@ -27,8 +30,9 @@ This project started as scratching my own itch - I wanted more granular series m
   - [Jellyseerr/Overseerr](#4-jellyseerroverseerr-webhook-optional)
 - [How to Use](#how-to-use)
   - [Create Your First Rule](#create-your-first-rule)
-  - [Add Series](#add-series-three-ways)
+  - [Add Series](#add-series-four-ways)
   - [Episode Selection](#episode-selection)
+  - [Selection Flow and Rule Picker](#selection-flow-and-rule-picker)
 - [Features Explained](#features-explained)
 - [Configuration Examples](#configuration-examples)
 - [Troubleshooting](#troubleshooting)
@@ -40,13 +44,15 @@ This project started as scratching my own itch - I wanted more granular series m
 
 ## What It Does
 
-Episeerr gives you **three independent features** for TV episode management:
+Episeerr gives you **four independent features** for TV episode management:
 
 | Feature | What It Does | Use Case |
 |---------|--------------|----------|
 | 🎯 **Episode Selection** | Choose specific episodes to download | Try pilots, skip seasons, selective downloads |
 | ⚡ **Viewing Automation** | Next episode ready when you watch | Binge watching, always-ready episodes |
 | 💾 **Storage Management** | Automatic cleanup based on time/viewing | Limited storage, inactive show cleanup |
+| 🔄 **Plex Watchlist Sync** | Add to Plex watchlist, Episeerr handles the rest | Zero-effort adding, full selection control |
+| 📌 **Always Have** | Baseline episodes always present and protected | Showcase libraries, permanent pilots, season placeholders |
 
 **Use one, some, or all** - they work independently!
 
@@ -102,8 +108,6 @@ services:
     image: vansmak/episeerr:latest
     container_name: episeerr
     environment:
-      
-      - LOG_LEVEL=INFO  # Optional - defaults to INFO if not set
       # ============================================
       # REQUIRED
       # ============================================
@@ -120,7 +124,7 @@ services:
       - TAUTULLI_API_KEY=your_tautulli_key
       
       # Option 2: Jellyfin (choose one mode below)
-      
+      environment:
       # --- Jellyfin: uncomment Option A OR Option B, not both ---
       #
       # Option A: Real-time (Jellyfin sends PlaybackProgress webhooks)
@@ -350,6 +354,71 @@ Download clients (qBittorrent, Transmission, etc.)
 Indexers and search services (Prowlarr, Jackett, etc.)
 Custom services with unique requirements
 
+
+## Plex Watchlist Sync
+
+**Add something to your Plex watchlist and Episeerr takes care of the rest.**
+
+- **TV shows** → get the `episeerr_select` tag in Sonarr → appear in Pending Requests → you pick a rule or specific episodes before anything downloads
+- **Movies** → go straight to Radarr (no selection step needed)
+
+**Optional:** Auto-remove movies from Radarr after you've watched them, with a configurable grace period.
+
+---
+
+### Setup
+
+1. Go to `http://your-server:5002/setup`
+2. Scroll to the **Plex** section under Dashboard Integrations
+3. Enter your **Plex URL** (e.g., `http://plex:32400`) and **Plex Token**
+4. In the **Watchlist Auto-Sync** section below the connection fields:
+   - Enable **automatic sync**
+   - Set your **sync interval** (default: 2 hours)
+   - Optionally enable **movie cleanup** with a grace period
+5. Click **Save**
+
+> **Prerequisites:** The `episeerr_select` delayed release profile in Sonarr must be set up or TV shows will start downloading immediately. See [Episode Selection setup](#episode-selection).
+
+---
+
+### Getting Your Plex Token
+
+A helper script is included in the repo. It requires the `requests` library.
+
+```bash
+python get_plex_token.py
+```
+
+Enter your Plex **username** (not email) and password when prompted. The token printed works for both local server access and the Plex.tv watchlist API.
+
+**Manual method (no script):**
+1. Sign in to [plex.tv](https://plex.tv) in a browser
+2. Open any media item
+3. Click the `···` menu → **Get Info**
+4. In the URL bar you'll find `X-Plex-Token=YOURTOKEN`
+
+---
+
+### How It Works
+
+| What You Do | What Episeerr Does |
+|-------------|-------------------|
+| Add TV show to Plex watchlist | Creates a pending selection request, tags series in Sonarr with `episeerr_select` |
+| Add movie to Plex watchlist | Sends directly to Radarr |
+| Watch a movie (if cleanup enabled) | Schedules Radarr deletion after grace period |
+
+Sync runs on your configured interval. Items already in Sonarr/Radarr are skipped. Items already in your pending requests are not duplicated.
+
+---
+
+### Movie Cleanup
+
+When **Delete movies after watched** is enabled:
+- Episeerr checks for watched movies in your Plex library
+- Movies watched more than **Grace Period** days ago are removed from Radarr
+- Only movies that were added via watchlist sync are eligible
+
+---
 
 ## Webhook Setup
 
@@ -678,7 +747,7 @@ docker logs episeerr | grep "Stored.*request"
 
 ---
 
-### Add Series (Three Ways)
+### Add Series (Four Ways)
 
 #### **Method 1: Auto-Assign (Passive)**
 
@@ -727,6 +796,18 @@ Best for: Existing series or manual control
 
 ---
 
+#### **Method 4: Plex Watchlist Sync (Automatic)**
+
+Best for: Hands-off adding from Plex
+
+1. **Enable Plex Watchlist Sync** on the Setup page
+2. **Add a show** to your Plex watchlist
+3. On the next sync cycle, Episeerr creates a pending request for TV shows, or sends movies straight to Radarr
+
+**Use case:** Browse Plex Discover, add to watchlist, Episeerr handles the rest
+
+---
+
 ### Episode Selection
 
 **Choose specific episodes manually across seasons.**
@@ -751,22 +832,61 @@ Best for: Existing series or manual control
 
 #### **Usage:**
 
+**Method A: Sonarr tag (new series)**
+
 1. **Add series to Sonarr** with `episeerr_select` tag
-
 2. **Episeerr** → Pending Items → Select Seasons
-
 3. **Choose specific episodes**
-
 4. **Submit** → Only those episodes monitored
 
-```
-[Episode selection interface showing seasons and episodes]
-[Checkboxes for each episode]
-```
+**Method B: Series page icon (existing series)**
+
+1. **Episeerr** → Series (grid or manage view)
+2. Click the **list icon** on any poster (grid) or in the Actions column (table)
+3. You're taken straight to the selection page for that show
+
+**Method C: Plex Watchlist Sync**
+
+1. Add a TV show to your Plex watchlist
+2. On the next sync, a pending request is created automatically
+3. Go to **Pending Items** → Select Seasons and episodes
+
+---
+
+### Selection Flow and Rule Picker
+
+When a show enters the selection flow (from any method above), the season selection page shows a **rule dropdown** at the top.
+
+**Two options:**
+
+| Option | What It Does |
+|--------|--------------|
+| **Apply Rule** | Assigns the rule for ongoing management — no immediate downloads; the rule governs future watch events |
+| **Select seasons/episodes below** | Manually choose what to download; the selected rule is still assigned for ongoing management |
+
+**The rule dropdown pre-selects the show's current rule** if it already has one — so re-routing a series to a different rule is just a one-click change.
 
 ---
 
 ## Features Explained
+
+### 🔄 Plex Watchlist Sync
+
+**Hands-off adding from your Plex watchlist.**
+
+**Use cases:**
+- Browse Plex Discover and add without touching Sonarr
+- Automatic movie requests to Radarr
+- Clean up watched movies automatically
+
+**How it works:**
+1. Add show/movie to Plex watchlist
+2. Episeerr polls on your configured interval
+3. TV → pending selection request + `episeerr_select` tag in Sonarr
+4. Movie → sent directly to Radarr
+5. (Optional) Watched movies removed from Radarr after grace period
+
+---
 
 ### 🎯 Episode Selection
 
@@ -777,12 +897,34 @@ Best for: Existing series or manual control
 - Skip filler episodes
 - Download specific arcs
 - Selective backlog management
+- Re-route an existing series to a different rule
 
 **How it works:**
-1. Add series with `episeerr_select` tag
-2. All episodes unmonitored
-3. Choose which ones you want
-4. Only selected episodes download
+1. Series enters selection flow (tag, watchlist sync, or series page icon)
+2. Season selection page appears with a rule picker at the top
+3. Either apply a rule directly (no manual picking needed), or choose specific episodes below
+4. Only selected episodes download; the chosen rule handles ongoing management
+
+---
+
+### 📌 Always Have (Rule Parameter)
+
+**Define a baseline of episodes that are always present and protected from cleanup.**
+
+This is about setting up the show, not ongoing watching. When a show enters a rule with Always Have, those episodes get downloaded immediately. Grace and Keep cleanup will never touch them — only Dormant (which is intentionally nuclear) overrides this.
+
+**Expression syntax:**
+
+| Expression | Result |
+|------------|--------|
+| `s1e1` | Just the pilot |
+| `s1` | All of season 1 |
+| `s1, s*e1` | Season 1 + first ep of every other season |
+| `s1-3` | Seasons 1 through 3 |
+| `s1e1-5` | Season 1, episodes 1-5 |
+| `all` | Everything |
+
+Combine with commas. Leave blank to skip. Always Have, Get, Keep, Grace, and Dormant are all independent — use any combination.
 
 ---
 
@@ -926,6 +1068,53 @@ Dormant: 90 days
 
 ---
 
+### Showcase
+
+**Profile:** Plex shows all seasons exist without downloading everything
+
+```yaml
+Rule Name: showcase
+Always Have: s1, s*e1
+GET: 1 episode
+KEEP: 1 episode
+Action: Search
+Grace Watched: null
+Grace Unwatched: null
+Dormant: null
+```
+
+**What happens:**
+- Show added → Season 1 downloads + first episode of every other season
+- Plex displays all seasons so users see the full scope of the show
+- When someone starts watching → Get 1 brings the next episode
+- Always Have episodes never get deleted by Keep or Grace
+- No cleanup configured — show persists as a library placeholder
+
+---
+
+### One-at-a-Time with Pilot
+
+**Profile:** Minimal footprint, always keep a starting point
+
+```yaml
+Rule Name: one_at_a_time
+Always Have: s1e1
+GET: 1 episode
+KEEP: 1 episode
+Action: Search
+Keep Pilot: true
+Grace Watched: 14 days
+Dormant: 60 days
+```
+
+**What happens:**
+- Pilot is always protected (Always Have + Keep Pilot)
+- Watch E5 → E6 ready, E4 deleted
+- After 14 days inactive → Cleanup watched, pilot stays
+- After 60 days dormant → Everything deleted including pilot
+
+---
+
 ## Troubleshooting
 
 ### Container Won't Start
@@ -1053,6 +1242,25 @@ docker logs episeerr | grep "Jellyfin"
 
 ## FAQ
 
+### Plex Watchlist Sync
+
+**Q: Do I need Tautulli for Plex watchlist sync?**
+A: No. Watchlist sync uses the Plex.tv API directly with your Plex token — Tautulli is only needed for viewing automation (next episode ready when you watch).
+
+**Q: Where do I get my Plex token?**
+A: Run `python get_plex_token.py` from the repo. Enter your Plex **username** (not email) and password. See [Getting Your Plex Token](#getting-your-plex-token) for a manual method too.
+
+**Q: Why does my username not work in get_plex_token.py?**
+A: Use your Plex **username**, not your email address. Check your username at [plex.tv/account](https://app.plex.tv/desktop/#!/account).
+
+**Q: TV shows from my watchlist aren't downloading automatically — is that right?**
+A: Yes, by design. TV shows get the `episeerr_select` tag and land in Pending Requests so you can choose a rule or pick specific episodes first. Movies go straight to Radarr with no selection step.
+
+**Q: Can I change the sync interval?**
+A: Yes — Setup page → Plex section → Sync Interval. Options range from 30 minutes to 24 hours.
+
+---
+
 ### General
 
 **Q: Do I need all the webhooks?**  
@@ -1060,6 +1268,15 @@ A: No! Only set up webhooks for features you want:
 - Episode Selection only: Sonarr webhook
 - Viewing Automation: Sonarr + Tautulli/Jellyfin webhooks
 - Full automation: All webhooks
+
+**Q: What does Always Have do?**  
+A: It's an expression on a rule that defines episodes to always keep. When a show enters the rule, those episodes get downloaded immediately. Grace and Keep cleanup won't delete them. Only Dormant (which is intentionally nuclear) overrides it.
+
+**Q: Does Always Have apply when I move a show to a different rule?**  
+A: Yes. Whether it's a new show or a reassignment, the Always Have expression runs and ensures those episodes are monitored.
+
+**Q: Will Always Have re-download episodes I deleted manually?**  
+A: Not automatically. Always Have runs on rule assignment and protects during cleanup. It doesn't continuously scan for missing episodes.
 
 **Q: Can I use both Tautulli and Jellyfin?**  
 A: No need - choose one based on your media server (Plex = Tautulli, Jellyfin = Jellyfin webhook)
