@@ -339,6 +339,9 @@ def get_episeerr_delay_profile_id():
         logger.warning("No suitable delay profile found")
         return None
         
+    except requests.exceptions.ConnectionError:
+        logger.warning("Sonarr not reachable - skipping delay profile lookup")
+        return None
     except Exception as e:
         logger.error(f"Error finding Episeerr delay profile: {str(e)}")
         return None
@@ -471,6 +474,9 @@ def get_series_from_sonarr(series_id):
             logger.error(f"Failed to get series {series_id}: {response.status_code}")
             return None
             
+    except requests.exceptions.ConnectionError:
+        logger.warning(f"Sonarr not reachable - skipping series {series_id} lookup")
+        return None
     except Exception as e:
         logger.error(f"Error getting series {series_id}: {str(e)}")
         return None
@@ -754,6 +760,9 @@ def get_series_title(series_id, headers):
         if response.ok:
             return response.json().get('title', 'Unknown Series')
         return 'Unknown Series'
+    except requests.exceptions.ConnectionError:
+        logger.warning("Sonarr not reachable - cannot get series title")
+        return 'Unknown Series'
     except Exception as e:
         logger.error(f"Error getting series title: {str(e)}")
         return 'Unknown Series'
@@ -894,6 +903,9 @@ def get_series_episodes(series_id, season_number, headers):
 
         return episodes_response.json()
         
+    except requests.exceptions.ConnectionError:
+        logger.warning("Sonarr not reachable - cannot get series episodes")
+        return []
     except Exception as e:
         logger.error(f"Error getting series episodes: {str(e)}", exc_info=True)
         return []
