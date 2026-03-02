@@ -2,6 +2,17 @@
 
 ## [Unreleased / Dev]
 
+### v3.4.0
+
+🔐 **Auth**
+- Webhook endpoints for Jellyfin, Emby, and Jellyseerr integrations are now exempt from authentication — external services no longer receive `401 Unauthorized` when `REQUIRE_AUTH=true`
+
+🛠️ **Fixes**
+- Episeerr starts cleanly even when Sonarr is offline — tag reconciliation and delay profile sync log a warning instead of erroring out
+- `/api/series-stats` returns `503 Sonarr unavailable` (instead of crashing) when Sonarr is unreachable at startup or during operation
+- Series and Rules pages show an empty list instead of a 500 error when Sonarr is down
+- Config cleanup scheduler skips silently when Sonarr is unreachable, preventing accidental series removal from config
+
 ### v3.3.9
 - **Fix** — `get_rule_for_series` phantom import removed from `media_processor.py`; replaced with inline lookup over `config['rules']` (function never existed, caused import error during webhook processing)
 

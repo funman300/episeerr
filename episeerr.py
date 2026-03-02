@@ -1,4 +1,4 @@
-__version__ = "3.3.9"
+__version__ = "3.4.0"
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import subprocess
 import os
@@ -93,6 +93,10 @@ _AUTH_EXEMPT_ENDPOINTS = {
     'static',
     'process_sonarr_webhook',
     'handle_server_webhook',
+    # Integration webhooks (Blueprint endpoints — external services can't authenticate)
+    'jellyfin_integration.jellyfin_webhook',
+    'emby_integration.emby_webhook',
+    'seerr_integration.seerr_webhook',
 }
 
 
@@ -1063,7 +1067,10 @@ Add these routes to your Flask application to support the sidebar navigation.
 def rules_page():
     """Rules management page with series assignment interface."""
     config = load_config()
-    all_series = get_sonarr_series()
+    try:
+        all_series = get_sonarr_series()
+    except requests.exceptions.ConnectionError:
+        all_series = []
     
     # Get SONARR_URL for template links
     sonarr_preferences = sonarr_utils.load_preferences()
@@ -1747,6 +1754,9 @@ def get_sonarr_series():
         
         return all_series
         
+    except requests.exceptions.ConnectionError:
+        app.logger.warning("Sonarr not reachable - is it running?")
+        raise
     except Exception as e:
         app.logger.error(f"Error fetching Sonarr series: {str(e)}")
         return []
@@ -1771,7 +1781,11 @@ def index():
 def series_management():  # Changed from index to avoid confusion
     """Main series/rules management page."""
     config = load_config()
-    all_series = get_sonarr_series()
+    try:
+        all_series = get_sonarr_series()
+    except requests.exceptions.ConnectionError:
+        all_series = []
+        app.logger.warning("Sonarr not reachable - showing empty series list")
     sonarr_stats = get_sonarr_stats()
     
     # Get SONARR_URL for template links
@@ -2362,9 +2376,23 @@ def series_stats():
             count = sum(1 for sid in details.get('series', {}) if str(sid) in all_series_ids)
             stats['rule_breakdown'][rule_name] = count
         return jsonify(stats)
+    except requests.exceptions.ConnectionError:
+        return jsonify({
+            "status": "error",
+            "message": "Sonarr unavailable",
+            "series_count": 0,
+            "monitored": 0,
+            "unassigned": 0
+        }), 503
     except Exception as e:
         app.logger.error(f"Error getting series stats: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "series_count": 0,
+            "monitored": 0,
+            "unassigned": 0
+        }), 500
 
 def cleanup_config_rules():
     """Clean up config by removing non-existent series AND comprehensive tag reconciliation."""
@@ -2510,6 +2538,9 @@ def cleanup_config_rules():
         else:
             app.logger.info("✓ Tag reconciliation complete: No changes needed")
             
+    except requests.exceptions.ConnectionError:
+        app.logger.warning("Sonarr not reachable during cleanup - skipping")
+        return
     except Exception as e:
         app.logger.error(f"Error during config cleanup: {str(e)}")
 
@@ -4786,9 +4817,11 @@ def initialize_episeerr():
         # Summary
         app.logger.info(f"✓ Tag reconciliation complete: {drift_fixed} moved, {drift_synced} synced, {orphaned} orphaned")
             
+    except requests.exceptions.ConnectionError:
+        app.logger.warning("Sonarr not ready - tags will be created when Sonarr becomes available")
     except Exception as e:
         app.logger.error(f"Error during tag reconciliation: {str(e)}")
-    
+
     # NEW: Ensure delay profile has control tags ONLY (default, select, delay)
     try:
         updated = episeerr_utils.update_delay_profile_with_control_tags()
@@ -4796,6 +4829,8 @@ def initialize_episeerr():
             app.logger.info("✓ Delay profile updated with control tags (default, select, delay)")
         else:
             app.logger.warning("Delay profile update skipped or failed (check logs)")
+    except requests.exceptions.ConnectionError:
+        app.logger.warning("Sonarr not ready yet - will retry delay profile sync later")
     except Exception as e:
         app.logger.error(f"Error updating delay profile with control tags: {str(e)}")
     

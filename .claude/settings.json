@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(///192.168.254.205/joe_home/projects/episeerr/**)",
+      "Read(///192.168.254.205/joe_home/projects/episeerr_dev/**)"
+    ],
+    "additionalDirectories": [
+      "\\\\192.168.254.205\\joe_home\\projects\\episeerr_dev"
+    ]
+  }
+}
