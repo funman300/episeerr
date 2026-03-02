@@ -277,6 +277,9 @@ def get_or_create_rule_tag_id(rule_name):
             logger.error(f"Failed to create tag '{tag_label}': {tag_create_response.text}")
             return None
             
+    except requests.exceptions.ConnectionError:
+        logger.warning(f"Error creating rule tag '{rule_name}': Sonarr not reachable")
+        return None
     except Exception as e:
         logger.error(f"Error creating rule tag '{rule_name}': {str(e)}")
         return None
@@ -1302,6 +1305,8 @@ def check_and_cancel_unmonitored_downloads():
         # Log summary
         logger.info(f"Cancellation check complete. Cancelled {cancelled_count} unmonitored downloads for episeerr series")
     
+    except requests.exceptions.ConnectionError:
+        logger.warning("Error in download queue monitoring: Sonarr not reachable")
     except Exception as e:
         logger.error(f"Error in download queue monitoring: {str(e)}", exc_info=True)
         

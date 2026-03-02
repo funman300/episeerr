@@ -4641,7 +4641,10 @@ def migrate_create_rule_tags():
                     app.logger.info(f"✓ Created/verified tag: episeerr_{rule_name} (ID: {tag_id})")
                 else:
                     failed.append(rule_name)
-                    app.logger.error(f"✗ Failed to create tag for rule: {rule_name}")
+                    app.logger.warning(f"✗ Failed to create tag for rule: {rule_name}")
+            except requests.exceptions.ConnectionError:
+                failed.append(rule_name)
+                app.logger.warning(f"✗ Sonarr not reachable - skipping tag for rule: {rule_name}")
             except Exception as e:
                 failed.append(rule_name)
                 app.logger.error(f"✗ Error creating tag for {rule_name}: {str(e)}")
