@@ -1,6 +1,14 @@
 # Changelog
 
-## [Unreleased / Dev]
+## v3.4.1
+
+### 🐛 Jellyfin Fixes
+- Detection Method field now renders as a dropdown in setup UI (was rendering as a text input)
+- Fixed critical bug in PlaybackProgress mode: episode was marked as processed *before* `process_episode()` ran, and a duplicate dedup check inside `process_episode()` caused it to immediately return `False` — subprocess never executed despite logs claiming success
+- Dedup check now happens before the "In trigger range" log so duplicate ticks are silent at debug level
+- Per-tick progress % log demoted to debug — no more log spam during playback
+- `process_episode()` now logs Sonarr series lookup result, assigned rule, and full media_processor output on failure
+- Sonarr series not found returns `False` immediately with a clear warning instead of silently continuing
 
 ### v3.4.0
 
