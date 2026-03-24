@@ -348,7 +348,7 @@ class JellyfinIntegration(ServiceIntegration):
                 logger.warning(f"❌ Sonarr series not found for '{series_name}' — check title matches Sonarr exactly")
                 return False
             logger.info(f"✅ Found Sonarr series ID {series_id} for '{series_name}'")
-
+            
             # Tag sync & drift correction
             from episeerr_utils import validate_series_tag, sync_rule_tag_to_sonarr
             from episeerr import load_config

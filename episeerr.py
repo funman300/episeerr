@@ -1,4 +1,4 @@
-__version__ = "3.4.1"
+__version__ = "3.5.0"
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import subprocess
 import os
@@ -97,6 +97,8 @@ _AUTH_EXEMPT_ENDPOINTS = {
     'jellyfin_integration.jellyfin_webhook',
     'emby_integration.emby_webhook',
     'seerr_integration.seerr_webhook',
+    'plex_integration.webhook',
+    'tautulli_integration.tautulli_webhook',
 }
 
 
@@ -139,8 +141,8 @@ def login():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
 
-        valid_username = os.getenv('AUTH_USERNAME', 'admin')
-        valid_password = os.getenv('AUTH_PASSWORD', '')
+        valid_username = os.getenv('AUTH_USERNAME', 'admin').strip()
+        valid_password = os.getenv('AUTH_PASSWORD', '').strip()
 
         if not valid_password:
             return render_template('login.html',
@@ -185,34 +187,121 @@ def reload_module_configs():
     except Exception as e:
         app.logger.error(f"Failed to reload module configs: {e}")
 
-def auto_add_quick_link(name, url, icon, open_in_iframe=False):
+def get_smart_url(service_data, req):
+    """Return the best URL for the current request context (HTTP vs HTTPS)."""
+    primary_url = service_data.get('url', '') or ''
+    config = service_data.get('config') or {}
+    alternate_url = config.get('alternate_url', '') or ''
+    is_https = (
+        req.is_secure or
+        req.headers.get('X-Forwarded-Proto') == 'https' or
+        req.headers.get('X-Forwarded-Ssl') == 'on'
+    )
+    if is_https and alternate_url:
+        return alternate_url
+    return primary_url or None
+
+
+def get_smart_url_for_link(link, req):
+    """Return the best URL for a quick_link dict."""
+    alternate_url = link.get('alternate_url', '') or ''
+    is_https = (
+        req.is_secure or
+        req.headers.get('X-Forwarded-Proto') == 'https' or
+        req.headers.get('X-Forwarded-Ssl') == 'on'
+    )
+    if is_https and alternate_url:
+        return alternate_url
+    return link.get('url', '')
+
+
+# ---------------------------------------------------------------------------
+# Container liveness filter (cached 30 s)
+# ---------------------------------------------------------------------------
+_container_cache: dict = {'data': None, 'ts': 0.0}
+_CONTAINER_CACHE_TTL = 30
+
+
+def get_running_containers():
+    """Return (running_names: set[str], running_ports: set[int]) or (None, None) if Docker unavailable."""
+    import time
+    global _container_cache
+    now = time.time()
+    if _container_cache['data'] is not None and now - _container_cache['ts'] < _CONTAINER_CACHE_TTL:
+        return _container_cache['data']
+    try:
+        from integrations.docker import _docker_get
+        from settings_db import get_service as _gs
+        docker_svc = _gs('docker', 'default')
+        if not docker_svc:
+            raise RuntimeError('Docker not configured')
+        cfg = docker_svc.get('config') or {}
+        host = cfg.get('docker_host') or docker_svc.get('url') or 'unix:///var/run/docker.sock'
+        containers = _docker_get(host, '/containers/json')  # no all=true → running only
+        running_names, running_ports = set(), set()
+        for c in containers:
+            for n in c.get('Names', []):
+                running_names.add(n.lstrip('/').lower())
+            for p in c.get('Ports', []):
+                if p.get('PublicPort'):
+                    running_ports.add(p['PublicPort'])
+        result = (running_names, running_ports)
+    except Exception as e:
+        app.logger.debug(f'Container liveness check unavailable: {e}')
+        result = (None, None)
+    _container_cache = {'data': result, 'ts': now}
+    return result
+
+
+def is_container_running(url, running_names, running_ports, name=None):
+    """True if the service appears to be running, or if Docker info is unavailable."""
+    if running_names is None:
+        return True  # Docker not configured/reachable — show everything
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url or '')
+        host = (parsed.hostname or '').lower()
+        is_local = (
+            host in ('localhost', '127.0.0.1') or
+            host.startswith('192.168.') or
+            host.startswith('10.') or
+            any(host.startswith(f'172.{i}.') for i in range(16, 32))
+        )
+        if not is_local:
+            return True  # External / public URL — always show
+        if parsed.port and parsed.port in running_ports:
+            return True
+    except Exception:
+        return True
+    # Port check failed (host-networked containers don't expose ports) — try name
+    if name:
+        nl = name.lower()
+        for cname in running_names:
+            if nl in cname or cname in nl:
+                return True
+    return False
+
+
+def auto_add_quick_link(name, url, icon, open_in_iframe=False, alternate_url=None):
     """Automatically add or update a service quick link"""
     from settings_db import get_all_quick_links, add_quick_link, delete_quick_link
-    
-    # Check if link already exists (by URL)
+
     existing_links = get_all_quick_links()
-    
-    # Normalize URLs for comparison
     normalized_url = url.rstrip('/').lower()
-    
+
     for link in existing_links:
-        link_url = link['url'].rstrip('/').lower()
-        
-        if link_url == normalized_url:
+        if link['url'].rstrip('/').lower() == normalized_url:
             app.logger.debug(f"Quick link for {name} already exists (ID: {link['id']})")
-            
-            # UPDATE: Check if open_in_iframe setting changed
-            if link.get('open_in_iframe') != open_in_iframe:
-                # Need to update the quick link with new iframe setting
+            # Recreate if iframe or alternate_url changed
+            if (link.get('open_in_iframe') != open_in_iframe or
+                    (link.get('alternate_url') or '') != (alternate_url or '')):
                 delete_quick_link(link['id'])
-                new_id = add_quick_link(name, url, icon, open_in_iframe)
-                app.logger.info(f"Updated quick link {name} - iframe: {open_in_iframe} (ID: {new_id})")
-            
-            return  # Already exists (and updated if needed)
-    
-    # Add new link
-    add_quick_link(name, url, icon, open_in_iframe)
-    app.logger.info(f"Auto-added {name} to quick links - iframe: {open_in_iframe}")
+                new_id = add_quick_link(name, url, icon, open_in_iframe, alternate_url)
+                app.logger.info(f"Updated quick link {name} (ID: {new_id})")
+            return
+
+    add_quick_link(name, url, icon, open_in_iframe, alternate_url)
+    app.logger.info(f"Auto-added {name} to quick links")
 
 @app.before_request
 def check_first_run():
@@ -292,21 +381,26 @@ def setup():
             'saved_values': saved_values  # for template pre-fill
         }
     
-    # Check if setup is complete
-    setup_complete = (sonarr and tautulli)
+    # Check if setup is complete — needs Sonarr + at least one media server
+    plex_svc     = get_service('plex',     'default')
+    jellyfin_svc = get_service('jellyfin', 'default')
+    emby_svc     = get_service('emby',     'default')
+    has_media_server = bool(tautulli or plex_svc or jellyfin_svc or emby_svc)
+    setup_complete = bool(sonarr and has_media_server)
     
     # Quick links
     from settings_db import get_all_quick_links
     quick_links = get_all_quick_links()
     
+    sonarr_config = (sonarr.get('config') or {}) if sonarr else {}
+
     return render_template('setup.html',
         setup_complete=setup_complete,
         sonarr_connected=sonarr is not None,
         sonarr_url=sonarr['url'] if sonarr else None,
         sonarr_apikey=sonarr['api_key'] if sonarr else None,
-        tautulli_connected=tautulli is not None,
-        tautulli_url=tautulli['url'] if tautulli else None,
-        tautulli_apikey=tautulli['api_key'] if tautulli else None,
+        sonarr_alternate_url=sonarr_config.get('alternate_url', ''),
+        sonarr_open_in_iframe=sonarr_config.get('open_in_iframe', False),
         tmdb_connected=tmdb is not None,
         tmdb_apikey=tmdb['api_key'] if tmdb else None,
         integrations=get_all_integrations(),
@@ -484,14 +578,14 @@ def save_service_config(service):
                 # Auto-add/update quick links if URL provided
                 if url and url.startswith('http'):
                     try:
-                        # Get the open_in_iframe setting from normalized_data
                         open_in_iframe = normalized_data.get('open_in_iframe', False)
-                        
+                        alternate_url = normalized_data.get('alternate_url') or None
                         auto_add_quick_link(
                             integration.display_name,
                             url,
                             integration.icon,
-                            open_in_iframe  # Pass the iframe setting
+                            open_in_iframe,
+                            alternate_url
                         )
                     except Exception as e:
                         app.logger.warning(f"Failed to add/update quick link: {e}")
@@ -520,32 +614,38 @@ def save_service_config(service):
             url = data.get('sonarr-url')
             apikey = data.get('sonarr-apikey')
             open_in_iframe = data.get('sonarr-open_in_iframe', False)
+            alternate_url = data.get('sonarr-alternate_url') or None
 
             if not url or not apikey:
                 return jsonify({'status': 'error', 'message': 'URL and API key required'}), 400
-            
-            save_service('sonarr', 'default', url, apikey)
-            auto_add_quick_link('Sonarr', url, 
-                              'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/sonarr.png', open_in_iframe)
-            
+
+            save_service('sonarr', 'default', url, apikey,
+                         config={'alternate_url': alternate_url, 'open_in_iframe': open_in_iframe})
+            auto_add_quick_link('Sonarr', url,
+                                'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/sonarr.png',
+                                open_in_iframe, alternate_url)
+
             return jsonify({
                 'status': 'success',
                 'message': 'Sonarr saved successfully'
             })
-        
-        
-        
+
+
+
         elif service == 'tautulli':
             url = data.get('tautulli-url')
             apikey = data.get('tautulli-apikey')
             open_in_iframe = data.get('tautulli-open_in_iframe', False)
+            alternate_url = data.get('tautulli-alternate_url') or None
 
             if not url or not apikey:
                 return jsonify({'status': 'error', 'message': 'URL and API key required'}), 400
-            
-            save_service('tautulli', 'default', url, apikey)
+
+            save_service('tautulli', 'default', url, apikey,
+                         config={'alternate_url': alternate_url, 'open_in_iframe': open_in_iframe})
             auto_add_quick_link('Tautulli', url,
-                              'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/tautulli.png', open_in_iframe)
+                                'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/tautulli.png',
+                                open_in_iframe, alternate_url)
             
             return jsonify({
                 'status': 'success',
@@ -582,18 +682,27 @@ def save_service_config(service):
 def manage_quick_links():
     """Get or add quick links"""
     from settings_db import get_all_quick_links, add_quick_link
-    
+
     if request.method == 'GET':
         links = get_all_quick_links()
-        return jsonify({'status': 'success', 'links': links})
-    
+        running_names, running_ports = get_running_containers()
+        result = []
+        for link in links:
+            # Custom (manually-added) links always show; auto-added links require container check
+            if link.get('custom') or is_container_running(link.get('url', ''), running_names, running_ports, name=link.get('name')):
+                link['url'] = get_smart_url_for_link(link, request)
+                result.append(link)
+        return jsonify({'status': 'success', 'links': result})
+
     else:  # POST
         data = request.json
         link_id = add_quick_link(
             data.get('name'),
             data.get('url'),
             data.get('icon', 'fas fa-link'),
-            data.get('open_in_iframe', False)  # NEW: Accept iframe flag
+            data.get('open_in_iframe', False),
+            data.get('alternate_url') or None,
+            custom=True
         )
         return jsonify({'status': 'success', 'id': link_id})
 
@@ -605,15 +714,16 @@ def iframe_view(service_id):
     from settings_db import get_quick_link_by_id
     
     service = get_quick_link_by_id(service_id)
-    
+
     if not service:
         return "Service not found", 404
-    
+
+    smart_url = get_smart_url_for_link(service, request)
+
     if not service.get('open_in_iframe'):
-        # If not configured for iframe, redirect to external URL
-        return redirect(service['url'])
-    
-    return render_template('iframe_view.html', service=service)
+        return redirect(smart_url)
+
+    return render_template('iframe_view.html', service={**service, 'url': smart_url})
 
 
 @app.route('/api/services-sidebar')
@@ -649,21 +759,72 @@ def services_sidebar():
     return jsonify({'status': 'success', 'services': services})
 
 
+def get_episode_watch_history(rating_key: str):
+    """
+    Route watch-history queries to the correct integration.
+
+    Priority:
+      1. Tautulli — if configured with override_plex=True
+      2. Plex     — if configured
+      3. Jellyfin — if configured
+      4. Emby     — if configured
+      5. None
+
+    Returns {'last_watched': <unix timestamp>} or None.
+    """
+    from settings_db import get_tautulli_config, get_plex_config, get_jellyfin_config, get_emby_config
+
+    tautulli_cfg = get_tautulli_config()
+    if tautulli_cfg and tautulli_cfg.get('override_plex'):
+        from integrations.tautulli import get_tautulli_watch_history
+        result = get_tautulli_watch_history(rating_key)
+        if result:
+            return result
+
+    plex_cfg = get_plex_config()
+    if plex_cfg and plex_cfg.get('url') and plex_cfg.get('api_key'):
+        from integrations.plex import get_plex_watch_history
+        return get_plex_watch_history(rating_key)
+
+    jellyfin_cfg = get_jellyfin_config()
+    if jellyfin_cfg and jellyfin_cfg.get('url') and jellyfin_cfg.get('api_key'):
+        # Jellyfin uses internal item IDs, not Plex rating_keys — return None here;
+        # callers that use Jellyfin should query get_jellyfin_config() directly.
+        return None
+
+    emby_cfg = get_emby_config()
+    if emby_cfg and emby_cfg.get('url') and emby_cfg.get('api_key'):
+        return None  # Same note as Jellyfin above
+
+    return None
+
+
 @app.route('/api/media-server')
 def get_media_server():
-    """Get all configured media servers (Plex via Tautulli, Jellyfin, Emby)."""
+    """Get all configured media servers (Plex, Jellyfin, Emby)."""
     from integrations import get_integration
     from settings_db import get_service
 
     media_servers = []
+    running_names, running_ports = get_running_containers()
 
-    # Plex via Tautulli (legacy)
+    # Plex (direct integration)
+    plex_data = get_service('plex', 'default')
+    if plex_data and is_container_running(plex_data.get('url', ''), running_names, running_ports, name='plex'):
+        media_servers.append({
+            'type': 'plex',
+            'name': 'Plex',
+            'url': get_smart_url(plex_data, request),
+            'icon': 'https://www.plex.tv/wp-content/themes/plex/assets/img/plex-logo.svg'
+        })
+
+    # Tautulli — kept for backward compat; users may still rely on this link
     tautulli = get_service('tautulli', 'default')
-    if tautulli:
+    if tautulli and is_container_running(tautulli.get('url', ''), running_names, running_ports, name='tautulli'):
         media_servers.append({
             'type': 'tautulli',
             'name': 'Tautulli',
-            'url': tautulli['url'],
+            'url': get_smart_url(tautulli, request),
             'icon': 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/tautulli.png'
         })
 
@@ -671,11 +832,11 @@ def get_media_server():
     jellyfin = get_integration('jellyfin')
     if jellyfin:
         data = get_service('jellyfin', 'default')
-        if data:
+        if data and is_container_running(data.get('url', ''), running_names, running_ports, name='jellyfin'):
             media_servers.append({
                 'type': 'jellyfin',
                 'name': 'Jellyfin',
-                'url': data['url'],
+                'url': get_smart_url(data, request),
                 'icon': 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyfin.png'
             })
 
@@ -683,11 +844,11 @@ def get_media_server():
     emby = get_integration('emby')
     if emby:
         data = get_service('emby', 'default')
-        if data:
+        if data and is_container_running(data.get('url', ''), running_names, running_ports, name='emby'):
             media_servers.append({
                 'type': 'emby',
                 'name': 'Emby',
-                'url': data['url'],
+                'url': get_smart_url(data, request),
                 'icon': 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/emby.png'
             })
 
@@ -700,22 +861,22 @@ def get_optional_integrations():
     from integrations import get_all_integrations
     from settings_db import get_service
 
-    # Only exclude the actual media server integrations (Jellyfin/Emby webhooks).
-    # 'plex' integration is for watchlists/widgets — keep it in optional integrations.
-    media_servers = {'jellyfin', 'emby'}
+    # Exclude media server integrations from the optional list — they appear in /api/media-server
+    media_servers = {'jellyfin', 'emby', 'plex', 'tautulli'}
     connected = []
+    running_names, running_ports = get_running_containers()
 
     for integration in get_all_integrations():
         service_name = integration.service_name
         if service_name in media_servers:
             continue
         data = get_service(service_name, 'default')
-        # Only include if configured AND has a URL (e.g. Docker without web UI URL is excluded)
-        if data and data.get('url'):
+        # Only include if configured AND has a URL AND container is running
+        if data and data.get('url') and is_container_running(data.get('url', ''), running_names, running_ports, name=service_name):
             config = data.get('config') or {}
             connected.append({
                 'name': integration.display_name,
-                'url': data['url'],
+                'url': get_smart_url(data, request),
                 'icon': integration.icon,
                 'service_name': service_name,
                 'open_in_iframe': bool(config.get('open_in_iframe', False)),
@@ -740,13 +901,14 @@ def iframe_service_view(service_type):
     if service.get('config'):
         open_in_iframe = service['config'].get('open_in_iframe', False)
     
+    smart_url = get_smart_url(service, request)
+
     if not open_in_iframe:
-        # If not configured for iframe, redirect to external URL
-        return redirect(service['url'])
-    
+        return redirect(smart_url)
+
     return render_template('iframe_view.html', service={
         'name': service_type.replace('_', ' ').title(),
-        'url': service['url']
+        'url': smart_url
     })
 
 @app.route('/api/quick-links/<int:link_id>', methods=['DELETE'])
@@ -755,6 +917,14 @@ def delete_quick_link_route(link_id):
     from settings_db import delete_quick_link
     delete_quick_link(link_id)
     return jsonify({'status': 'success'})
+
+
+@app.route('/api/invalidate-container-cache', methods=['POST'])
+def invalidate_container_cache():
+    """Force next sidebar fetch to query Docker fresh (called after container start/stop)."""
+    global _container_cache
+    _container_cache['ts'] = 0.0
+    return jsonify({'status': 'ok'})
 
 # Configuration management
 config_path = os.path.join(app.root_path, 'config', 'config.json')
@@ -1776,6 +1946,11 @@ def documentation():
 def index():
     """Redirect to dashboard as main page."""
     return redirect(url_for('dashboard.dashboard'))
+
+@app.route('/tv')
+def tv_dashboard():
+    """TV-optimized dashboard for Android TV."""
+    return render_template('tv_dashboard.html')
 
 @app.route('/series')  # or whatever you want to call it
 def series_management():  # Changed from index to avoid confusion
@@ -4285,7 +4460,22 @@ def handle_episode_grab(json_data):
 
 @app.route('/webhook', methods=['POST'])
 def handle_server_webhook():
-    app.logger.info("Received webhook from Tautulli")
+    """
+    Legacy Tautulli webhook endpoint — kept for backward compatibility.
+    New installs should use /api/integration/tautulli/webhook instead.
+    """
+    app.logger.info("Received webhook on legacy /webhook route — delegating to Tautulli integration")
+    data = request.get_json(silent=True) or {}
+    if not data:
+        return jsonify({'status': 'error', 'message': 'No data received'}), 400
+    try:
+        from integrations.tautulli import process_watch_event
+        result = process_watch_event(data)
+        return jsonify(result), 200 if result['status'] == 'success' else 500
+    except Exception as exc:
+        app.logger.error(f"Legacy /webhook delegation error: {exc}")
+        # Fall through to the original inline logic as a safety net
+    app.logger.info("Received webhook from Tautulli (fallback path)")
     data = request.json
     if not data:
         return jsonify({'status': 'error', 'message': 'No data received'}), 400

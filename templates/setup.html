@@ -70,11 +70,20 @@
                                     <small class="text-muted">Settings → General → API Key</small>
                                 </div>
                             </div>
-                            
+
+                            <!-- Alternate URL -->
+                            <div class="mb-3">
+                                <label for="sonarr-alternate_url" class="form-label">Alternate URL (HTTPS, optional)</label>
+                                <input type="text" class="form-control" id="sonarr-alternate_url" name="sonarr-alternate_url"
+                                       placeholder="https://sonarr.yourdomain.com"
+                                       value="{{ sonarr_alternate_url or '' }}">
+                                <small class="form-text text-muted">Optional HTTPS URL for remote access (Cloudflare tunnel, etc.)</small>
+                            </div>
+
                             <!-- Iframe Option -->
                             <div class="mb-3">
                                 <div class="form-check">
-                                    <input type="checkbox" class="form-check-input" id="sonarr-open_in_iframe" name="sonarr-open_in_iframe">
+                                    <input type="checkbox" class="form-check-input" id="sonarr-open_in_iframe" name="sonarr-open_in_iframe" {% if sonarr_open_in_iframe %}checked{% endif %}>
                                     <label class="form-check-label" for="sonarr-open_in_iframe">
                                         Open in Episeerr sidebar (iframe)
                                     </label>
@@ -103,74 +112,7 @@
     <!-- Media Server Section -->
     <div class="row mb-3">
         <div class="col-12">
-            <h5><i class="fas fa-film me-2"></i>Media Server <small class="text-muted">(See below for other servers, Jellyfin or Emby)</small></h5>
-        </div>
-    </div>
-
-    
-
-    
-
-    <!-- Plex/Tautulli -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="mb-0">
-                            <i class="fas fa-play-circle me-2"></i>Plex (via Tautulli)
-                            {% if tautulli_connected %}
-                                <span class="badge bg-success ms-2"><i class="fas fa-check me-1"></i>Connected</span>
-                            {% else %}
-                                <span class="badge bg-secondary ms-2">Not Connected</span>
-                            {% endif %}
-                        </h6>
-                        <small class="text-muted">Requires Tautulli for webhook support</small>
-                    </div>
-                    <button class="btn btn-sm btn-primary" data-bs-toggle="collapse" data-bs-target="#tautulli-config">
-                        <i class="fas fa-cog"></i>
-                    </button>
-                </div>
-                <div id="tautulli-config" class="collapse">
-                    <div class="card-body">
-                        <form id="tautulli-form">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="tautulli-url" class="form-label">Tautulli URL</label>
-                                    <input type="url" class="form-control" id="tautulli-url" name="tautulli-url"
-                                           placeholder="http://192.168.1.100:8181" value="{{ tautulli_url or '' }}">
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="tautulli-apikey" class="form-label">API Key</label>
-                                    <input type="text" class="form-control" id="tautulli-apikey" name="tautulli-apikey"
-                                           placeholder="API Key" value="{{ tautulli_apikey or '' }}">
-                                </div>
-                            </div>
-                            <!-- Iframe Option -->
-                            <div class="mb-3">
-                                <div class="form-check">
-                                    <input type="checkbox" class="form-check-input" id="tautulli-open_in_iframe" name="tautulli-open_in_iframe">
-                                    <label class="form-check-label" for="tautulli-open_in_iframe">
-                                        Open in Episeerr sidebar (iframe)
-                                    </label>
-                                    <small class="form-text text-muted d-block">
-                                        When checked, this service will open inside Episeerr instead of a new tab
-                                    </small>
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <button type="button" class="btn btn-secondary" onclick="testConnection('tautulli')">
-                                    <i class="fas fa-plug me-1"></i>Test
-                                </button>
-                                <button type="submit" class="btn btn-success">
-                                    <i class="fas fa-save me-1"></i>Save
-                                </button>
-                            </div>
-                            <div id="tautulli-test-result" class="mt-3" style="display: none;"></div>
-                        </form>
-                    </div>
-                </div>
-            </div>
+            <h5><i class="fas fa-film me-2"></i>Media Server <small class="text-muted">Configure Plex, Jellyfin, or Emby in the Integrations section below</small></h5>
         </div>
     </div>
 
@@ -178,6 +120,15 @@
     <div class="row mb-3">
         <div class="col-12">
             <h4><i class="fas fa-puzzle-piece text-info me-2"></i>Optional Integrations</h4>
+            <p class="text-muted mb-1" style="font-size:13px;">
+                <i class="fas fa-info-circle me-1"></i>
+                <strong>Plex</strong> and <strong>Tautulli</strong> appear here. For watch detection, choose <strong>one</strong>:
+                <strong>Plex native webhook</strong> (configure in Plex → Watch Detection) <em>or</em>
+                <strong>Tautulli watched webhook</strong> (Trigger: Watched, any media type) — <strong>not both</strong>, as this causes double-processing.
+                Both options handle TV shows (rule automation) and movies (watchlist status updates).
+                Tautulli can still be configured alongside Plex native webhook for its richer watch history
+                via the <em>Override Plex</em> toggle, as long as its watched webhook is not also enabled.
+            </p>
         </div>
     </div>
 
@@ -282,7 +233,17 @@
                                 </div>
                                 {% endfor %}
                             </div>
-                            
+
+                            <!-- Alternate URL — universal for all integrations -->
+                            <div class="mb-3">
+                                <label class="form-label">Alternate URL (HTTPS, optional)</label>
+                                <input type="text" class="form-control"
+                                    name="{{ integration.service_name }}-alternate_url"
+                                    value="{{ integration_configs[integration.service_name].saved_values.get('alternate_url', '') }}"
+                                    placeholder="https://service.yourdomain.com">
+                                <small class="form-text text-muted">Optional HTTPS URL for remote access (Cloudflare tunnel, etc.)</small>
+                            </div>
+
                             <!-- Iframe Option -->
                             <div class="mb-3">
                                 <div class="form-check">
@@ -409,7 +370,12 @@
                         </div>
                         <div class="mb-3">
                             <label for="link-url" class="form-label">URL *</label>
-                            <input type="url" class="form-control" id="link-url" name="url" required placeholder="https://...">
+                            <input type="url" class="form-control" id="link-url" name="url" required placeholder="http://192.168.1.100:8080">
+                        </div>
+                        <div class="mb-3">
+                            <label for="link-alternate-url" class="form-label">Alternate URL (HTTPS, optional)</label>
+                            <input type="text" class="form-control" id="link-alternate-url" name="alternate_url" placeholder="https://app.yourdomain.com">
+                            <small class="form-text text-muted">Used when accessing Episeerr via HTTPS (Cloudflare tunnel, etc.)</small>
                         </div>
                         <div class="mb-3">
                             <label for="link-icon" class="form-label">Icon (Font Awesome class)</label>
@@ -602,6 +568,7 @@ function addCustomLink() {
     const data = {
         name: formData.get('name'),
         url: formData.get('url'),
+        alternate_url: formData.get('alternate_url') || null,
         icon: formData.get('icon') || 'fas fa-link',
         open_in_iframe: document.getElementById('link-open-in-iframe').checked
     };

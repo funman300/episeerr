@@ -1309,7 +1309,7 @@ def check_and_cancel_unmonitored_downloads():
         logger.warning("Error in download queue monitoring: Sonarr not reachable")
     except Exception as e:
         logger.error(f"Error in download queue monitoring: {str(e)}", exc_info=True)
-        
+
 def save_request(series_id, title, season, episodes, request_id=None):
     """
     Save a request for episode selection to the requests directory.
