@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.5.1
+
+### 🐛 Bug Fixes
+- Fixed "Open in Episeerr sidebar (iframe)" checkbox being ignored when the page is served over HTTPS — sidebar links now always open in an iframe when the checkbox is enabled, regardless of protocol
+
 ## v3.5.0
 
 ### 🔌 Dispatcharr Integration
