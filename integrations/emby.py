@@ -6,6 +6,7 @@ Provides: Webhook-triggered polling for watch detection
 import os
 import json
 import requests
+from episeerr_utils import http
 import logging
 import threading
 import time
@@ -154,7 +155,7 @@ class EmbyIntegration(ServiceIntegration):
             url = f"{config['url']}/Sessions"
             headers = {'X-Emby-Token': config['api_key']}
 
-            response = requests.get(url, headers=headers, timeout=10)
+            response = http.get(url, headers=headers, timeout=10)
             if response.ok:
                 sessions = response.json()
                 for session in sessions:
@@ -335,29 +336,14 @@ class EmbyIntegration(ServiceIntegration):
             series_id = get_series_id(series_name)
 
             # Tag sync & drift correction
+            final_rule = None
             if series_id:
-                from episeerr_utils import validate_series_tag, sync_rule_tag_to_sonarr
-                from episeerr import load_config
-                from media_processor import move_series_in_config
-
+                from episeerr_utils import reconcile_series_drift
+                from episeerr import load_config, save_config
                 config = load_config()
-                config_rule = None
-                series_id_str = str(series_id)
-
-                for rule_name, rule_details in config['rules'].items():
-                    if series_id_str in rule_details.get('series', {}):
-                        config_rule = rule_name
-                        break
-
-                if config_rule:
-                    matches, actual_tag_rule = validate_series_tag(series_id, config_rule)
-                    if not matches:
-                        if actual_tag_rule:
-                            logger.warning(f"EMBY DRIFT - config: {config_rule} → tag: {actual_tag_rule}")
-                            move_series_in_config(series_id, config_rule, actual_tag_rule)
-                        else:
-                            logger.warning(f"No tag on {series_id} → restoring episeerr_{config_rule}")
-                            sync_rule_tag_to_sonarr(series_id, config_rule)
+                final_rule, modified = reconcile_series_drift(series_id, config)
+                if modified:
+                    save_config(config)
 
             # Write temp file for media_processor
             temp_dir = os.path.join(os.getcwd(), 'temp')
@@ -370,6 +356,7 @@ class EmbyIntegration(ServiceIntegration):
                 'thetvdb_id': None,
                 'themoviedb_id': None,
                 'sonarr_series_id': series_id,
+                'rule': final_rule,
                 'source': 'emby'
             }
 
@@ -409,7 +396,7 @@ class EmbyIntegration(ServiceIntegration):
         """Test connection to Emby server"""
         try:
             headers = {'X-Emby-Token': api_key}
-            response = requests.get(f"{url}/System/Info", headers=headers, timeout=10)
+            response = http.get(f"{url}/System/Info", headers=headers, timeout=10)
 
             if response.ok:
                 info = response.json()

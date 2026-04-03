@@ -4,6 +4,8 @@ import json
 import time
 from datetime import datetime
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import logging
 import threading
 import re
@@ -12,6 +14,22 @@ from dotenv import load_dotenv
 from logging_config import main_logger as logger
 # Load environment variables
 load_dotenv()
+
+# ── Shared HTTP session with retry/backoff ────────────────────────────────────
+# Retries on connection errors and 5xx responses (backoff: 1s, 2s, 4s).
+# POST/DELETE are only retried on connection-level failures (not on bad status
+# codes) to avoid double-writes; GET/PUT retry on status codes too.
+_retry = Retry(
+    total=3,
+    backoff_factor=1,          # sleeps: 1s, 2s, 4s
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["GET", "PUT"],   # status-code retries only for idempotent methods
+    raise_on_status=False,
+)
+http = requests.Session()
+http.mount("http://",  HTTPAdapter(max_retries=_retry))
+http.mount("https://", HTTPAdapter(max_retries=_retry))
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ============================================================
 # DATABASE SUPPORT - Get settings from DB first, fallback to .env
@@ -97,6 +115,32 @@ def get_sonarr_headers():
         'Content-Type': 'application/json'
     }
 
+_tags_cache = None
+_tags_cache_time = 0
+_TAGS_CACHE_TTL = 60  # seconds
+
+def get_sonarr_tags():
+    """Fetch all Sonarr tags with a 60s in-memory cache."""
+    global _tags_cache, _tags_cache_time
+    now = time.time()
+    if _tags_cache is not None and (now - _tags_cache_time) < _TAGS_CACHE_TTL:
+        return _tags_cache
+    try:
+        headers = get_sonarr_headers()
+        resp = http.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
+        if resp.ok:
+            _tags_cache = resp.json()
+            _tags_cache_time = now
+            return _tags_cache
+    except Exception as e:
+        logger.warning(f"Could not fetch Sonarr tags: {e}")
+    return _tags_cache or []
+
+def invalidate_tags_cache():
+    global _tags_cache, _tags_cache_time
+    _tags_cache = None
+    _tags_cache_time = 0
+
 def create_episeerr_default_tag():
     """Create a single 'episeerr_default' tag in Sonarr and return its ID."""
     global EPISEERR_DEFAULT_TAG_ID
@@ -105,19 +149,15 @@ def create_episeerr_default_tag():
         logger.debug("Tag auto-creation disabled, checking for existing episeerr_default tag")
         # Still check if tag exists, just don't create it
         try:
-            headers = get_sonarr_headers()
-            tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
-            
-            if tags_response.ok:
-                for tag in tags_response.json():
-                    if tag['label'].lower() == 'episeerr_default':
-                        EPISEERR_DEFAULT_TAG_ID = tag['id']
-                        logger.info(f"Found existing 'episeerr_default' tag with ID {EPISEERR_DEFAULT_TAG_ID}")
-                        return EPISEERR_DEFAULT_TAG_ID
-            
+            for tag in get_sonarr_tags():
+                if tag['label'].lower() == 'episeerr_default':
+                    EPISEERR_DEFAULT_TAG_ID = tag['id']
+                    logger.info(f"Found existing 'episeerr_default' tag with ID {EPISEERR_DEFAULT_TAG_ID}")
+                    return EPISEERR_DEFAULT_TAG_ID
+
             logger.warning("episeerr_default tag not found. Please create manually in Sonarr or set EPISEERR_AUTO_CREATE_TAGS=true")
             return None
-            
+
         except Exception as e:
             logger.warning(f"Could not check for existing tags: {str(e)}")
             return None
@@ -129,22 +169,17 @@ def create_episeerr_default_tag():
     
     try:
         headers = get_sonarr_headers()
-        logger.debug(f"Making GET request to {SONARR_URL}/api/v3/tag to fetch existing tags")
-       
-        tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
-       
-        if not tags_response.ok:
-            logger.error(f"Failed to get tags. Status: {tags_response.status_code}, Response: {tags_response.text}")
-            return None
-            
-        for tag in tags_response.json():
+        logger.debug(f"Fetching tags from {SONARR_URL}/api/v3/tag")
+        tags = get_sonarr_tags()
+
+        for tag in tags:
             if tag['label'].lower() == 'episeerr_default':
                 EPISEERR_DEFAULT_TAG_ID = tag['id']
                 logger.info(f"Found existing 'episeerr_default' tag with ID {EPISEERR_DEFAULT_TAG_ID}")
                 return EPISEERR_DEFAULT_TAG_ID
        
         logger.debug("No 'episeerr_default' tag found, creating new tag")
-        tag_create_response = requests.post(
+        tag_create_response = http.post(
             f"{SONARR_URL}/api/v3/tag",
             headers=headers,
             json={"label": "episeerr_default"},
@@ -153,6 +188,7 @@ def create_episeerr_default_tag():
         if tag_create_response.ok:
             EPISEERR_DEFAULT_TAG_ID = tag_create_response.json().get('id')
             logger.info(f"Created tag: 'episeerr_default' with ID {EPISEERR_DEFAULT_TAG_ID}")
+            invalidate_tags_cache()
             return EPISEERR_DEFAULT_TAG_ID
         else:
             logger.error(f"Failed to create episeerr_default tag. Status: {tag_create_response.status_code}, Response: {tag_create_response.text}")
@@ -173,19 +209,15 @@ def create_episeerr_select_tag():
         logger.debug("Tag auto-creation disabled, checking for existing episeerr_select tag")
         # Still check if tag exists, just don't create it
         try:
-            headers = get_sonarr_headers()
-            tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
-            
-            if tags_response.ok:
-                for tag in tags_response.json():
-                    if tag['label'].lower() == 'episeerr_select':
-                        EPISEERR_SELECT_TAG_ID = tag['id']
-                        logger.info(f"Found existing 'episeerr_select' tag with ID {EPISEERR_SELECT_TAG_ID}")
-                        return EPISEERR_SELECT_TAG_ID
-            
+            for tag in get_sonarr_tags():
+                if tag['label'].lower() == 'episeerr_select':
+                    EPISEERR_SELECT_TAG_ID = tag['id']
+                    logger.info(f"Found existing 'episeerr_select' tag with ID {EPISEERR_SELECT_TAG_ID}")
+                    return EPISEERR_SELECT_TAG_ID
+
             logger.warning("episeerr_select tag not found. Please create manually in Sonarr or set EPISEERR_AUTO_CREATE_TAGS=true")
             return None
-            
+
         except Exception as e:
             logger.warning(f"Could not check for existing tags: {str(e)}")
             return None
@@ -197,22 +229,17 @@ def create_episeerr_select_tag():
     
     try:
         headers = get_sonarr_headers()
-        logger.debug(f"Making GET request to {SONARR_URL}/api/v3/tag to fetch existing tags")
-       
-        tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
-       
-        if not tags_response.ok:
-            logger.error(f"Failed to get tags. Status: {tags_response.status_code}, Response: {tags_response.text}")
-            return None
-            
-        for tag in tags_response.json():
+        logger.debug(f"Fetching tags from {SONARR_URL}/api/v3/tag")
+        tags = get_sonarr_tags()
+
+        for tag in tags:
             if tag['label'].lower() == 'episeerr_select':
                 EPISEERR_SELECT_TAG_ID = tag['id']
                 logger.info(f"Found existing 'episeerr_select' tag with ID {EPISEERR_SELECT_TAG_ID}")
                 return EPISEERR_SELECT_TAG_ID
        
         logger.debug("No 'episeerr_select' tag found, creating new tag")
-        tag_create_response = requests.post(
+        tag_create_response = http.post(
             f"{SONARR_URL}/api/v3/tag",
             headers=headers,
             json={"label": "episeerr_select"},
@@ -221,6 +248,7 @@ def create_episeerr_select_tag():
         if tag_create_response.ok:
             EPISEERR_SELECT_TAG_ID = tag_create_response.json().get('id')
             logger.info(f"Created tag: 'episeerr_select' with ID {EPISEERR_SELECT_TAG_ID}")
+            invalidate_tags_cache()
             return EPISEERR_SELECT_TAG_ID
         else:
             logger.error(f"Failed to create episeerr_select tag. Status: {tag_create_response.status_code}, Response: {tag_create_response.text}")
@@ -248,21 +276,17 @@ def get_or_create_rule_tag_id(rule_name):
         headers = get_sonarr_headers()
         
         # Check if tag already exists
-        tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
-        
-        if not tags_response.ok:
-            logger.error(f"Failed to get tags. Status: {tags_response.status_code}")
-            return None
-        
+        tags = get_sonarr_tags()
+
         # Look for existing tag
-        for tag in tags_response.json():
+        for tag in tags:
             if tag['label'].lower() == tag_label.lower():
                 logger.debug(f"Found existing tag '{tag_label}' with ID {tag['id']}")
                 return tag['id']
         
         # Tag doesn't exist - create it
         logger.info(f"Creating new tag '{tag_label}'")
-        tag_create_response = requests.post(
+        tag_create_response = http.post(
             f"{SONARR_URL}/api/v3/tag",
             headers=headers,
             json={"label": tag_label},
@@ -272,6 +296,7 @@ def get_or_create_rule_tag_id(rule_name):
         if tag_create_response.ok:
             tag_id = tag_create_response.json().get('id')
             logger.info(f"✓ Created tag '{tag_label}' with ID {tag_id}")
+            invalidate_tags_cache()
             return tag_id
         else:
             logger.error(f"Failed to create tag '{tag_label}': {tag_create_response.text}")
@@ -293,13 +318,11 @@ def get_tag_mapping():
         dict: {tag_id: tag_label} or empty dict on failure
     """
     try:
-        headers = get_sonarr_headers()
-        response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers, timeout=10)
-        
-        if response.ok:
-            return {tag['id']: tag['label'] for tag in response.json()}
+        tags = get_sonarr_tags()
+        if tags:
+            return {tag['id']: tag['label'] for tag in tags}
         else:
-            logger.error(f"Failed to get tag mapping: {response.status_code}")
+            logger.error("Failed to get tag mapping: empty response")
             return {}
             
     except Exception as e:
@@ -314,7 +337,7 @@ def get_episeerr_delay_profile_id():
     """
     try:
         headers = get_sonarr_headers()
-        resp = requests.get(f"{SONARR_URL}/api/v3/delayprofile", headers=headers, timeout=10)
+        resp = http.get(f"{SONARR_URL}/api/v3/delayprofile", headers=headers, timeout=10)
         
         if not resp.ok:
             logger.error(f"Failed to get delay profiles: {resp.status_code}")
@@ -379,7 +402,7 @@ def update_delay_profile_with_control_tags():
         headers = get_sonarr_headers()
         
         # Get current profile
-        get_resp = requests.get(f"{SONARR_URL}/api/v3/delayprofile/{profile_id}", headers=headers)
+        get_resp = http.get(f"{SONARR_URL}/api/v3/delayprofile/{profile_id}", headers=headers)
         if not get_resp.ok:
             logger.error(f"Failed to get delay profile: {get_resp.status_code}")
             return False
@@ -415,7 +438,7 @@ def update_delay_profile_with_control_tags():
         
         # Update profile with ONLY these three tags
         profile['tags'] = list(control_tags)
-        put_resp = requests.put(
+        put_resp = http.put(
             f"{SONARR_URL}/api/v3/delayprofile/{profile_id}",
             headers=headers,
             json=profile
@@ -461,7 +484,7 @@ def get_series_from_sonarr(series_id):
     """
     try:
         headers = get_sonarr_headers()
-        response = requests.get(
+        response = http.get(
             f"{SONARR_URL}/api/v3/series/{series_id}",
             headers=headers,
             timeout=10
@@ -497,7 +520,7 @@ def update_series_in_sonarr(series):
     """
     try:
         headers = get_sonarr_headers()
-        response = requests.put(
+        response = http.put(
             f"{SONARR_URL}/api/v3/series/{series['id']}",
             headers=headers,
             json=series,
@@ -615,20 +638,21 @@ def remove_all_episeerr_tags(series_id):
         return False
 
 
-def validate_series_tag(series_id, expected_rule):
+def validate_series_tag(series_id, expected_rule, series_data=None):
     """
     Check if series tag matches expected rule in config.
     Handles multiple episeerr_* tags (logs error, auto-fixes to config rule).
-    
+
     Args:
         series_id: Sonarr series ID
         expected_rule: Rule name from config
-        
+        series_data: Pre-fetched series dict (avoids redundant API call in bulk loops)
+
     Returns:
         tuple: (matches: bool, actual_tag_rule: str or None)
     """
     try:
-        series = get_series_from_sonarr(series_id)
+        series = series_data if series_data is not None else get_series_from_sonarr(series_id)
         if not series:
             return (False, None)
         
@@ -669,11 +693,102 @@ def validate_series_tag(series_id, expected_rule):
 
 
 
+def reconcile_series_drift(series_id, config, series_data=None):
+    """
+    Check and correct rule/tag alignment for a single series.
+
+    Mutates *config* in-place.  Caller is responsible for calling save_config()
+    when modified=True (allows bulk callers to batch one save).
+
+    Cases handled:
+      - Tag matches config           → no-op
+      - Tag differs from config      → move series in config to match tag (tag wins)
+      - No episeerr tag on series    → restore tag from config (config wins)
+      - Series not in config at all  → recover from orphaned Sonarr tag if present
+
+    Args:
+        series_id: Sonarr series ID
+        config: Episeerr config dict (mutated in-place)
+        series_data: Pre-fetched series dict (avoids redundant API call in bulk loops)
+
+    Returns:
+        (final_rule: str | None, modified: bool)
+    """
+    import time as _time
+    series_id_str = str(series_id)
+
+    # Find which rule config currently says this series belongs to
+    config_rule = None
+    for rule_name, rule_details in config['rules'].items():
+        if series_id_str in rule_details.get('series', {}):
+            config_rule = rule_name
+            break
+
+    if config_rule:
+        matches, actual_tag_rule = validate_series_tag(series_id, config_rule, series_data=series_data)
+        if matches:
+            return config_rule, False
+
+        if actual_tag_rule:
+            # Drift: user changed tag in Sonarr → move config to match
+            actual_rule = next(
+                (rn for rn in config['rules'] if rn.lower() == actual_tag_rule.lower()), None
+            )
+            if actual_rule:
+                series_data = config['rules'][config_rule]['series'].pop(series_id_str)
+                config['rules'][actual_rule].setdefault('series', {})[series_id_str] = series_data
+                sync_rule_tag_to_sonarr(series_id, actual_rule)
+                logger.warning(f"Drift: series {series_id} moved {config_rule} → {actual_rule}")
+                return actual_rule, True
+            else:
+                logger.error(f"Drift target rule '{actual_tag_rule}' not found in config for series {series_id}")
+                return config_rule, False
+        else:
+            # No episeerr rule tag at all → restore from config
+            sync_rule_tag_to_sonarr(series_id, config_rule)
+            logger.warning(f"No tag on series {series_id} → restored episeerr_{config_rule}")
+            return config_rule, False
+
+    else:
+        # Series not in config — check for an orphaned episeerr tag in Sonarr
+        series = series_data if series_data is not None else get_series_from_sonarr(series_id)
+        if not series:
+            return None, False
+
+        tag_mapping = get_tag_mapping()
+        for tag_id in series.get('tags', []):
+            tag_name = tag_mapping.get(tag_id, '').lower()
+            if not tag_name.startswith('episeerr_'):
+                continue
+            rule_name = tag_name.replace('episeerr_', '')
+            if rule_name in ('default', 'select'):
+                continue
+            actual_rule = next(
+                (rn for rn in config['rules'] if rn.lower() == rule_name), None
+            )
+            if actual_rule:
+                config['rules'][actual_rule].setdefault('series', {})[series_id_str] = {
+                    'activity_date': int(_time.time())
+                }
+                logger.info(
+                    f"Orphaned: series {series_id} added to '{actual_rule}' via Sonarr tag"
+                )
+                return actual_rule, True
+            else:
+                logger.warning(
+                    f"Orphaned tag '{tag_name}' on series {series_id} "
+                    f"but rule '{rule_name}' not in config"
+                )
+                return None, False
+
+        return None, False
+
+
 def unmonitor_series(series_id, headers):
     """Unmonitor all episodes in a series."""
     try:
         # Get all episodes for the series
-        episodes_response = requests.get(
+        episodes_response = http.get(
             f"{SONARR_URL}/api/v3/episode?seriesId={series_id}",
             headers=headers
         )
@@ -686,7 +801,7 @@ def unmonitor_series(series_id, headers):
         all_episode_ids = [ep['id'] for ep in episodes]
         
         if all_episode_ids:
-            unmonitor_response = requests.put(
+            unmonitor_response = http.put(
                 f"{SONARR_URL}/api/v3/episode/monitor",
                 headers=headers,
                 json={"episodeIds": all_episode_ids, "monitored": False}
@@ -712,7 +827,7 @@ def unmonitor_season(series_id, season_number, headers):
     """Unmonitor all episodes in a specific season."""
     try:
         # Get episodes for the specific season
-        episodes_response = requests.get(
+        episodes_response = http.get(
             f"{SONARR_URL}/api/v3/episode?seriesId={series_id}&seasonNumber={season_number}",
             headers=headers
         )
@@ -725,7 +840,7 @@ def unmonitor_season(series_id, season_number, headers):
         season_episode_ids = [ep['id'] for ep in episodes]
         
         if season_episode_ids:
-            unmonitor_response = requests.put(
+            unmonitor_response = http.put(
                 f"{SONARR_URL}/api/v3/episode/monitor",
                 headers=headers,
                 json={"episodeIds": season_episode_ids, "monitored": False}
@@ -748,7 +863,7 @@ def unmonitor_season(series_id, season_number, headers):
 def get_episode_info(episode_id, headers):
     """Get episode information from Sonarr API"""
     try:
-        response = requests.get(f"{SONARR_URL}/api/v3/episode/{episode_id}", headers=headers)
+        response = http.get(f"{SONARR_URL}/api/v3/episode/{episode_id}", headers=headers)
         if response.ok:
             return response.json()
         return None
@@ -759,7 +874,7 @@ def get_episode_info(episode_id, headers):
 def get_series_title(series_id, headers):
     """Get series title from Sonarr API"""
     try:
-        response = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers)
+        response = http.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers)
         if response.ok:
             return response.json().get('title', 'Unknown Series')
         return 'Unknown Series'
@@ -779,12 +894,12 @@ def cancel_download(queue_id, headers):
             "removeFromClient": True,
             "removeFromDownloadClient": True
         }
-        response = requests.delete(f"{SONARR_URL}/api/v3/queue/bulk", headers=headers, json=payload)
+        response = http.delete(f"{SONARR_URL}/api/v3/queue/bulk", headers=headers, json=payload)
         
         # If primary method fails, try alternative
         if not response.ok:
             logger.warning(f"Bulk removal failed for queue item {queue_id}. Trying alternative method.")
-            response = requests.delete(
+            response = http.delete(
                 f"{SONARR_URL}/api/v3/queue/{queue_id}", 
                 headers=headers,
                 params={
@@ -808,7 +923,7 @@ def monitor_specific_episodes(series_id, season_number, episode_numbers, headers
     :return: True if successful, False otherwise
     """
     try:
-        episodes_response = requests.get(
+        episodes_response = http.get(
             f"{SONARR_URL}/api/v3/episode?seriesId={series_id}",
             headers=headers
         )
@@ -829,7 +944,7 @@ def monitor_specific_episodes(series_id, season_number, episode_numbers, headers
             return False
         
         monitor_episode_ids = [ep['id'] for ep in target_episodes]
-        monitor_response = requests.put(
+        monitor_response = http.put(
             f"{SONARR_URL}/api/v3/episode/monitor",
             headers=headers,
             json={"episodeIds": monitor_episode_ids, "monitored": True}
@@ -867,7 +982,7 @@ def search_episodes(series_id, episode_ids, headers):
             "episodeIds": episode_ids
         }
         
-        search_response = requests.post(
+        search_response = http.post(
             f"{SONARR_URL}/api/v3/command",
             headers=headers,
             json=search_payload
@@ -895,7 +1010,7 @@ def get_series_episodes(series_id, season_number, headers):
     :return: List of episodes or empty list on failure
     """
     try:
-        episodes_response = requests.get(
+        episodes_response = http.get(
             f"{SONARR_URL}/api/v3/episode?seriesId={series_id}&seasonNumber={season_number}",
             headers=headers
         )
@@ -944,7 +1059,7 @@ def delete_overseerr_request(request_id):
         logger.info(f"Attempting to delete Jellyseerr request {request_id}")
         logger.debug(f"Overseerr headers: {headers}")
 
-        delete_response = requests.delete(
+        delete_response = http.delete(
             f"{overseerr_url}/api/v1/request/{request_id}",
             headers=headers
         )
@@ -978,7 +1093,7 @@ def process_episode_selection(series_id, episode_numbers):
         headers = get_sonarr_headers()
         
         # Get series info
-        series_response = requests.get(
+        series_response = http.get(
             f"{SONARR_URL}/api/v3/series/{series_id}",
             headers=headers
         )
@@ -1010,7 +1125,7 @@ def process_episode_selection(series_id, episode_numbers):
         
         # Final fallback - get the latest season from Sonarr
         if season_number is None:
-            seasons_response = requests.get(
+            seasons_response = http.get(
                 f"{SONARR_URL}/api/v3/series/{series_id}",
                 headers=headers
             )
@@ -1112,7 +1227,7 @@ def process_episode_selection_with_season(series_id, season_number, episode_numb
         logger.info(f"Processing episode selection for series {series_id}, season {season_number}, episodes {episode_numbers}")
         
         # Get series info
-        series_response = requests.get(
+        series_response = http.get(
             f"{SONARR_URL}/api/v3/series/{series_id}",
             headers=headers
         )
@@ -1159,7 +1274,7 @@ def process_episode_selection_with_season(series_id, season_number, episode_numb
         logger.info(f"Monitoring episodes: {valid_episode_numbers} (IDs: {episode_ids_to_monitor})")
         
         # Monitor selected episodes
-        monitor_response = requests.put(
+        monitor_response = http.put(
             f"{SONARR_URL}/api/v3/episode/monitor",
             headers=headers,
             json={"episodeIds": episode_ids_to_monitor, "monitored": True}
@@ -1178,7 +1293,7 @@ def process_episode_selection_with_season(series_id, season_number, episode_numb
             "episodeIds": episode_ids_to_monitor
         }
         
-        search_response = requests.post(
+        search_response = http.post(
             f"{SONARR_URL}/api/v3/command",
             headers=headers,
             json=search_payload
@@ -1208,7 +1323,7 @@ def check_and_cancel_unmonitored_downloads():
     
     try:
         # Retrieve current queue
-        queue_response = requests.get(f"{SONARR_URL}/api/v3/queue", headers=headers)
+        queue_response = http.get(f"{SONARR_URL}/api/v3/queue", headers=headers)
         
         if not queue_response.ok:
             logger.error(f"Failed to retrieve queue. Status: {queue_response.status_code}")
@@ -1232,7 +1347,7 @@ def check_and_cancel_unmonitored_downloads():
             # Check if this is a TV episode
             if item.get('seriesId') and item.get('episodeId'):
                 # Get series details to check for episeerr tags
-                series_response = requests.get(
+                series_response = http.get(
                     f"{SONARR_URL}/api/v3/series/{item['seriesId']}", 
                     headers=headers
                 )

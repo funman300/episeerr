@@ -16,6 +16,7 @@ from integrations.base import ServiceIntegration
 from typing import Dict, Any, Optional, Tuple
 from flask import Blueprint, jsonify, request
 import requests
+from episeerr_utils import http
 import logging
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
@@ -62,7 +63,7 @@ def _soap(base: str, action: str, body_inner: str, timeout: int = 5) -> Optional
         'SOAPACTION': f'"{_AVT_NS}#{action}"',
     }
     try:
-        resp = requests.post(f"{base}{_TRANSPORT_PATH}", data=envelope,
+        resp = http.post(f"{base}{_TRANSPORT_PATH}", data=envelope,
                              headers=headers, timeout=timeout)
         resp.raise_for_status()
         return ET.fromstring(resp.text)
@@ -74,7 +75,7 @@ def _soap(base: str, action: str, body_inner: str, timeout: int = 5) -> Optional
 def _friendly_name(base: str) -> str:
     """Return the UPnP friendly name for a speaker, or 'Unknown'."""
     try:
-        resp = requests.get(f"{base}{_DEVICE_PATH}", timeout=5)
+        resp = http.get(f"{base}{_DEVICE_PATH}", timeout=5)
         resp.raise_for_status()
         root = ET.fromstring(resp.text)
         el = root.find('.//{urn:schemas-upnp-org:device-1-0}friendlyName')
@@ -206,7 +207,7 @@ def _get_zones(base: str) -> list:
             'Content-Type': 'text/xml; charset="utf-8"',
             'SOAPACTION':   f'"{_ZGT_NS}#GetZoneGroupState"',
         }
-        resp = requests.post(f"{base}{_TOPOLOGY_PATH}", data=envelope,
+        resp = http.post(f"{base}{_TOPOLOGY_PATH}", data=envelope,
                              headers=headers, timeout=6)
         resp.raise_for_status()
         soap_root = ET.fromstring(resp.text)
@@ -225,7 +226,7 @@ def _get_zones(base: str) -> list:
 
     # ── Method 2: HTTP /status/topology (older firmware) ──────────────────────
     try:
-        resp = requests.get(f"{base}{_ZONE_PATH}", timeout=6)
+        resp = http.get(f"{base}{_ZONE_PATH}", timeout=6)
         resp.raise_for_status()
         root  = ET.fromstring(resp.text)
         zones = _parse_zone_groups(root, base)
@@ -283,7 +284,7 @@ class SonosIntegration(ServiceIntegration):
     def test_connection(self, url: str, api_key: str) -> Tuple[bool, str]:
         try:
             base = _base_url(url)
-            resp = requests.get(f"{base}{_DEVICE_PATH}", timeout=8)
+            resp = http.get(f"{base}{_DEVICE_PATH}", timeout=8)
             if resp.status_code == 200:
                 root = ET.fromstring(resp.text)
                 el = root.find('.//{urn:schemas-upnp-org:device-1-0}friendlyName')
@@ -362,6 +363,7 @@ class SonosIntegration(ServiceIntegration):
                 if not url:
                     return jsonify({'success': False, 'message': 'No URL configured'})
 
+                alt_url = config.get('alternate_url', '').strip().rstrip('/')
                 zone_param = request.args.get('zone', None, type=int)
 
                 stats = integration.get_dashboard_stats(url, config.get('api_key', ''))
@@ -396,6 +398,13 @@ class SonosIntegration(ServiceIntegration):
                     track  = display_zone.get('track')  or 'Unknown track'
                     artist = display_zone.get('artist') or ''
                     art    = display_zone.get('album_art_url')
+
+                    # Proxy art through Episeerr to avoid mixed content on HTTPS pages.
+                    # The browser never sees the raw Sonos IP — all art fetches go through
+                    # /api/integration/sonos/art?url=<encoded> which fetches server-side.
+                    if art:
+                        from urllib.parse import quote as _quote
+                        art = f'/api/integration/sonos/art?url={_quote(art, safe="")}'
 
                     if art:
                         art_html = (
@@ -513,7 +522,7 @@ class SonosIntegration(ServiceIntegration):
                 dev_ok   = False
                 dev_name = None
                 try:
-                    r = requests.get(f"{base}{_DEVICE_PATH}", timeout=5)
+                    r = http.get(f"{base}{_DEVICE_PATH}", timeout=5)
                     dev_ok = r.status_code == 200
                     if dev_ok:
                         root = ET.fromstring(r.text)
@@ -536,7 +545,7 @@ class SonosIntegration(ServiceIntegration):
                         '</s:Body>'
                         '</s:Envelope>'
                     )
-                    r = requests.post(f"{base}{_TOPOLOGY_PATH}", data=envelope,
+                    r = http.post(f"{base}{_TOPOLOGY_PATH}", data=envelope,
                                       headers={'Content-Type': 'text/xml; charset="utf-8"',
                                                'SOAPACTION': f'"{_ZGT_NS}#GetZoneGroupState"'},
                                       timeout=5)
@@ -557,7 +566,7 @@ class SonosIntegration(ServiceIntegration):
                 topo_ok   = False
                 topo_text = None
                 try:
-                    r = requests.get(f"{base}{_ZONE_PATH}", timeout=5)
+                    r = http.get(f"{base}{_ZONE_PATH}", timeout=5)
                     topo_ok   = r.status_code == 200
                     topo_text = r.text[:300] if topo_ok else f"HTTP {r.status_code}"
                 except Exception as e:
@@ -604,6 +613,33 @@ class SonosIntegration(ServiceIntegration):
                 return jsonify(stats)
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
+
+        @bp.route('/api/integration/sonos/art')
+        def art_proxy():
+            """
+            Server-side proxy for Sonos album art.
+            Handles both local Sonos speaker URLs (port 1400) and external CDN URLs
+            returned when playing radio or streaming services.
+            """
+            from flask import request as freq, Response
+            from urllib.parse import unquote
+            raw_url = freq.args.get('url', '').strip()
+            if not raw_url:
+                return Response('Missing url parameter', status=400)
+            decoded = unquote(raw_url)
+            # Block link-local and loopback but allow LAN + CDN art
+            blocked = ['169.254.', '127.0.0.1', 'localhost', '0.0.0.0']
+            if any(b in decoded for b in blocked):
+                return Response('Forbidden', status=403)
+            try:
+                r = http.get(decoded, timeout=5, stream=True,
+                                 headers={'User-Agent': 'Episeerr/1.0'})
+                r.raise_for_status()
+                content_type = r.headers.get('Content-Type', 'image/jpeg')
+                return Response(r.content, status=200, content_type=content_type)
+            except Exception as e:
+                logger.debug(f"Art proxy failed for {decoded}: {e}")
+                return Response('Not found', status=404)
 
         return bp
 

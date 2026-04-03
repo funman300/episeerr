@@ -6,6 +6,7 @@ Provides: Webhook-triggered polling for watch detection, real-time session monit
 import os
 import json
 import requests
+from episeerr_utils import http
 import logging
 import threading
 import time
@@ -175,7 +176,7 @@ class JellyfinIntegration(ServiceIntegration):
             url = f"{config['url']}/Sessions"
             headers = {'X-Emby-Token': config['api_key']}
             
-            response = requests.get(url, headers=headers, timeout=10)
+            response = http.get(url, headers=headers, timeout=10)
             if response.ok:
                 sessions = response.json()
                 for session in sessions:
@@ -350,36 +351,20 @@ class JellyfinIntegration(ServiceIntegration):
             logger.info(f"✅ Found Sonarr series ID {series_id} for '{series_name}'")
             
             # Tag sync & drift correction
-            from episeerr_utils import validate_series_tag, sync_rule_tag_to_sonarr
-            from episeerr import load_config
-            from media_processor import move_series_in_config
+            from episeerr_utils import reconcile_series_drift
+            from episeerr import load_config, save_config
 
             config = load_config()
-            config_rule = None
-            series_id_str = str(series_id)
-
-            for rule_name, rule_details in config['rules'].items():
-                if series_id_str in rule_details.get('series', {}):
-                    config_rule = rule_name
-                    break
-
-            if config_rule:
-                logger.info(f"📋 Series assigned to rule '{config_rule}'")
-                matches, actual_tag_rule = validate_series_tag(series_id, config_rule)
-                if not matches:
-                    if actual_tag_rule:
-                        logger.warning(f"JELLYFIN DRIFT - config: {config_rule} → tag: {actual_tag_rule}")
-                        move_series_in_config(series_id, config_rule, actual_tag_rule)
-                    else:
-                        logger.warning(f"No tag on {series_id} → restoring episeerr_{config_rule}")
-                        sync_rule_tag_to_sonarr(series_id, config_rule)
-            else:
+            final_rule, modified = reconcile_series_drift(series_id, config)
+            if modified:
+                save_config(config)
+            if not final_rule:
                 logger.warning(f"⚠️ Series ID {series_id} not assigned to any rule — media_processor may skip it")
 
             # Write temp file for media_processor
             temp_dir = os.path.join(os.getcwd(), 'temp')
             os.makedirs(temp_dir, exist_ok=True)
-            
+
             episode_data = {
                 'server_title': series_name,
                 'server_season_num': int(season),
@@ -387,6 +372,7 @@ class JellyfinIntegration(ServiceIntegration):
                 'thetvdb_id': None,
                 'themoviedb_id': None,
                 'sonarr_series_id': series_id,
+                'rule': final_rule,
                 'source': 'jellyfin'
             }
             
@@ -429,7 +415,7 @@ class JellyfinIntegration(ServiceIntegration):
         """Test connection to Jellyfin server"""
         try:
             headers = {'X-Emby-Token': api_key}
-            response = requests.get(f"{url}/System/Info", headers=headers, timeout=10)
+            response = http.get(f"{url}/System/Info", headers=headers, timeout=10)
             
             if response.ok:
                 info = response.json()

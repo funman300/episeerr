@@ -1,4 +1,4 @@
-__version__ = "3.5.1"
+__version__ = "3.6.0"
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import subprocess
 import os
@@ -19,14 +19,18 @@ from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 import requests
 import episeerr_utils
-from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID, normalize_url
+from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID, normalize_url, http
 import pending_deletions
 from dashboard import dashboard_bp
+from webhooks import sonarr_webhooks_bp
 import media_processor
 from settings_db import (
     save_service, get_service, delete_service,
     update_service_test_result, get_all_services,
-    set_setting, get_setting
+    set_setting, get_setting,
+    add_pending_request, get_pending_request, get_all_pending_requests,
+    delete_pending_request, find_pending_request_by_series,
+    find_pending_request_by_tmdb, migrate_pending_requests_from_files,
 )
 from logging_config import main_logger as logger
 # Import plugin system
@@ -36,6 +40,7 @@ app = Flask(__name__)
 
 register_integration_blueprints(app)
 app.register_blueprint(dashboard_bp)
+app.register_blueprint(sonarr_webhooks_bp)
 
 # Session / Auth configuration
 _secret = os.getenv('SECRET_KEY')
@@ -75,7 +80,7 @@ else:
     app.logger.warning("TMDB_API_KEY is missing - you may encounter issues fetching series details and seasons")
 
 # Request storage
-REQUESTS_DIR = os.path.join(os.getcwd(), 'data', 'requests')
+REQUESTS_DIR = os.path.join(os.getcwd(), 'data', 'pending_requests')
 os.makedirs(REQUESTS_DIR, exist_ok=True)
 
 LAST_PROCESSED_FILE = os.path.join(os.getcwd(), 'data', 'last_processed.json')
@@ -91,8 +96,9 @@ _AUTH_EXEMPT_ENDPOINTS = {
     'login',
     'logout',
     'static',
-    'process_sonarr_webhook',
-    'handle_server_webhook',
+    # Sonarr + legacy Tautulli webhooks (Blueprint endpoints)
+    'sonarr_webhooks.process_sonarr_webhook',
+    'sonarr_webhooks.handle_server_webhook',
     # Integration webhooks (Blueprint endpoints — external services can't authenticate)
     'jellyfin_integration.jellyfin_webhook',
     'emby_integration.emby_webhook',
@@ -303,22 +309,6 @@ def auto_add_quick_link(name, url, icon, open_in_iframe=False, alternate_url=Non
     add_quick_link(name, url, icon, open_in_iframe, alternate_url)
     app.logger.info(f"Auto-added {name} to quick links")
 
-@app.before_request
-def check_first_run():
-    # Skip check for setup page itself, static files, and API routes
-    if request.endpoint in ['setup', 'static', 'test_connection', 'save_service_config',
-                            'manage_quick_links', 'delete_quick_link_route',
-                            'iframe_view', 'services_sidebar', 'iframe_service_view']:
-        return
-    
-    # Check if Sonarr is configured (required service)
-    from settings_db import get_sonarr_config
-    sonarr = get_sonarr_config()
-    
-    if not sonarr or not sonarr.get('url'):
-        # Not configured - redirect to setup
-        return redirect(url_for('setup'))
-
 @app.route('/setup')
 def setup():
     """Service setup page"""
@@ -462,7 +452,7 @@ def test_connection(service):
             if not url or not api_key:
                 return jsonify({'status': 'error', 'message': 'URL and API key are required'}), 400
             
-            response = requests.get(f"{url}/api/v3/system/status", 
+            response = http.get(f"{url}/api/v3/system/status", 
                                   headers={'X-Api-Key': api_key}, timeout=10)
             response.raise_for_status()
             
@@ -476,7 +466,7 @@ def test_connection(service):
             if not url or not api_key:
                 return jsonify({'status': 'error', 'message': 'URL and API key are required'}), 400
             
-            response = requests.get(f"{url}/api/v2",
+            response = http.get(f"{url}/api/v2",
                                   params={'apikey': api_key, 'cmd': 'get_server_info'},
                                   timeout=10)
             response.raise_for_status()
@@ -759,46 +749,6 @@ def services_sidebar():
     return jsonify({'status': 'success', 'services': services})
 
 
-def get_episode_watch_history(rating_key: str):
-    """
-    Route watch-history queries to the correct integration.
-
-    Priority:
-      1. Tautulli — if configured with override_plex=True
-      2. Plex     — if configured
-      3. Jellyfin — if configured
-      4. Emby     — if configured
-      5. None
-
-    Returns {'last_watched': <unix timestamp>} or None.
-    """
-    from settings_db import get_tautulli_config, get_plex_config, get_jellyfin_config, get_emby_config
-
-    tautulli_cfg = get_tautulli_config()
-    if tautulli_cfg and tautulli_cfg.get('override_plex'):
-        from integrations.tautulli import get_tautulli_watch_history
-        result = get_tautulli_watch_history(rating_key)
-        if result:
-            return result
-
-    plex_cfg = get_plex_config()
-    if plex_cfg and plex_cfg.get('url') and plex_cfg.get('api_key'):
-        from integrations.plex import get_plex_watch_history
-        return get_plex_watch_history(rating_key)
-
-    jellyfin_cfg = get_jellyfin_config()
-    if jellyfin_cfg and jellyfin_cfg.get('url') and jellyfin_cfg.get('api_key'):
-        # Jellyfin uses internal item IDs, not Plex rating_keys — return None here;
-        # callers that use Jellyfin should query get_jellyfin_config() directly.
-        return None
-
-    emby_cfg = get_emby_config()
-    if emby_cfg and emby_cfg.get('url') and emby_cfg.get('api_key'):
-        return None  # Same note as Jellyfin above
-
-    return None
-
-
 @app.route('/api/media-server')
 def get_media_server():
     """Get all configured media servers (Plex, Jellyfin, Emby)."""
@@ -947,7 +897,7 @@ def get_tmdb_endpoint(endpoint, params=None):
             # Otherwise use as API key in params (v3)
             params['api_key'] = auth_token
         
-        response = requests.get(base_url, params=params, headers=headers)
+        response = http.get(base_url, params=params, headers=headers)
         
         if response.status_code == 200:
             return response.json()
@@ -1022,7 +972,7 @@ def get_sonarr_stats():
         
         # Get queue statistics
         try:
-            response = requests.get(f"{sonarr_url}/api/v3/queue", headers=headers, timeout=5)
+            response = http.get(f"{sonarr_url}/api/v3/queue", headers=headers, timeout=5)
             if response.ok:
                 queue_data = response.json()
                 records = queue_data.get('records', [])
@@ -1040,7 +990,7 @@ def get_sonarr_stats():
         
         # Get missing episodes count
         try:
-            response = requests.get(f"{sonarr_url}/api/v3/wanted/missing", headers=headers, timeout=5)
+            response = http.get(f"{sonarr_url}/api/v3/wanted/missing", headers=headers, timeout=5)
             if response.ok:
                 missing_data = response.json()
                 stats['missing_stats'] = {
@@ -1054,7 +1004,7 @@ def get_sonarr_stats():
             from datetime import datetime, timezone
             today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
             
-            response = requests.get(
+            response = http.get(
                 f"{sonarr_url}/api/v3/history",
                 headers=headers,
                 params={'page': 1, 'pageSize': 50, 'sortKey': 'date', 'sortDirection': 'descending'},
@@ -1329,7 +1279,7 @@ def api_series_data_enhanced():
         sonarr_api_key = os.environ.get('SONARR_API_KEY')
         
         headers = {'X-Api-Key': sonarr_api_key}
-        response = requests.get(f'{sonarr_url}/api/v3/series', headers=headers)
+        response = http.get(f'{sonarr_url}/api/v3/series', headers=headers)
         
         if response.status_code != 200:
             return jsonify({'success': False, 'error': 'Failed to fetch from Sonarr'}), 500
@@ -1393,47 +1343,6 @@ def api_sidebar_stats():
     except Exception as e:
         return jsonify({
             'error': str(e)
-        }), 500
-
-def api_rules_list():
-    """Return formatted rules data for sidebar display"""
-    try:
-        config_data = load_config()
-        default_rule = config_data.get('default_rule')
-        rules = config_data.get('rules', {})
-        
-        rules_list = []
-        
-        # Process each rule
-        for rule_name, rule_details in sorted(rules.items()):
-            is_default = (rule_name == default_rule)
-            series_count = len(rule_details.get('series', []))
-            
-            # Create display name (title case with spaces)
-            display_name = rule_name.replace('_', ' ').title()
-            
-            rules_list.append({
-                'name': rule_name,
-                'display_name': display_name,
-                'description': rule_details.get('description', ''),
-                'series_count': series_count,
-                'is_default': is_default
-            })
-        
-        # Sort: default first, then alphabetically
-        rules_list.sort(key=lambda x: (not x['is_default'], x['display_name']))
-        
-        return jsonify({
-            'success': True,
-            'rules': rules_list,
-            'total_count': len(rules_list)
-        })
-    
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'rules': []
         }), 500
 
 @app.route('/pending-deletions')
@@ -1702,8 +1611,21 @@ def clear_old_logs():
 # SIMPLIFIED CONFIG MANAGEMENT
 # ============================================================================
 
+_config_cache = None
+_config_cache_time = 0
+_CONFIG_CACHE_TTL = 30  # seconds
+
+def _invalidate_config_cache():
+    global _config_cache, _config_cache_time
+    _config_cache = None
+    _config_cache_time = 0
+
 def load_config():
     """Load configuration with simplified migration."""
+    global _config_cache, _config_cache_time
+    now = time.time()
+    if _config_cache is not None and (now - _config_cache_time) < _CONFIG_CACHE_TTL:
+        return _config_cache
     try:
         # REMOVED: Backup on every load (was causing spam)
         with open(config_path, 'r') as file:
@@ -1721,7 +1643,9 @@ def load_config():
         if migrated:
             save_config(config)
             app.logger.info("✓ Migrated rules to include grace_scope field (defaulted to 'series')")
-        
+
+        _config_cache = config
+        _config_cache_time = time.time()
         return config
     except FileNotFoundError:
         default_config = {
@@ -1729,7 +1653,7 @@ def load_config():
                 'default': {
                     'get_type': 'episodes',
                     'get_count': 1,
-                    'keep_type': 'episodes', 
+                    'keep_type': 'episodes',
                     'keep_count': 1,
                     'action_option': 'search',
                     'monitor_watched': False,
@@ -1750,6 +1674,7 @@ def load_config():
 
 def save_config(config):
     """Save configuration to JSON file with automatic backup."""
+    _invalidate_config_cache()
     try:
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         
@@ -1842,7 +1767,7 @@ def check_aired_not_downloaded():
     end = now.strftime('%Y-%m-%dT%H:%M:%SZ')
 
     try:
-        response = requests.get(
+        response = http.get(
             f"{sonarr_url}/api/v3/calendar",
             headers=headers,
             params={'start': start, 'end': end, 'unmonitored': 'false'},
@@ -1895,7 +1820,7 @@ def get_sonarr_series():
         sonarr_url = sonarr_preferences['SONARR_URL']
         
         # Get all series
-        response = requests.get(f"{sonarr_url}/api/v3/series", headers=headers)
+        response = http.get(f"{sonarr_url}/api/v3/series", headers=headers)
         if not response.ok:
             app.logger.error(f"Failed to fetch series from Sonarr: {response.status_code}")
             return []
@@ -1903,7 +1828,7 @@ def get_sonarr_series():
         all_series = response.json()
         
         # Get all tags to find 'watched' tag ID
-        tags_response = requests.get(f"{sonarr_url}/api/v3/tag", headers=headers)
+        tags_response = http.get(f"{sonarr_url}/api/v3/tag", headers=headers)
         if tags_response.ok:
             tags = tags_response.json()
             watched_tag_id = None
@@ -2182,7 +2107,7 @@ def delete_rule(rule_name):
     if tag_id:
         try:
             headers = episeerr_utils.get_sonarr_headers()
-            series_response = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
+            series_response = http.get(f"{SONARR_URL}/api/v3/series", headers=headers)
             if series_response.ok:
                 all_series = series_response.json()
                 removed_from_count = 0
@@ -2192,7 +2117,7 @@ def delete_rule(rule_name):
                     if tag_id in tags:
                         tags.remove(tag_id)
                         series['tags'] = tags
-                        update_resp = requests.put(
+                        update_resp = http.put(
                             f"{SONARR_URL}/api/v3/series/{series['id']}",
                             headers=headers,
                             json=series
@@ -2218,14 +2143,14 @@ def delete_rule(rule_name):
             profile_id = episeerr_utils.get_episeerr_delay_profile_id()
             if profile_id:
                 headers = episeerr_utils.get_sonarr_headers()
-                get_resp = requests.get(f"{SONARR_URL}/api/v3/delayprofile/{profile_id}", headers=headers)
+                get_resp = http.get(f"{SONARR_URL}/api/v3/delayprofile/{profile_id}", headers=headers)
                 if get_resp.ok:
                     profile = get_resp.json()
                     current_tags = profile.get('tags', [])
                     if tag_id in current_tags:
                         current_tags.remove(tag_id)
                         profile['tags'] = current_tags
-                        put_resp = requests.put(
+                        put_resp = http.put(
                             f"{SONARR_URL}/api/v3/delayprofile/{profile_id}",
                             headers=headers,
                             json=profile
@@ -2241,7 +2166,7 @@ def delete_rule(rule_name):
     if tag_id:
         try:
             headers = episeerr_utils.get_sonarr_headers()
-            delete_resp = requests.delete(
+            delete_resp = http.delete(
                 f"{SONARR_URL}/api/v3/tag/{tag_id}",
                 headers=headers
             )
@@ -2339,23 +2264,6 @@ def assign_rules():
     if '/rules' in referer:
         return redirect(url_for('rules_page'))
     return redirect(url_for('index', message=message))
-
-@app.template_filter('sonarr_url')
-def sonarr_series_url(series):
-    """Generate Sonarr series URL from series object."""
-    # Use titleSlug if available, otherwise fallback to ID
-    if isinstance(series, dict):
-        if 'titleSlug' in series:
-            return f"{SONARR_URL}/series/{series['titleSlug']}"
-        else:
-            return f"{SONARR_URL}/series/{series.get('id', '')}"
-    else:
-        # If it's just an ID passed directly
-        return f"{SONARR_URL}/series/{series}"
-
-@app.route('/delete-rule/<rule_name>', methods=['POST'])
-
-
 
 @app.context_processor
 def inject_service_urls():
@@ -2591,125 +2499,43 @@ def cleanup_config_rules():
         
         
         
-        # NEW: Comprehensive tag reconciliation (create, drift, orphaned)
+        # Tag reconciliation (create tags, drift, orphaned)
         app.logger.info("Starting tag reconciliation during cleanup...")
-        
-        # Step 1: Create/verify all rule tags exist in Sonarr
+
         created, failed = migrate_create_rule_tags()
         if created > 0 or failed > 0:
             app.logger.info(f"  Tag creation: {created} verified, {failed} failed")
-        
-        # Step 2: Drift detection - fix mismatched tags
-        drift_fixed = 0
-        drift_synced = 0
-        series_deleted = 0
-        
-        for rule_name, rule_details in config['rules'].items():
-            for series_id_str in list(rule_details.get('series', {}).keys()):
-                try:
-                    series_id = int(series_id_str)
-                    
-                    # First check if series still exists
-                    try:
-                        series_data = episeerr_utils.get_series_from_sonarr(series_id)
-                        if not series_data:
-                            # Series deleted - remove from config
-                            del rule_details['series'][series_id_str]
-                            series_deleted += 1
-                            app.logger.info(f"  Removed deleted series {series_id} from config (no longer in Sonarr)")
-                            changes_made = True
-                            continue
-                    except Exception as fetch_error:
-                        if "404" in str(fetch_error):
-                            # Definite 404 - series deleted
-                            del rule_details['series'][series_id_str]
-                            series_deleted += 1
-                            app.logger.info(f"  Removed series {series_id} from config (404 - deleted from Sonarr)")
-                            changes_made = True
-                            continue
-                        else:
-                            # Other error - log and continue
-                            app.logger.error(f"  Error fetching series {series_id}: {str(fetch_error)}")
-                            continue
-                    
-                    # Now check tag drift
-                    matches, actual_tag_rule = episeerr_utils.validate_series_tag(series_id, rule_name)
-                    
-                    if not matches:
-                        if actual_tag_rule:
-                            # Find actual rule name (case-insensitive)
-                            actual_rule_name = None
-                            for rn in config['rules'].keys():
-                                if rn.lower() == actual_tag_rule.lower():
-                                    actual_rule_name = rn
-                                    break
-                            
-                            if actual_rule_name:
-                                # Move series to new rule
-                                series_data = rule_details['series'][series_id_str]
-                                del rule_details['series'][series_id_str]
-                                
-                                target_rule = config['rules'][actual_rule_name]
-                                target_rule.setdefault('series', {})[series_id_str] = series_data
-                                
-                                drift_fixed += 1
-                                app.logger.info(f"  Drift: Moved series {series_id} to '{actual_rule_name}'")
-                                changes_made = True
-                            else:
-                                app.logger.error(f"Target rule '{actual_tag_rule}' not found")
-                        else:
-                            # No tag found: sync from config
-                            episeerr_utils.sync_rule_tag_to_sonarr(series_id, rule_name)
-                            drift_synced += 1
-                
-                except Exception as e:
-                    app.logger.error(f"Error checking drift for series {series_id_str}: {str(e)}")
-        
-        # Step 3: Orphaned tags - find shows tagged in Sonarr but not in config
-        # Build set of series IDs in config
-        config_series_ids = set()
-        for rule_details in config['rules'].values():
-            config_series_ids.update(rule_details.get('series', {}).keys())
-        
-        orphaned = 0
-        for series in existing_series:
-            series_id = str(series['id'])
-            
-            # Skip if already in config
-            if series_id in config_series_ids:
-                continue
-            
-            # Check if has episeerr tag
-            tag_mapping = episeerr_utils.get_tag_mapping()
-            for tag_id in series.get('tags', []):
-                tag_name = tag_mapping.get(tag_id, '').lower()
-                
-                # Found episeerr rule tag (not default/select)
-                if tag_name.startswith('episeerr_'):
-                    rule_name = tag_name.replace('episeerr_', '')
-                    if rule_name not in ['default', 'select']:
-                        # Find actual rule name (case-insensitive)
-                        actual_rule_name = None
-                        for rn in config['rules'].keys():
-                            if rn.lower() == rule_name:
-                                actual_rule_name = rn
-                                break
-                        
-                        if actual_rule_name:
-                            # Add to config
-                            config['rules'][actual_rule_name].setdefault('series', {})[series_id] = {}
-                            orphaned += 1
-                            app.logger.info(f"  Orphaned: Added {series['title']} to '{actual_rule_name}'")
-                            changes_made = True
-                            break
-        
-        # Save if any changes made
-        if changes_made or drift_fixed > 0 or drift_synced > 0 or orphaned > 0 or series_deleted > 0:
+
+        # Collect all series IDs to check: known + orphaned candidates
+        known_ids = [
+            int(sid)
+            for rule_details in config['rules'].values()
+            for sid in list(rule_details.get('series', {}).keys())
+        ]
+        config_series_ids = {
+            sid
+            for rule_details in config['rules'].values()
+            for sid in rule_details.get('series', {}).keys()
+        }
+        orphaned_ids = [
+            s['id'] for s in existing_series
+            if str(s['id']) not in config_series_ids
+        ]
+
+        series_lookup = {s['id']: s for s in existing_series}
+        reconciled = 0
+        for series_id in known_ids + orphaned_ids:
+            try:
+                _, changed = episeerr_utils.reconcile_series_drift(series_id, config, series_data=series_lookup.get(series_id))
+                if changed:
+                    reconciled += 1
+                    changes_made = True
+            except Exception as e:
+                app.logger.error(f"  Error reconciling series {series_id}: {e}")
+
+        if changes_made:
             save_config(config)
-            if series_deleted > 0:
-                app.logger.info(f"✓ Tag reconciliation complete: {drift_fixed} moved, {drift_synced} synced, {orphaned} orphaned, {series_deleted} deleted")
-            else:
-                app.logger.info(f"✓ Tag reconciliation complete: {drift_fixed} moved, {drift_synced} synced, {orphaned} orphaned")
+            app.logger.info(f"✓ Tag reconciliation complete: {reconciled} corrections made")
         else:
             app.logger.info("✓ Tag reconciliation complete: No changes needed")
             
@@ -3039,17 +2865,14 @@ def dry_run_settings():
     """Manage dry run settings."""
     if request.method == 'POST':
         try:
-            app.logger.info(f"Form data received: {dict(request.form)}")
             config = load_config()
-            
+
             for rule_name in config.get('rules', {}).keys():
                 rule_dry_run_key = f'rule_dry_run_{rule_name}'
-                rule_dry_run = rule_dry_run_key in request.form
-                app.logger.info(f"Setting {rule_name} dry_run to: {rule_dry_run}")
-                config['rules'][rule_name]['dry_run'] = rule_dry_run
-            
+                config['rules'][rule_name]['dry_run'] = rule_dry_run_key in request.form
+
             save_config(config)
-            app.logger.info("save_config() called")
+            app.logger.info("Dry run settings saved")
             
             return redirect(url_for('scheduler_admin', message="Dry run settings saved successfully"))
         except Exception as e:
@@ -3166,24 +2989,14 @@ def send_to_selection(series_id):
     """Create a pending selection request for a Sonarr series and redirect to season selection."""
     try:
         # Check if a pending request already exists for this series — reuse it if so
-        os.makedirs(REQUESTS_DIR, exist_ok=True)
-        for filename in os.listdir(REQUESTS_DIR):
-            if not filename.endswith('.json'):
-                continue
-            try:
-                with open(os.path.join(REQUESTS_DIR, filename), 'r') as f:
-                    existing = json.load(f)
-                if str(existing.get('series_id')) == str(series_id) and existing.get('tmdb_id'):
-                    config = load_config()
-                    current_rule = ''
-                    for rule_name_iter, rule_data in config.get('rules', {}).items():
-                        if str(series_id) in rule_data.get('series', {}):
-                            current_rule = rule_name_iter
-                            break
-                    app.logger.info(f"Reusing existing pending request for series {series_id}")
-                    return redirect(url_for('select_seasons', tmdb_id=existing['tmdb_id'], current_rule=current_rule))
-            except Exception:
-                continue
+        existing = find_pending_request_by_series(series_id)
+        if existing and existing.get('tmdb_id'):
+            config = load_config()
+            current_rule = next(
+                (rn for rn, rd in config.get('rules', {}).items() if str(series_id) in rd.get('series', {})), ''
+            )
+            app.logger.info(f"Reusing existing pending request for series {series_id}")
+            return redirect(url_for('select_seasons', tmdb_id=existing['tmdb_id'], current_rule=current_rule))
 
         sonarr_preferences = sonarr_utils.load_preferences()
         headers = {
@@ -3193,7 +3006,7 @@ def send_to_selection(series_id):
         sonarr_url = sonarr_preferences['SONARR_URL']
 
         # Get series info from Sonarr
-        resp = requests.get(f"{sonarr_url}/api/v3/series/{series_id}", headers=headers, timeout=10)
+        resp = http.get(f"{sonarr_url}/api/v3/series/{series_id}", headers=headers, timeout=10)
         if not resp.ok:
             return render_template('error.html', message=f"Could not find series in Sonarr (ID: {series_id})")
 
@@ -3219,7 +3032,7 @@ def send_to_selection(series_id):
         if not tmdb_id:
             return render_template('error.html', message=f"Could not determine TMDB ID for \"{series_title}\"")
 
-        # Create a selection request file (same format as the Sonarr webhook handler)
+        # Create a selection request in the DB
         request_id = f"sonarr-select-{series_id}-{int(time.time())}"
         pending_request = {
             "id": request_id,
@@ -3234,9 +3047,7 @@ def send_to_selection(series_id):
             "jellyseerr_request_id": None,
             "created_at": int(time.time())
         }
-        os.makedirs(REQUESTS_DIR, exist_ok=True)
-        with open(os.path.join(REQUESTS_DIR, f"{request_id}.json"), 'w') as f:
-            json.dump(pending_request, f, indent=2)
+        add_pending_request(pending_request)
 
         app.logger.info(f"✓ Created manual selection request for {series_title} (TMDB: {tmdb_id})")
 
@@ -3300,17 +3111,9 @@ def select_seasons(tmdb_id):
         # Look up the pending request ID for this tmdb_id so the template can delete it on cancel
         request_id = ''
         try:
-            for filename in os.listdir(REQUESTS_DIR):
-                if not filename.endswith('.json'):
-                    continue
-                try:
-                    with open(os.path.join(REQUESTS_DIR, filename), 'r') as f:
-                        req_data = json.load(f)
-                    if str(req_data.get('tmdb_id')) == str(tmdb_id):
-                        request_id = req_data.get('id', '')
-                        break
-                except Exception:
-                    continue
+            req_data = find_pending_request_by_tmdb(tmdb_id)
+            if req_data:
+                request_id = req_data.get('id', '')
         except Exception:
             pass
 
@@ -3340,22 +3143,11 @@ def apply_rule_to_selection():
         # Find the pending request to get series_id
         series_id = None
         request_id = None
-        request_file_path = None
-        
-        for filename in os.listdir(REQUESTS_DIR):
-            if filename.endswith('.json'):
-                filepath = os.path.join(REQUESTS_DIR, filename)
-                try:
-                    with open(filepath, 'r') as f:
-                        request_data = json.load(f)
-                        if str(request_data.get('tmdb_id')) == str(tmdb_id):
-                            series_id = request_data.get('series_id')
-                            request_id = request_data.get('id')
-                            request_file_path = filepath
-                            break
-                except Exception:
-                    continue
-        
+        request_data = find_pending_request_by_tmdb(tmdb_id)
+        if request_data:
+            series_id = request_data.get('series_id')
+            request_id = request_data.get('id')
+
         if not series_id:
             return redirect(url_for('rules_page'))
 
@@ -3396,7 +3188,7 @@ def apply_rule_to_selection():
                 _get_count = _rule_cfg.get('get_count', 1)
                 _action_option = _rule_cfg.get('action_option', 'monitor')
 
-                _eps_resp = requests.get(
+                _eps_resp = http.get(
                     f"{SONARR_URL}/api/v3/episode?seriesId={series_id}",
                     headers=_rule_headers
                 )
@@ -3422,7 +3214,7 @@ def apply_rule_to_selection():
                         _to_monitor = [ep['id'] for ep in _season_eps[:_n]]
 
                     if _to_monitor:
-                        _mon_resp = requests.put(
+                        _mon_resp = http.put(
                             f"{SONARR_URL}/api/v3/episode/monitor",
                             headers=_rule_headers,
                             json={"episodeIds": _to_monitor, "monitored": True}
@@ -3433,7 +3225,7 @@ def apply_rule_to_selection():
                                 f"for series {series_id}"
                             )
                             if _action_option == 'search':
-                                _srch_resp = requests.post(
+                                _srch_resp = http.post(
                                     f"{SONARR_URL}/api/v3/command",
                                     headers=_rule_headers,
                                     json={"name": "EpisodeSearch", "episodeIds": _to_monitor}
@@ -3454,30 +3246,27 @@ def apply_rule_to_selection():
         except Exception as e:
             app.logger.error(f"Tag sync failed: {e}")
         
-        # Clean up the pending request file
-        if request_file_path and os.path.exists(request_file_path):
-            try:
-                os.remove(request_file_path)
-                app.logger.info(f"✓ Removed pending request {request_id}")
-            except Exception:
-                pass
+        # Clean up the pending request
+        if request_id:
+            delete_pending_request(request_id)
+            app.logger.info(f"✓ Removed pending request {request_id}")
         
         # Remove episeerr_select tag (keep rule tag)
         try:
-            tag_resp = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers)
+            tag_resp = http.get(f"{SONARR_URL}/api/v3/tag", headers=headers)
             if tag_resp.ok:
                 tag_map = {t['label'].lower(): t['id'] for t in tag_resp.json()}
                 select_tag_id = tag_map.get('episeerr_select')
                 
                 if select_tag_id:
-                    series_resp = requests.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers)
+                    series_resp = http.get(f"{SONARR_URL}/api/v3/series/{series_id}", headers=headers)
                     if series_resp.ok:
                         series_data = series_resp.json()
                         current_tags = series_data.get('tags', [])
                         if select_tag_id in current_tags:
                             current_tags.remove(select_tag_id)
                             series_data['tags'] = current_tags
-                            requests.put(f"{SONARR_URL}/api/v3/series", headers=headers, json=series_data)
+                            http.put(f"{SONARR_URL}/api/v3/series", headers=headers, json=series_data)
         except Exception as e:
             app.logger.debug(f"Tag cleanup: {e}")
         
@@ -3506,24 +3295,12 @@ def select_episodes(tmdb_id):
         app.logger.info(f"Episode selection for TMDB ID {tmdb_id}, seasons: {selected_seasons}")
         
         # Find the corresponding series_id from pending requests
-        series_id = None
-        request_id = None
-        
-        for filename in os.listdir(REQUESTS_DIR):
-            if filename.endswith('.json'):
-                try:
-                    with open(os.path.join(REQUESTS_DIR, filename), 'r') as f:
-                        request_data = json.load(f)
-                        if str(request_data.get('tmdb_id')) == str(tmdb_id):
-                            series_id = request_data.get('series_id')
-                            request_id = request_data.get('id')
-                            app.logger.info(f"Found matching request: series_id={series_id}, request_id={request_id}")
-                            break
-                except Exception as e:
-                    app.logger.error(f"Error reading request file {filename}: {str(e)}")
-        
-        if not series_id or not request_id:
+        req = find_pending_request_by_tmdb(tmdb_id)
+        if not req:
             return render_template('error.html', message="No pending request found for this series")
+        series_id = req.get('series_id')
+        request_id = req.get('id')
+        app.logger.info(f"Found matching request: series_id={series_id}, request_id={request_id}")
         
         # Get TV show details from TMDB
         show_data = get_tmdb_endpoint(f"tv/{tmdb_id}")
@@ -3567,41 +3344,32 @@ def select_episodes(tmdb_id):
 def process_episode_selection():
     """Process episode selection with multi-season support."""
     try:
-        app.logger.info(f"Raw form data: {dict(request.form)}")
-        app.logger.info(f"Form lists: episodes={request.form.getlist('episodes')}")
-        
         # Get form data
         request_id = request.form.get('request_id')
         episodes = request.form.getlist('episodes')  # Gets ALL values with name 'episodes'
         action = request.form.get('action')
-        
+
         app.logger.info(f"Processing: request_id={request_id}, action={action}, episodes={episodes}")
         
         if action == 'cancel':
-            # Delete the request file
             if request_id:
-                request_file = os.path.join(REQUESTS_DIR, f"{request_id}.json")
-                if os.path.exists(request_file):
-                    os.remove(request_file)
-                    app.logger.info(f"Cancelled and removed request {request_id}")
-            
+                delete_pending_request(request_id)
+                app.logger.info(f"Cancelled and removed request {request_id}")
+
             return redirect(url_for('rules_page'))
         
         elif action == 'process':
             # Load request data
-            request_file = os.path.join(REQUESTS_DIR, f"{request_id}.json")
-            if not os.path.exists(request_file):
+            request_data = get_pending_request(request_id)
+            if not request_data:
                 return redirect(url_for('rules_page'))
-            
-            with open(request_file, 'r') as f:
-                request_data = json.load(f)
             
             series_id = request_data['series_id']
             
             if not episodes:
                 return redirect(url_for('rules_page'))
             
-            app.logger.info(f"DEBUG: Processing {len(episodes)} episodes: {episodes}")
+            app.logger.debug(f"Processing {len(episodes)} episodes: {episodes}")
             
             # Parse episodes by season: "season:episode" format
             episodes_by_season = {}
@@ -3680,12 +3448,9 @@ def process_episode_selection():
                     app.logger.warning(f"Selected rule '{selected_rule}' not found in config")
             # ── END NEW ──────────────────────────────────────────────
             
-            # Clean up request file
-            try:
-                os.remove(request_file)
-                app.logger.info(f"Removed request file: {request_id}.json")
-            except Exception as e:
-                app.logger.error(f"Error removing request file: {str(e)}")
+            # Clean up request
+            delete_pending_request(request_id)
+            app.logger.info(f"Removed pending request: {request_id}")
             
             # Prepare result message
             return redirect(url_for('rules_page'))
@@ -3721,16 +3486,8 @@ def get_pending_requests():
     if not TMDB_API_KEY:
         return jsonify({"success": False, "requests": [], "count": 0})
     try:
-        pending_requests = []
-        for filename in os.listdir(REQUESTS_DIR):
-            if filename.endswith('.json'):
-                try:
-                    with open(os.path.join(REQUESTS_DIR, filename), 'r') as f:
-                        request_data = json.load(f)
-                        pending_requests.append(request_data)
-                except Exception as e:
-                    app.logger.error(f"Error reading request file {filename}: {str(e)}")
-        pending_requests.sort(key=lambda x: x.get('created_at', 0), reverse=True)
+        rows = get_all_pending_requests()
+        pending_requests = sorted(rows, key=lambda x: x.get('created_at', 0), reverse=True)
         return jsonify({
             "success": True,
             "requests": pending_requests,
@@ -3743,890 +3500,22 @@ def get_pending_requests():
 def delete_request(request_id):
     """Delete a pending request by its unique request_id (filename base)."""
     try:
-        filename = f"{request_id}.json"
-        filepath = os.path.join(REQUESTS_DIR, filename)
-
-        if os.path.exists(filepath):
-            os.remove(filepath)
-            app.logger.info(f"Deleted pending request file {filename}")
+        deleted = delete_pending_request(request_id)
+        if deleted:
+            app.logger.info(f"Deleted pending request {request_id}")
             return jsonify({"status": "success", "message": "Request deleted successfully"}), 200
         else:
-            app.logger.warning(f"Pending request file {filename} not found")
+            app.logger.warning(f"Pending request {request_id} not found")
             return jsonify({"status": "error", "message": "Request not found"}), 404
 
     except Exception as e:
         app.logger.error(f"Error deleting request {request_id}: {str(e)}")
         return jsonify({"status": "error", "message": "Failed to delete request"}), 500
 
-def process_watch_event(series_id: int, user_name: str = None):
-    """
-    Shared logic for any watch event (Tautulli or Jellyfin).
-    - Find current config rule
-    - Validate tag vs config
-    - Auto-correct drift if needed
-    - Apply GET + KEEP for the (possibly updated) rule
-    - Update activity_date
-    """
-    config = load_config()
-    
-    # 1. Find current assignment in config
-    config_rule = None
-    series_id_str = str(series_id)
-    for rule_name, rule_data in config['rules'].items():
-        if series_id_str in rule_data.get('series', {}):
-            config_rule = rule_name
-            break
-    
-    if not config_rule:
-        app.logger.info(f"Series {series_id} not assigned to any rule → skipping watch processing")
-        return False, "Not assigned"
-    
-    # 2. Check what Sonarr currently says
-    matches, actual_tag_rule = episeerr_utils.validate_series_tag(series_id, config_rule)
-    
-    if matches:
-        app.logger.debug(f"Tag matches config: {config_rule}")
-        final_rule = config_rule
-    
-    else:
-        if actual_tag_rule:
-            # Drift: tag was changed manually → move config to match tag
-            app.logger.warning(f"DRIFT DETECTED — config: {config_rule}, Sonarr tag: {actual_tag_rule}")
-            episeerr_utils.move_series_in_config(series_id, config_rule, actual_tag_rule)
-            final_rule = actual_tag_rule
-            app.logger.info(f"Series moved to rule '{final_rule}' to match Sonarr tag")
-        
-        else:
-            # No episeerr rule tag at all → restore from config
-            app.logger.warning(f"No episeerr rule tag found → restoring episeerr_{config_rule}")
-            episeerr_utils.sync_rule_tag_to_sonarr(series_id, config_rule)
-            final_rule = config_rule
-    
-    # 3. Apply GET + KEEP logic for final_rule
-    rule_config = config['rules'][final_rule]
-    
-    # ─── Your GET logic here ───
-    # monitor new episodes, search, etc. based on rule['get_type'], ['get_count'], etc.
-    # Example:
-    # apply_get_settings(series_id, rule_config)
-    
-    # ─── Your KEEP logic here ───
-    # delete old episodes based on grace periods, keep_count, etc.
-    # Example:
-    # apply_keep_cleanup(series_id, rule_config)
-    
-    # 4. Update activity tracking
-    series_data = config['rules'][final_rule]['series'][series_id_str]
-    series_data['activity_date'] = int(time.time())
-    # Optional: update last_season / last_episode if you track them
-    
-    save_config(config)
-    
-    app.logger.info(f"Watch processed for series {series_id} under rule '{final_rule}'")
-    return True, final_rule
+
 # ============================================================================
-# WEBHOOK ROUTES
+# WEBHOOK ROUTES — moved to webhooks.py (sonarr_webhooks_bp)
 # ============================================================================
-
-@app.route('/sonarr-webhook', methods=['POST'])
-def process_sonarr_webhook():
-    """Handle incoming Sonarr webhooks for series additions with enhanced tag-based assignment."""
-    app.logger.info("Received Sonarr webhook")
-    
-    try:
-        json_data = request.json
-        
-        event_type = json_data.get('eventType')
-        app.logger.info(f"Sonarr webhook event type: {event_type}")
-        
-        if event_type == 'Grab':
-            return handle_episode_grab(json_data)
-        
-        series = json_data.get('series', {})
-        series_id = series.get('id')
-        tvdb_id = series.get('tvdbId')
-        tmdb_id = series.get('tmdbId')
-        series_title = series.get('title')
-        
-        app.logger.info(f"Processing series addition: {series_title} (ID: {series_id}, TVDB: {tvdb_id})")
-        
-        # Sonarr connection setup
-        sonarr_preferences = sonarr_utils.load_preferences()
-        headers = {
-            'X-Api-Key': sonarr_preferences['SONARR_API_KEY'],
-            'Content-Type': 'application/json'
-        }
-        SONARR_URL = sonarr_preferences['SONARR_URL']
-
-        # ────────────────────────────────────────────────────────────────
-        # Jellyseerr request cleanup (moved up)
-        # ────────────────────────────────────────────────────────────────
-        jellyseerr_request_id = None
-        jellyseerr_requested_seasons = None
-        tvdb_id_str = str(tvdb_id) if tvdb_id else None
-
-        if tvdb_id_str:
-            request_file = os.path.join(REQUESTS_DIR, f"jellyseerr-{tvdb_id_str}.json")
-            if os.path.exists(request_file):
-                try:
-                    with open(request_file, 'r') as f:
-                        request_data = json.load(f)
-                    jellyseerr_request_id = request_data.get('request_id')
-                    jellyseerr_requested_seasons = request_data.get('requested_seasons')
-                    app.logger.info(f"✓ Found Jellyseerr request file: {jellyseerr_request_id}")
-                    
-                    app.logger.info(f"Cancelling Jellyseerr request {jellyseerr_request_id}")
-                    seerr = get_integration('jellyseerr')
-                    if seerr and jellyseerr_request_id:
-                        seerr.delete_request(jellyseerr_request_id)
-                    
-                    try:
-                        from activity_storage import save_request_event
-                        save_request_event(request_data)
-                    except Exception as e:
-                        app.logger.error(f"Failed to log request to activity: {e}")
-                    
-                    os.remove(request_file)
-                    app.logger.info(f"✓ Removed Jellyseerr request file")
-                except Exception as e:
-                    app.logger.error(f"Error processing Jellyseerr request file: {str(e)}")
-
-        # ────────────────────────────────────────────────────────────────
-        # Enhanced tag detection - supports all rule tags
-        # ────────────────────────────────────────────────────────────────
-        tags_response = requests.get(f"{SONARR_URL}/api/v3/tag", headers=headers)
-        if not tags_response.ok:
-            app.logger.error(f"Failed to get Sonarr tags: {tags_response.status_code}")
-            return jsonify({"status": "error", "message": "Failed to get tags"}), 500
-        
-        tags = tags_response.json()
-        tag_mapping = {tag['id']: tag['label'].lower() for tag in tags}
-
-        series_tags = series.get('tags', [])
-        app.logger.info(f"Series tags (IDs): {series_tags}")
-        app.logger.info(f"Tag mapping: {tag_mapping}")
-
-        assigned_rule = None
-        is_select_request = False
-
-        config = None  # lazy load
-        
-        # Create reverse mapping (label -> id) for webhook format compatibility
-        reverse_tag_mapping = {label.lower(): tag_id for tag_id, label in tag_mapping.items()}
-        app.logger.debug(f"Reverse tag mapping created: {len(reverse_tag_mapping)} tags")
-
-        for tag_id in series_tags:
-            # Handle both formats: integer IDs and string labels
-            original_tag = tag_id
-            tag_label = None
-            
-            if isinstance(tag_id, int):
-                # Standard format: integer ID
-                tag_label = tag_mapping.get(tag_id, '').lower()
-            elif isinstance(tag_id, str):
-                # Webhook format: string label
-                # Check if it looks like a tag label
-                tag_label = tag_id.lower()
-                # Try to get the actual ID from reverse mapping
-                actual_tag_id = reverse_tag_mapping.get(tag_label)
-                if actual_tag_id:
-                    tag_id = actual_tag_id
-                    app.logger.debug(f"Converted tag label '{original_tag}' to ID {tag_id}")
-                else:
-                    app.logger.warning(f"Tag label '{original_tag}' not found in Sonarr tags")
-                    continue
-            else:
-                app.logger.error(f"Unexpected tag type: {original_tag} (type: {type(original_tag)})")
-                continue
-            
-            if not tag_label:
-                app.logger.warning(f"Could not determine label for tag: {original_tag}")
-                continue
-                
-            if not tag_label.startswith('episeerr_'):
-                continue
-                
-            rule_name = tag_label.replace('episeerr_', '')
-            app.logger.info(f"Processing episeerr tag: {tag_label} (rule_name: {rule_name})")
-            
-            if rule_name == 'select':
-                is_select_request = True
-                app.logger.info("Detected episeerr_select tag → selection workflow")
-                break
-                
-            else:
-                # Direct rule tag - case-insensitive lookup
-                if config is None:
-                    config = load_config()
-                
-                actual_rule_name = None
-                for rn in config.get('rules', {}).keys():
-                    if rn.lower() == rule_name.lower():
-                        actual_rule_name = rn
-                        break
-                
-                if actual_rule_name:
-                    assigned_rule = actual_rule_name
-                    app.logger.info(f"✓ Detected direct rule tag: episeerr_{rule_name} → matched rule '{actual_rule_name}'")
-                    break
-                else:
-                    app.logger.warning(f"Ignoring unknown rule tag: episeerr_{rule_name}")
-                    if config:
-                        app.logger.warning(f"Available rules: {list(config.get('rules', {}).keys())}")
-                    else:
-                        app.logger.warning("Config not yet loaded")
-
-        # ────────────────────────────────────────────────────────────────
-        # No episeerr tag → auto-assign fallback
-        # ────────────────────────────────────────────────────────────────
-        app.logger.info(f"=== TAG DETECTION SUMMARY ===")
-        app.logger.info(f"assigned_rule: {assigned_rule}")
-        app.logger.info(f"is_select_request: {is_select_request}")        
-        if not assigned_rule and not is_select_request:
-            import media_processor
-            global_settings = media_processor.load_global_settings()
-            app.logger.info(f"Auto-assign check: enabled={global_settings.get('auto_assign_new_series', False)}")
-            
-            if global_settings.get('auto_assign_new_series', False):
-                if config is None:
-                    config = load_config()
-                default_rule_name = config.get('default_rule', 'default')
-                
-                if default_rule_name not in config['rules']:
-                    return jsonify({"status": "error", "message": f"Default rule '{default_rule_name}' missing"}), 500
-                
-                series_id_str = str(series_id)
-                target_rule = config['rules'][default_rule_name]
-                target_rule.setdefault('series', {})
-                series_dict = target_rule['series']
-                
-                if series_id_str not in series_dict:
-                    series_dict[series_id_str] = {'activity_date': None}
-                    save_config(config)
-                    try:
-                        episeerr_utils.sync_rule_tag_to_sonarr(series_id, default_rule_name)
-                    except Exception as e:
-                        app.logger.error(f"Auto-assign tag sync failed: {e}")
-                    app.logger.info(f"Auto-assigned to default rule '{default_rule_name}'")
-                
-                # Set assigned_rule and continue to processing
-                assigned_rule = default_rule_name
-            else:
-                # ONLY return if auto-assign is OFF
-                app.logger.info("No episeerr tags + auto-assign off → no action")
-                return jsonify({"status": "success", "message": "No processing needed"}), 200
-
-        # ────────────────────────────────────────────────────────────────
-        # We have action → unmonitor + cleanup tags + cancel downloads
-        # ────────────────────────────────────────────────────────────────
-        app.logger.info(f"Unmonitoring episodes for {series_title}")
-        episeerr_utils.unmonitor_series(series_id, headers)
-        
-        # Remove ONLY episeerr_select/episeerr_default/episeerr_delay (keep rule tags)
-        updated_tags = []
-        removed = []
-        had_delay_tag = False
-        
-        # Create reverse mapping for string labels
-        reverse_tag_mapping = {label.lower(): tag_id for tag_id, label in tag_mapping.items()}
-        
-        for tag_item in series_tags:
-            # Handle both integer IDs and string labels
-            if isinstance(tag_item, int):
-                # Integer ID format
-                tag_id = tag_item
-                label = tag_mapping.get(tag_id, '').lower()
-            elif isinstance(tag_item, str):
-                # String label format (from webhook)
-                label = tag_item.lower()
-                tag_id = reverse_tag_mapping.get(label)
-                if not tag_id:
-                    app.logger.warning(f"Unknown tag label in removal: {tag_item}")
-                    continue
-            else:
-                app.logger.warning(f"Unexpected tag type in removal: {tag_item}")
-                continue
-            
-            if label in ['episeerr_select', 'episeerr_delay']:
-                removed.append(label)
-                if label == 'episeerr_delay':
-                    had_delay_tag = True
-            else:
-                # Keep this tag - use integer ID
-                updated_tags.append(tag_id)
-        
-        if removed:
-            # Get fresh series data from Sonarr
-            series_resp = requests.get(
-                f"{SONARR_URL}/api/v3/series/{series_id}",
-                headers=headers
-            )
-            
-            if series_resp.ok:
-                update_payload = series_resp.json()
-                update_payload['tags'] = updated_tags
-                
-                resp = requests.put(
-                    f"{SONARR_URL}/api/v3/series",
-                    headers=headers,
-                    json=update_payload
-                )
-                
-                if resp.ok:
-                    app.logger.info(f"Removed control tag(s): {removed}")
-                else:
-                    app.logger.error(f"Tag removal failed: {resp.text}")
-            else:
-                app.logger.error(f"Failed to fetch series data: {series_resp.status_code}")
-        
-        try:
-            episeerr_utils.check_and_cancel_unmonitored_downloads()
-        except Exception as e:
-            app.logger.error(f"Download cancel failed: {e}")
-
-        # ────────────────────────────────────────────────────────────────
-        # Branch: selection vs rule processing
-        # ────────────────────────────────────────────────────────────────
-        if is_select_request:
-            app.logger.info(f"Processing {series_title} with episeerr_select tag - creating selection request")
-            
-            # Ensure we have a TMDB ID for the UI
-            if not tmdb_id:
-                try:
-                    external_ids = get_external_ids(tvdb_id, 'tv')
-                    if external_ids and external_ids.get('tmdb_id'):
-                        tmdb_id = external_ids['tmdb_id']
-                    else:
-                        search_results = search_tv_shows(series_title)
-                        if search_results.get('results'):
-                            tmdb_id = search_results['results'][0]['id']
-                except Exception as e:
-                   app.logger.error(f"Error finding TMDB ID: {str(e)}")
-            
-            # Create a selection request
-            request_id = f"sonarr-select-{series_id}-{int(time.time())}"
-            
-            pending_request = {
-                "id": request_id,
-                "series_id": series_id,
-                "title": series_title,
-                "needs_season_selection": True,
-                "tmdb_id": tmdb_id,
-                "tvdb_id": tvdb_id,
-                "source": "sonarr",
-                "source_name": "Sonarr Episode Selection",
-                "needs_attention": True,
-                "jellyseerr_request_id": jellyseerr_request_id,
-                "created_at": int(time.time())
-            }
-            
-            os.makedirs(REQUESTS_DIR, exist_ok=True)
-            with open(os.path.join(REQUESTS_DIR, f"{request_id}.json"), 'w') as f:
-                json.dump(pending_request, f, indent=2)
-            
-            app.logger.info(f"✓ Created episode selection request for {series_title}")
-
-            try:
-                from notifications import send_notification
-                send_notification(
-                    "selection_pending",
-                    series=series_title,
-                    series_id=series_id
-                )
-            except Exception as e:
-                app.logger.error(f"Failed to send selection pending notification: {e}")
-            
-            return jsonify({"status": "success", "message": "Selection request created"}), 200
-
-        # ─── Rule processing ─────────────────────────────────────────────
-        if config is None:
-            config = load_config()
-
-        app.logger.info(f"Applying rule: {assigned_rule}")
-
-        # Determine starting season
-        starting_season = 1
-        if jellyseerr_requested_seasons:
-            try:
-                seasons = [int(s.strip()) for s in str(jellyseerr_requested_seasons).split(',')]
-                if seasons:
-                    starting_season = min(seasons)
-                    app.logger.info(f"✓ Using requested season {starting_season} from Jellyseerr")
-            except Exception as e:
-                app.logger.warning(f"Could not parse requested seasons: {e}")
-
-        # Add to config + sync tag
-        series_id_str = str(series_id)
-        target_rule = config['rules'][assigned_rule]
-        target_rule.setdefault('series', {})
-        series_dict = target_rule['series']
-        
-        if series_id_str not in series_dict:
-            series_dict[series_id_str] = {'activity_date': None}
-            save_config(config)
-            try:
-                episeerr_utils.sync_rule_tag_to_sonarr(series_id, assigned_rule)
-                app.logger.info(f"Synced tag episeerr_{assigned_rule}")
-            except Exception as e:
-                app.logger.error(f"Tag sync failed: {e}")
-
-        # Execute rule logic
-        try:
-            rule_config = config['rules'][assigned_rule]
-            get_type = rule_config.get('get_type', 'episodes')
-            get_count = rule_config.get('get_count', 1)
-            action_option = rule_config.get('action_option', 'monitor')
-
-            # Process always_have FIRST (additive on top of get_type, runs after unmonitor)
-            always_have = rule_config.get('always_have', '')
-            if always_have:
-                try:
-                    media_processor.process_always_have(series_id, always_have)
-                except Exception as e:
-                    app.logger.error(f"always_have processing failed for series {series_id}: {e}")
-
-            app.logger.info(f"Executing rule '{assigned_rule}' with get_type '{get_type}', get_count '{get_count}' starting from Season {starting_season}")
-            
-            # Get all episodes for the series
-            episodes_response = requests.get(
-                f"{SONARR_URL}/api/v3/episode?seriesId={series_id}",
-                headers=headers
-            )
-            
-            if episodes_response.ok:
-                all_episodes = episodes_response.json()
-                
-                # Get episodes from the requested season
-                requested_season_episodes = sorted(
-                    [ep for ep in all_episodes if ep.get('seasonNumber') == starting_season],
-                    key=lambda x: x.get('episodeNumber', 0)
-                )
-                
-                if not requested_season_episodes:
-                    app.logger.warning(f"No Season {starting_season} episodes found for {series_title}")
-                else:
-                    # Determine which episodes to monitor based on get settings
-                    episodes_to_monitor = []
-                    
-                    if get_type == 'all':
-                        episodes_to_monitor = [
-                            ep['id'] for ep in all_episodes 
-                            if ep.get('seasonNumber') >= starting_season
-                        ]
-                        app.logger.info(f"Monitoring all episodes from Season {starting_season} onward")
-                        
-                    elif get_type == 'seasons':
-                        num_seasons = get_count or 1
-                        episodes_to_monitor = [
-                            ep['id'] for ep in all_episodes 
-                            if starting_season <= ep.get('seasonNumber') < (starting_season + num_seasons)
-                        ]
-                        app.logger.info(f"Monitoring {num_seasons} season(s) starting from Season {starting_season} ({len(episodes_to_monitor)} episodes)")
-                        
-                    else:  # episodes
-                        try:
-                            num_episodes = get_count or 1
-                            episodes_to_monitor = [ep['id'] for ep in requested_season_episodes[:num_episodes]]
-                            app.logger.info(f"Monitoring first {len(episodes_to_monitor)} episodes of Season {starting_season}")
-                        except (ValueError, TypeError):
-                            episodes_to_monitor = [requested_season_episodes[0]['id']] if requested_season_episodes else []
-                            app.logger.warning(f"Invalid get_count, defaulting to first episode")
-                    
-                    if episodes_to_monitor:
-                        # Monitor the selected episodes
-                        monitor_response = requests.put(
-                            f"{SONARR_URL}/api/v3/episode/monitor",
-                            headers=headers,
-                            json={"episodeIds": episodes_to_monitor, "monitored": True}
-                        )
-                        
-                        if monitor_response.ok:
-                            app.logger.info(f"✓ Monitored {len(episodes_to_monitor)} episodes for {series_title}")
-                            
-                            # Search for episodes if action_option is 'search'
-                            if action_option == 'search':
-                                if get_type == 'seasons':
-                                    # Use SeasonSearch for season-based rules
-                                    first_ep_response = requests.get(
-                                        f"{SONARR_URL}/api/v3/episode/{episodes_to_monitor[0]}",
-                                        headers=headers
-                                    )
-                                    if first_ep_response.ok:
-                                        first_ep = first_ep_response.json()
-                                        season_number = first_ep.get('seasonNumber')
-                                        
-                                        app.logger.info(f"Searching for season pack for Season {season_number}")
-                                        search_json = {
-                                            "name": "SeasonSearch",
-                                            "seriesId": series_id,
-                                            "seasonNumber": season_number
-                                        }
-                                    else:
-                                        search_json = {"name": "EpisodeSearch", "episodeIds": episodes_to_monitor}
-                                else:
-                                    # Individual episode search
-                                    search_json = {"name": "EpisodeSearch", "episodeIds": episodes_to_monitor}
-                                
-                                search_response = requests.post(
-                                    f"{SONARR_URL}/api/v3/command",
-                                    headers=headers,
-                                    json=search_json
-                                )
-                                
-                                if search_response.ok:
-                                    search_type = "season pack" if get_type == 'seasons' else "episodes"
-                                    app.logger.info(f"✓ Started search for {search_type}")
-                                else:
-                                    app.logger.error(f"Failed to search: {search_response.text}")
-                        else:
-                            app.logger.error(f"Failed to monitor episodes: {monitor_response.text}")
-                    else:
-                        app.logger.warning(f"No episodes to monitor for {series_title}")
-                        
-                    # ────────────────────────────────────────────────────────────────
-                    # Remove episeerr_delay tag to allow immediate downloads
-                    # ────────────────────────────────────────────────────────────────
-                    # Now that we've monitored the correct episodes and triggered searches,
-                    # remove the delay tag so downloads can proceed immediately
-                    
-                    try:
-                        delay_tag_id = episeerr_utils.get_or_create_rule_tag_id('delay')
-                        if delay_tag_id:
-                            # Get fresh series data
-                            series_refresh_resp = requests.get(
-                                f"{SONARR_URL}/api/v3/series/{series_id}",
-                                headers=headers
-                            )
-                            
-                            if series_refresh_resp.ok:
-                                fresh_series = series_refresh_resp.json()
-                                current_tags = fresh_series.get('tags', [])
-                                
-                                if delay_tag_id in current_tags:
-                                    # Remove delay tag
-                                    current_tags.remove(delay_tag_id)
-                                    fresh_series['tags'] = current_tags
-                                    
-                                    update_resp = requests.put(
-                                        f"{SONARR_URL}/api/v3/series",
-                                        headers=headers,
-                                        json=fresh_series
-                                    )
-                                    
-                                    if update_resp.ok:
-                                        app.logger.info(f"✓ Removed episeerr_delay tag - downloads can proceed immediately")
-                                    else:
-                                        app.logger.error(f"Failed to remove delay tag: {update_resp.text}")
-                                else:
-                                    app.logger.debug("episeerr_delay tag not present (already removed or never added)")
-                            else:
-                                app.logger.error(f"Failed to refresh series data: {series_refresh_resp.status_code}")
-                        else:
-                            app.logger.warning("Could not get delay tag ID")
-                            
-                    except Exception as e:
-                        app.logger.error(f"Error removing delay tag: {str(e)}")
-            else:
-                app.logger.error(f"Failed to get episodes: {episodes_response.text}")
-        except Exception as e:
-            app.logger.error(f"Error executing rule: {str(e)}", exc_info=True)
-
-        return jsonify({"status": "success", "message": "Processing completed"}), 200
-
-    except Exception as e:
-        app.logger.error(f"Error processing Sonarr webhook: {str(e)}", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)}), 500
-    
-def handle_episode_grab(json_data):
-    """
-    Handle episode grab:
-    1. Mark series as cleaned (stops grace checking)
-    2. Log download for dashboard
-    3. Delete pending Discord notifications
-    """
-    try:
-        series = json_data.get('series', {})
-        series_id = series.get('id')
-        series_title = series.get('title', 'Unknown')
-        episodes = json_data.get('episodes', [])
-        
-        if not episodes:
-            app.logger.warning(f"Grab webhook for {series_title} has no episodes")
-            return jsonify({"status": "success", "message": "No episodes in grab"}), 200
-        
-        episode_info = episodes[0]
-        season_num = episode_info.get('seasonNumber')
-        episode_num = episode_info.get('episodeNumber')
-        episode_id = episode_info.get('id')
-        
-        app.logger.info(f"✅ Episode grabbed: {series_title} S{season_num}E{episode_num}")
-        
-        # ──────────────────────────────────────────────────────
-        # 1. MARK AS CLEANED (stops grace checking)
-        # ──────────────────────────────────────────────────────
-        config = load_config()
-        
-        for rule_name, rule in config['rules'].items():
-            if str(series_id) in rule.get('series', {}):
-                series_data = rule['series'][str(series_id)]
-                
-                if isinstance(series_data, dict):
-                    series_data['grace_cleaned'] = True
-                    save_config(config)
-                    app.logger.info(f"✓ Marked as cleaned in rule '{rule_name}'")
-                break
-        
-        # ──────────────────────────────────────────────────────
-        # 2. LOG DOWNLOAD FOR DASHBOARD (7-day rolling window)
-        # ──────────────────────────────────────────────────────
-        try:
-            from datetime import datetime, timedelta
-            
-            download_event = {
-                'series_title': series_title,
-                'series_id': series_id,
-                'season': season_num,
-                'episode': episode_num,
-                'episode_title': episode_info.get('title', ''),
-                'timestamp': datetime.now().isoformat()
-            }
-            
-            downloads_file = os.path.join(os.getcwd(), 'data', 'recent_downloads.json')
-            os.makedirs(os.path.dirname(downloads_file), exist_ok=True)
-            
-            if os.path.exists(downloads_file):
-                with open(downloads_file, 'r') as f:
-                    downloads = json.load(f)
-            else:
-                downloads = []
-            
-            # Auto-cleanup: keep only last 7 days
-            cutoff = datetime.now() - timedelta(days=7)
-            downloads = [
-                d for d in downloads 
-                if datetime.fromisoformat(d['timestamp']) > cutoff
-            ]
-
-            # Remove any existing entry for this episode before adding new one
-            episode_key = (download_event['series_id'], download_event['season'], download_event['episode'])
-            downloads = [
-                d for d in downloads 
-                if (d['series_id'], d['season'], d['episode']) != episode_key
-            ]
-
-            # Add new download at the front
-            downloads.insert(0, download_event)
-
-            # Keep only 50 most recent (optional limit)
-            downloads = downloads[:50]
-
-            with open(downloads_file, 'w') as f:
-                json.dump(downloads, f, indent=2)
-                
-            app.logger.info(f"📥 Logged download for dashboard: {series_title} S{season_num}E{episode_num}")
-            
-        except Exception as e:
-            app.logger.error(f"Error logging download for dashboard: {e}")
-        
-        # ──────────────────────────────────────────────────────
-        # 3. DELETE PENDING DISCORD NOTIFICATION
-        # ──────────────────────────────────────────────────────
-        try:
-            from notification_storage import get_and_remove_notification
-            from notifications import delete_discord_message
-            
-            message_id = get_and_remove_notification(episode_id)
-            
-            if message_id:
-                app.logger.info(f"🗑️ Deleting pending search notification for episode {episode_id}")
-                if delete_discord_message(message_id):
-                    app.logger.info(f"✅ Successfully deleted notification message {message_id}")
-                else:
-                    app.logger.warning(f"⚠️ Failed to delete notification message {message_id}")
-        except ImportError:
-            # Notification modules not available, skip
-            pass
-        except Exception as e:
-            app.logger.error(f"Error deleting notification: {e}")
-        
-        return jsonify({"status": "success", "message": "Grab processed"}), 200
-                
-    except Exception as e:
-        app.logger.error(f"Error handling grab webhook: {str(e)}")
-        import traceback
-        app.logger.error(f"Traceback: {traceback.format_exc()}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-                        
-
-@app.route('/webhook', methods=['POST'])
-def handle_server_webhook():
-    """
-    Legacy Tautulli webhook endpoint — kept for backward compatibility.
-    New installs should use /api/integration/tautulli/webhook instead.
-    """
-    app.logger.info("Received webhook on legacy /webhook route — delegating to Tautulli integration")
-    data = request.get_json(silent=True) or {}
-    if not data:
-        return jsonify({'status': 'error', 'message': 'No data received'}), 400
-    try:
-        from integrations.tautulli import process_watch_event
-        result = process_watch_event(data)
-        return jsonify(result), 200 if result['status'] == 'success' else 500
-    except Exception as exc:
-        app.logger.error(f"Legacy /webhook delegation error: {exc}")
-        # Fall through to the original inline logic as a safety net
-    app.logger.info("Received webhook from Tautulli (fallback path)")
-    data = request.json
-    if not data:
-        return jsonify({'status': 'error', 'message': 'No data received'}), 400
-    
-    try:
-        # Extract identifiers (original)
-        series_title = data.get('plex_title') or data.get('server_title') or 'Unknown'
-        season_number = data.get('plex_season_num') or data.get('server_season_num')
-        episode_number = data.get('plex_ep_num') or data.get('server_ep_num')
-        thetvdb_id = data.get('thetvdb_id')
-        themoviedb_id = data.get('themoviedb_id')
-
-        # ─── NEW: Tag sync & drift correction BEFORE processing ───
-        # Late import the needed functions from media_processor.py
-        from media_processor import get_series_id, better_partial_match, validate_series_tag, sync_rule_tag_to_sonarr, move_series_in_config
-
-        series_id = get_series_id(series_title, thetvdb_id, themoviedb_id)
-        if not series_id:
-            app.logger.warning(f"Could not find Sonarr series ID for '{series_title}'")
-            # Proceed with temp file anyway (original behavior)
-        else:
-            # Tag sync/drift logic (what we added today)
-            config = load_config()
-            config_rule = None
-            series_id_str = str(series_id)
-            
-            for rule_name, rule_details in config['rules'].items():
-                if series_id_str in rule_details.get('series', {}):
-                    config_rule = rule_name
-                    break
-            
-            if config_rule:
-                matches, actual_tag_rule = validate_series_tag(series_id, config_rule)
-                
-                if not matches:
-                    if actual_tag_rule:
-                        app.logger.warning(f"DRIFT DETECTED - config: {config_rule} → tag: {actual_tag_rule}")
-                        move_series_in_config(series_id, config_rule, actual_tag_rule)
-                        final_rule = actual_tag_rule
-                    else:
-                        app.logger.warning(f"No episeerr tag on series {series_id} → restoring episeerr_{config_rule}")
-                        sync_rule_tag_to_sonarr(series_id, config_rule)
-                        final_rule = config_rule
-                else:
-                    final_rule = config_rule
-                    app.logger.debug(f"Tag matches config rule: {final_rule}")
-            if config_rule:
-                matches, actual_tag_rule = validate_series_tag(series_id, config_rule)
-                
-                if not matches:
-                    if actual_tag_rule:
-                        app.logger.warning(f"DRIFT DETECTED - config: {config_rule} → tag: {actual_tag_rule}")
-                        move_series_in_config(series_id, config_rule, actual_tag_rule)
-                        final_rule = actual_tag_rule
-                    else:
-                        app.logger.warning(f"No episeerr tag on series {series_id} → restoring episeerr_{config_rule}")
-                        sync_rule_tag_to_sonarr(series_id, config_rule)
-                        final_rule = config_rule
-                else:
-                    final_rule = config_rule
-                    app.logger.debug(f"Tag matches config rule: {final_rule}")
-            else:
-                # ORPHANED TAG DETECTION: Series not in config but might have episeerr tag in Sonarr
-                series = episeerr_utils.get_series_from_sonarr(series_id)
-                if series:
-                    tag_mapping = episeerr_utils.get_tag_mapping()
-                    found_orphaned_tag = False
-                    
-                    for tag_id in series.get('tags', []):
-                        tag_name = tag_mapping.get(tag_id, '').lower()
-                        
-                        if tag_name.startswith('episeerr_'):
-                            rule_name = tag_name.replace('episeerr_', '')
-                            
-                            # Skip special tags
-                            if rule_name in ['default', 'select']:
-                                continue
-                            
-                            # Find the rule (case-insensitive)
-                            actual_rule_name = None
-                            for rn in config['rules'].keys():
-                                if rn.lower() == rule_name:
-                                    actual_rule_name = rn
-                                    break
-                            
-                            if actual_rule_name:
-                                # Add series to config
-                                import time
-                                config['rules'][actual_rule_name].setdefault('series', {})[series_id_str] = {
-                                    'activity_date': int(time.time())
-                                }
-                                save_config(config)
-                                app.logger.info(f"🏷️ ORPHANED: Added series {series_id} ('{series_title}') to '{actual_rule_name}' based on Sonarr tag")
-                                final_rule = actual_rule_name
-                                found_orphaned_tag = True
-                                break
-                            else:
-                                app.logger.warning(f"Found episeerr tag '{tag_name}' on series {series_id} but rule '{rule_name}' doesn't exist in config")
-                                final_rule = None
-                                found_orphaned_tag = True
-                                break
-                    
-                    if not found_orphaned_tag:
-                        # No episeerr tags found
-                        final_rule = None
-                        app.logger.info(f"Series {series_id} not assigned to any rule → skipping tag sync")
-                else:
-                    final_rule = None
-                    app.logger.warning(f"Could not fetch series {series_id} from Sonarr")
-
-        # ─── Original temp file creation ───
-        temp_dir = os.path.join(os.getcwd(), 'temp')
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        plex_data = {
-            "server_title": series_title,
-            "server_season_num": season_number,
-            "server_ep_num": episode_number,
-            "thetvdb_id": thetvdb_id,
-            "themoviedb_id": themoviedb_id,
-            "sonarr_series_id": series_id,          # Added: useful for media_processor
-            "rule": final_rule                      # Added: pass final corrected rule
-        }
-        
-        temp_file_path = os.path.join(temp_dir, 'data_from_server.json')
-        with open(temp_file_path, 'w') as f:
-            json.dump(plex_data, f)
-        
-        # ─── Original subprocess call ───
-        result = subprocess.run(
-            ["python3", os.path.join(os.getcwd(), "media_processor.py")],
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode != 0:
-            app.logger.error(f"media_processor.py failed with return code {result.returncode}")
-            if result.stderr:
-                app.logger.error(f"Error output: {result.stderr}")
-        else:
-            app.logger.info("media_processor.py completed successfully")
-            if result.stderr:
-                app.logger.info(f"Processor output: {result.stderr}")
-        
-        app.logger.info("Webhook processing completed - activity tracked, next content processed")
-        return jsonify({'status': 'success'}), 200
-        
-    except Exception as e:
-        app.logger.error(f"Failed to process Tautulli webhook: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
 
 # ============================================================================
 # DEBUG & TEST ROUTES (Simplified)
@@ -4898,7 +3787,15 @@ def sync_all_series_tags():
 def initialize_episeerr():
     """Initialize episeerr components."""
     app.logger.debug("Entering initialize_episeerr()")
-    
+
+    # Migrate any pending request JSON files into SQLite (one-time, idempotent)
+    try:
+        migrated = migrate_pending_requests_from_files(REQUESTS_DIR)
+        if migrated:
+            app.logger.info(f"✓ Migrated {migrated} pending request(s) from files to DB")
+    except Exception as e:
+        app.logger.error(f"Error migrating pending requests: {e}")
+
     # Existing code
     try:
         episeerr_utils.check_and_cancel_unmonitored_downloads()
@@ -4927,88 +3824,39 @@ def initialize_episeerr():
             save_config(config)
             app.logger.info("  ✓ Tag migration marked as complete")
         
-        # Step 3: Drift detection - fix mismatched tags
-        drift_fixed = 0
-        drift_synced = 0
-        
-        for rule_name, rule_details in config['rules'].items():
-            for series_id_str in list(rule_details.get('series', {}).keys()):
-                try:
-                    series_id = int(series_id_str)
-                    matches, actual_tag_rule = episeerr_utils.validate_series_tag(series_id, rule_name)
-                    
-                    if not matches:
-                        if actual_tag_rule:
-                            # Find actual rule name (case-insensitive)
-                            actual_rule_name = None
-                            for rn in config['rules'].keys():
-                                if rn.lower() == actual_tag_rule.lower():
-                                    actual_rule_name = rn
-                                    break
-                            
-                            if actual_rule_name:
-                                # Move series to new rule
-                                series_data = rule_details['series'][series_id_str]
-                                del rule_details['series'][series_id_str]
-                                
-                                target_rule = config['rules'][actual_rule_name]
-                                target_rule.setdefault('series', {})[series_id_str] = series_data
-                                
-                                drift_fixed += 1
-                                app.logger.info(f"  Drift: Moved series {series_id} to '{actual_rule_name}'")
-                        else:
-                            # Sync missing tag
-                            episeerr_utils.sync_rule_tag_to_sonarr(series_id, rule_name)
-                            drift_synced += 1
-                
-                except Exception as e:
-                    app.logger.debug(f"Error checking series {series_id_str}: {str(e)}")
-        
-        # Step 4: Orphaned tags - find shows tagged in Sonarr but not in config
-        all_series = get_sonarr_series()
-        
-        # Build set of series IDs in config
-        config_series_ids = set()
-        for rule_details in config['rules'].values():
-            config_series_ids.update(rule_details.get('series', {}).keys())
-        
-        orphaned = 0
-        for series in all_series:
-            series_id = str(series['id'])
-            
-            # Skip if already in config
-            if series_id in config_series_ids:
-                continue
-            
-            # Check if has episeerr tag
-            tag_mapping = episeerr_utils.get_tag_mapping()
-            for tag_id in series.get('tags', []):
-                tag_name = tag_mapping.get(tag_id, '').lower()
-                
-                # Found episeerr rule tag (not default/select)
-                if tag_name.startswith('episeerr_'):
-                    rule_name = tag_name.replace('episeerr_', '')
-                    if rule_name not in ['default', 'select']:
-                        # Find actual rule name (case-insensitive)
-                        actual_rule_name = None
-                        for rn in config['rules'].keys():
-                            if rn.lower() == rule_name:
-                                actual_rule_name = rn
-                                break
-                        
-                        if actual_rule_name:
-                            # Add to config
-                            config['rules'][actual_rule_name].setdefault('series', {})[series_id] = {}
-                            orphaned += 1
-                            app.logger.info(f"  Orphaned: Added {series['title']} to '{actual_rule_name}'")
-                            break
-        
-        # Save if any changes made
-        if drift_fixed > 0 or drift_synced > 0 or orphaned > 0:
+        # Step 3: Drift detection + orphaned recovery for all series
+        all_series_ids = [
+            int(sid)
+            for rule_details in config['rules'].values()
+            for sid in list(rule_details.get('series', {}).keys())
+        ]
+        # Also check Sonarr series not in config (orphaned tag recovery)
+        all_sonarr_series = get_sonarr_series()
+        config_series_ids = {
+            sid
+            for rule_details in config['rules'].values()
+            for sid in rule_details.get('series', {}).keys()
+        }
+        orphaned_ids = [
+            s['id'] for s in all_sonarr_series
+            if str(s['id']) not in config_series_ids
+        ]
+
+        modified = False
+        reconciled = 0
+        for series_id in all_series_ids + orphaned_ids:
+            try:
+                _, changed = episeerr_utils.reconcile_series_drift(series_id, config)
+                if changed:
+                    modified = True
+                    reconciled += 1
+            except Exception as e:
+                app.logger.debug(f"Error reconciling series {series_id}: {e}")
+
+        if modified:
             save_config(config)
-        
-        # Summary
-        app.logger.info(f"✓ Tag reconciliation complete: {drift_fixed} moved, {drift_synced} synced, {orphaned} orphaned")
+
+        app.logger.info(f"✓ Tag reconciliation complete: {reconciled} corrections made")
             
     except requests.exceptions.ConnectionError:
         app.logger.warning("Sonarr not ready - tags will be created when Sonarr becomes available")
