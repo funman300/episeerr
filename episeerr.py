@@ -1,4 +1,4 @@
-__version__ = "3.6.2"
+__version__ = "3.6.5"
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import subprocess
 import os
@@ -700,11 +700,13 @@ def manage_quick_links():
 
 @app.route('/iframe/<int:service_id>')
 def iframe_view(service_id):
-    """Display a service in an iframe"""
+    """Display a service in an iframe.
+    Optional ?url= param allows opening a deep-link within the service instead of its root URL.
+    The provided URL must start with the service's configured base URL for security.
+    """
     from settings_db import get_quick_link_by_id
-    
-    service = get_quick_link_by_id(service_id)
 
+    service = get_quick_link_by_id(service_id)
     if not service:
         return "Service not found", 404
 
@@ -713,7 +715,23 @@ def iframe_view(service_id):
     if not service.get('open_in_iframe'):
         return redirect(smart_url)
 
-    return render_template('iframe_view.html', service={**service, 'url': smart_url})
+    # Allow a specific deep-link via ?path=/series/foo (preferred) or ?url=http://...
+    deep_path = request.args.get('path', '').strip()
+    deep_url  = request.args.get('url', '').strip()
+
+    if deep_path and deep_path.startswith('/') and '..' not in deep_path:
+        display_url = smart_url.rstrip('/') + deep_path
+    elif deep_url:
+        # Accept if it matches any configured base URL for this service
+        base_urls = [u for u in [service.get('url', ''), service.get('alternate_url', ''), smart_url] if u]
+        if any(deep_url.startswith(b.rstrip('/')) for b in base_urls):
+            display_url = deep_url
+        else:
+            display_url = smart_url
+    else:
+        display_url = smart_url
+
+    return render_template('iframe_view.html', service={**service, 'url': display_url})
 
 
 @app.route('/api/services-sidebar')
@@ -2530,6 +2548,11 @@ def create_rule():
         grace_unwatched = None if not grace_unwatched else int(grace_unwatched)
         dormant_days = None if not dormant_days else int(dormant_days)
         
+        always_have = request.form.get('always_have', '').strip()
+        ah_valid, ah_error = media_processor.validate_always_have_expression(always_have)
+        if not ah_valid:
+            return render_template('create_rule.html', error=ah_error, always_have_value=always_have)
+
         # Save rule
         config['rules'][rule_name] = {
             'description': request.form.get('description', ''),
@@ -2544,7 +2567,7 @@ def create_rule():
             'dormant_days': dormant_days,
             'grace_scope': grace_scope,
             'keep_pilot': 'keep_pilot' in request.form,
-            'always_have': request.form.get('always_have', '').strip(),
+            'always_have': always_have,
             'series': {},
             'dry_run': False
         }
@@ -2602,6 +2625,13 @@ def edit_rule(rule_name):
         grace_unwatched = None if not grace_unwatched else int(grace_unwatched)
         dormant_days = None if not dormant_days else int(dormant_days)
         
+        always_have = request.form.get('always_have', '').strip()
+        ah_valid, ah_error = media_processor.validate_always_have_expression(always_have)
+        if not ah_valid:
+            rule = config['rules'][rule_name]
+            return render_template('edit_rule.html', rule_name=rule_name, rule=rule,
+                                   config=config, error=ah_error)
+
         # Update rule
         config['rules'][rule_name].update({
             'description': request.form.get('description', ''),
@@ -2616,7 +2646,7 @@ def edit_rule(rule_name):
             'dormant_days': dormant_days,
             'grace_scope': grace_scope,
             'keep_pilot': 'keep_pilot' in request.form,
-            'always_have': request.form.get('always_have', '').strip()
+            'always_have': always_have
         })
         
         # Handle default rule setting
@@ -3815,13 +3845,13 @@ def apply_rule_to_selection():
                     if _get_type == 'all':
                         _to_monitor = [ep['id'] for ep in _all_eps if ep.get('seasonNumber', 0) >= _starting_season]
                     elif _get_type == 'seasons':
-                        _n = _get_count or 1
+                        _n = _get_count if _get_count is not None else 1
                         _to_monitor = [
                             ep['id'] for ep in _all_eps
                             if _starting_season <= ep.get('seasonNumber', 0) < (_starting_season + _n)
                         ]
                     else:  # episodes
-                        _n = _get_count or 1
+                        _n = _get_count if _get_count is not None else 1
                         _to_monitor = [ep['id'] for ep in _season_eps[:_n]]
 
                     if _to_monitor:
