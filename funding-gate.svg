@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="280" viewBox="0 0 420 280">
+  <!-- Gate structure (always visible) -->
+  <!-- Left post -->
+  <rect x="50" y="70" width="25" height="155" rx="5" fill="#A67B5B" stroke="#2C3E50" stroke-width="8" />
+  <!-- Right post -->
+  <rect x="345" y="70" width="25" height="155" rx="5" fill="#A67B5B" stroke="#2C3E50" stroke-width="8" />
+  <!-- Top beam -->
+  <rect x="50" y="70" width="320" height="25" rx="5" fill="#A67B5B" stroke="#2C3E50" stroke-width="8" />
+
+  <!-- Title -->
+  <text x="210" y="50" text-anchor="middle" font-family="sans-serif" font-size="26" font-weight="700" fill="#2C3E50" letter-spacing="2">FUNDING GATE</text>
+
+  <!-- Gate doorway background -->
+  <rect x="80" y="95" width="260" height="125" fill="#ECF0F1" stroke="#2C3E50" stroke-width="6" rx="5" />
+
+  <!-- ==================== CLOSED STATE ==================== -->
+  <g id="closed-state">
+    <!-- Vertical bars (closed gate) -->
+    <rect x="95" y="100" width="12" height="115" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+    <rect x="115" y="100" width="12" height="115" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+    <rect x="135" y="100" width="12" height="115" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+    <rect x="155" y="100" width="12" height="115" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+    <rect x="175" y="100" width="12" height="115" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+    <rect x="195" y="100" width="12" height="115" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+    <rect x="215" y="100" width="12" height="115" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+    <rect x="235" y="100" width="12" height="115" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+    <rect x="255" y="100" width="12" height="115" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+    <rect x="275" y="100" width="12" height="115" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+
+    <!-- Middle horizontal brace -->
+    <rect x="90" y="145" width="245" height="10" fill="#E6B87D" stroke="#2C3E50" stroke-width="3" />
+
+    <!-- Closed lock -->
+    <!-- Lock body -->
+    <rect x="187.5" y="165" rx="4" width="45" height="38" fill="#E74C3C" stroke="#2C3E50" stroke-width="4" />
+    <!-- Shackle -->
+    <path d="M 200 165 Q 200 150 210 150 Q 220 150 220 165" fill="none" stroke="#2C3E50" stroke-width="6" stroke-linecap="round" />
+    <!-- Keyhole -->
+    <circle r="4" cx="210" cy="178" fill="#2C3E50" />
+    <rect x="207.5" y="178" width="5" height="8" fill="#2C3E50" />
+
+    <!-- Status text -->
+    <text x="210" y="235" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="700" fill="#E74C3C" letter-spacing="3">CLOSED</text>
+    <text x="210" y="260" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#7F8C8E">dev, support &amp; fixes PAUSED</text>
+  </g>
+
+  <!-- ==================== OPEN STATE (hidden by default) ==================== -->
+  <g id="open-state" display="none">
+    <!-- Left door swung open -->
+    <rect x="85" y="100" width="12" height="115" transform="rotate(-35 85 100)" fill="#27AE60" stroke="#2C3E50" stroke-width="3" />
+    <!-- Right door swung open -->
+    <rect x="310" y="100" width="12" height="115" transform="rotate(35 323 100)" fill="#27AE60" stroke="#2C3E50" stroke-width="3" />
+
+    <!-- Green checkmark (success) -->
+    <path d="M 175 175 L 200 200 L 245 155" fill="none" stroke="#27AE60" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- Status text -->
+    <text x="210" y="235" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="700" fill="#27AE60" letter-spacing="3">OPEN</text>
+    <text x="210" y="260" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#27AE60">dev, support &amp; fixes ACTIVE</text>
+  </g>
+</svg>
