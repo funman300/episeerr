@@ -9,7 +9,7 @@ This project started as scratching my own itch - I wanted more granular series m
 ---
 [![Docker Pulls](https://img.shields.io/docker/pulls/vansmak/episeerr)](https://hub.docker.com/r/vansmak/episeerr)
 [![GitHub Issues](https://img.shields.io/github/issues/vansmak/episeerr)](https://github.com/Vansmak/episeerr/issues)
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-orange)](https://buymeacoffee.com/vansmak)
+[![Buy Me A Beer](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-orange)](https://buymeacoffee.com/vansmak)
 
 ---
 
