@@ -42,7 +42,7 @@
 
     <!-- Status text -->
     <text x="210" y="235" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="700" fill="#E74C3C" letter-spacing="3">CLOSED</text>
-    <text x="210" y="260" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#7F8C8E">dev, support &amp; fixes PAUSED</text>
+    <text x="210" y="260" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#7F8C8E">dev, support &amp; fixes may take much longer</text>
   </g>
 
   <!-- ==================== OPEN STATE (hidden by default) ==================== -->
