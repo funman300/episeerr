@@ -5,7 +5,7 @@ This project started as scratching my own itch - I wanted more granular series m
 
 [🔓 Sponsor to keep the gate OPEN!]  I use Claude to support development and fixes and only update subscription when I can. 
 
-![Funding Gate](https://github.com/Vansmak/episeerr/blob/main/funding-gate.svg)
+![Gate](https://github.com/Vansmak/episeerr/blob/main/funding-gate.svg)
 ---
 [![Docker Pulls](https://img.shields.io/docker/pulls/vansmak/episeerr)](https://hub.docker.com/r/vansmak/episeerr)
 [![GitHub Issues](https://img.shields.io/github/issues/vansmak/episeerr)](https://github.com/Vansmak/episeerr/issues)
