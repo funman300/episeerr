@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.7.5
+
+### ✨ Movie Rules
+
+Episeerr now manages Radarr movies via a dedicated **Movie Rules** system, separate from series rules.
+
+- **Movie Rules page** (`/movie-rules`): create rules that associate a Radarr tag (`episeerr-<rule>`) with cleanup behaviour
+- **Grace Watched**: delete a movie N days after it was last watched (source: Plex, Jellyfin, Emby, or Tautulli)
+- **Dormant**: delete a movie N days after it was added to Radarr when no watch history is found at all
+- **Watch history cache** built once per cleanup run using a priority chain — Plex / Jellyfin / Emby (TMDB ID exact match) → Tautulli (title-normalized fallback); Radarr added-date is only used as the fallback for truly unwatched (dormant) movies
+- **Radarr webhook** (`/radarr-webhook`): connect in Radarr Settings → Connect → Webhook; when a movie is added with no episeerr tag, Episeerr auto-applies the configured default movie rule tag
+- **Default movie rule**: mark any rule as the default in the Movie Rules UI; auto-tagging on addition only fires when a default is set
+- **Library movies tab**: movies tab in the library shows all Radarr movies with their assigned rule; rule can be assigned/changed from the drawer
+- **Pending Deletions integration**: movies flagged by cleanup appear in Pending Deletions with approve/reject support; `require_approval` and `dry_run` flags work identically to series rules
+- **Rules Summary** on the admin scheduler page now shows series and movie rule counts separately
+
+### 🐛 Bug Fixes
+
+- Fixed Radarr tag validation — tags now use hyphens (`episeerr-rule-name`) instead of underscores; Radarr enforces `^[a-z0-9-]+`
+- Fixed gunicorn two-worker race condition on tag creation: tag-create now retries a GET on `UNIQUE constraint` failure and returns the existing tag
+- Fixed series rule/status filter bars remaining visible when switching to the Movies tab (Bootstrap 5 `!important` specificity — now uses `style.cssText`)
+- Fixed `/scheduler` page 500 — wrong `url_for('pending_deletions')` → `url_for('view_pending_deletions')`
+- Fixed `loadRecentActivity` null guard — referenced `#recent-activity` div that was removed in a prior refactor
+- Fixed movie rule Edit button — `tojson` in double-quoted HTML attribute terminated the attribute early; changed to single-quoted `onclick='...'`
+
+---
+
 ## v3.7.2
 
 ### ✨ Universal Sidebar Search

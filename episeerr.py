@@ -1,4 +1,4 @@
-__version__ = "3.7.2"
+__version__ = "3.7.5"
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import subprocess
 import os
@@ -22,7 +22,7 @@ import episeerr_utils
 from episeerr_utils import EPISEERR_DEFAULT_TAG_ID, EPISEERR_SELECT_TAG_ID, normalize_url, http
 import pending_deletions
 from dashboard import dashboard_bp
-from webhooks import sonarr_webhooks_bp
+from webhooks import sonarr_webhooks_bp, radarr_webhooks_bp
 import media_processor
 from settings_db import (
     save_service, get_service, delete_service,
@@ -41,6 +41,7 @@ app = Flask(__name__)
 register_integration_blueprints(app)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(sonarr_webhooks_bp)
+app.register_blueprint(radarr_webhooks_bp)
 
 # Session / Auth configuration
 _secret = os.getenv('SECRET_KEY')
@@ -99,6 +100,8 @@ _AUTH_EXEMPT_ENDPOINTS = {
     # Sonarr + legacy Tautulli webhooks (Blueprint endpoints)
     'sonarr_webhooks.process_sonarr_webhook',
     'sonarr_webhooks.handle_server_webhook',
+    # Radarr webhook
+    'radarr_webhooks.process_radarr_webhook',
     # Integration webhooks (Blueprint endpoints — external services can't authenticate)
     'jellyfin_integration.jellyfin_webhook',
     'emby_integration.emby_webhook',
@@ -1365,10 +1368,11 @@ def api_sidebar_stats():
 
 @app.route('/pending-deletions')
 def view_pending_deletions():
-    """View all pending deletions"""
+    """View all pending deletions (episodes + movies)"""
     import pending_deletions
     summary = pending_deletions.get_pending_deletions_summary()
-    return render_template('pending_deletions.html', summary=summary)
+    movie_summary = pending_deletions.get_pending_movies_summary()
+    return render_template('pending_deletions.html', summary=summary, movie_summary=movie_summary)
 
 
 @app.route('/pending-deletions/approve', methods=['POST'])
@@ -1452,12 +1456,208 @@ def clear_pending_deletions():
 def get_pending_deletions_count():
     """API endpoint to get count of pending deletions for notifications"""
     import pending_deletions
-    summary = pending_deletions.get_pending_deletions_summary()
+    ep_summary = pending_deletions.get_pending_deletions_summary()
+    movie_summary = pending_deletions.get_pending_movies_summary()
     return jsonify({
-        'count': summary['total_episodes'],
-        'series_count': summary['total_series'],
-        'size_gb': summary['total_size_gb']
+        'count': ep_summary['total_episodes'] + movie_summary['total_movies'],
+        'series_count': ep_summary['total_series'],
+        'size_gb': round(ep_summary['total_size_gb'] + movie_summary['total_size_gb'], 2)
     })
+
+
+# ============================================================================
+# MOVIE RULES ROUTES
+# ============================================================================
+
+@app.route('/movie-rules')
+def movie_rules_page():
+    """Movie rules management page."""
+    config = load_config()
+    movie_rules = config.get('movie_rules', {})
+
+    radarr_cfg = None
+    radarr_ok = False
+    radarr_msg = ''
+    try:
+        from settings_db import get_radarr_config
+        radarr_cfg = get_radarr_config()
+        if radarr_cfg and radarr_cfg.get('url') and radarr_cfg.get('api_key'):
+            resp = http.get(
+                f"{normalize_url(radarr_cfg['url'])}/api/v3/system/status",
+                headers={'X-Api-Key': radarr_cfg['api_key']},
+                timeout=5
+            )
+            radarr_ok = resp.ok
+            radarr_msg = f"Connected to Radarr v{resp.json().get('version','?')}" if resp.ok else f"Radarr error {resp.status_code}"
+        else:
+            radarr_msg = 'Radarr not configured'
+    except Exception as e:
+        radarr_msg = f'Radarr unreachable: {e}'
+
+    return render_template(
+        'movie_rules.html',
+        movie_rules=movie_rules,
+        default_movie_rule=config.get('default_movie_rule', ''),
+        radarr_ok=radarr_ok,
+        radarr_msg=radarr_msg,
+    )
+
+
+@app.route('/movie-rules/create', methods=['POST'])
+def create_movie_rule():
+    """Create a new movie rule."""
+    config = load_config()
+    if 'movie_rules' not in config:
+        config['movie_rules'] = {}
+
+    rule_name = request.form.get('rule_name', '').strip()
+    if not rule_name:
+        return redirect(url_for('movie_rules_page'))
+
+    grace_watched_raw = request.form.get('grace_watched', '').strip()
+    dormant_days_raw = request.form.get('dormant_days', '').strip()
+
+    rule = {
+        'grace_watched': int(grace_watched_raw) if grace_watched_raw else None,
+        'dormant_days': int(dormant_days_raw) if dormant_days_raw else None,
+        'require_approval': request.form.get('require_approval') == 'true',
+        'dry_run': request.form.get('dry_run') == 'true',
+        'delete_option': request.form.get('delete_option', 'file_only'),
+        'description': request.form.get('description', '').strip(),
+    }
+
+    config['movie_rules'][rule_name] = rule
+
+    if request.form.get('set_as_default') == 'true':
+        config['default_movie_rule'] = rule_name
+    elif config.get('default_movie_rule') == rule_name and request.form.get('set_as_default') != 'true':
+        config.pop('default_movie_rule', None)
+
+    save_config(config)
+
+    # Create Radarr tag
+    try:
+        from movie_processor import get_or_create_radarr_tag, get_radarr_settings
+        radarr_url, api_key = get_radarr_settings()
+        if radarr_url and api_key:
+            get_or_create_radarr_tag(rule_name, radarr_url, api_key)
+    except Exception as e:
+        app.logger.warning(f"Could not create Radarr tag for movie rule '{rule_name}': {e}")
+
+    return redirect(url_for('movie_rules_page'))
+
+
+@app.route('/movie-rules/<rule_name>/edit', methods=['GET', 'POST'])
+def edit_movie_rule(rule_name):
+    """Edit an existing movie rule."""
+    config = load_config()
+    movie_rules = config.get('movie_rules', {})
+
+    if rule_name not in movie_rules:
+        return redirect(url_for('movie_rules_page'))
+
+    if request.method == 'POST':
+        grace_watched_raw = request.form.get('grace_watched', '').strip()
+        dormant_days_raw = request.form.get('dormant_days', '').strip()
+
+        new_name = request.form.get('rule_name', '').strip() or rule_name
+
+        movie_rules[rule_name].update({
+            'grace_watched': int(grace_watched_raw) if grace_watched_raw else None,
+            'dormant_days': int(dormant_days_raw) if dormant_days_raw else None,
+            'require_approval': request.form.get('require_approval') == 'true',
+            'dry_run': request.form.get('dry_run') == 'true',
+            'delete_option': request.form.get('delete_option', 'file_only'),
+            'description': request.form.get('description', '').strip(),
+        })
+
+        if request.form.get('set_as_default') == 'true':
+            config['default_movie_rule'] = new_name
+        elif config.get('default_movie_rule') == rule_name:
+            config.pop('default_movie_rule', None)
+
+        if new_name and new_name != rule_name:
+            movie_rules[new_name] = movie_rules.pop(rule_name)
+            if config.get('default_movie_rule') == rule_name:
+                config['default_movie_rule'] = new_name
+            config['movie_rules'] = movie_rules
+            save_config(config)
+            try:
+                from movie_processor import get_or_create_radarr_tag, get_radarr_settings
+                radarr_url, api_key = get_radarr_settings()
+                if radarr_url and api_key:
+                    get_or_create_radarr_tag(new_name, radarr_url, api_key)
+            except Exception:
+                pass
+        else:
+            save_config(config)
+
+        return redirect(url_for('movie_rules_page'))
+
+    return render_template('movie_rules.html',
+                           movie_rules=movie_rules,
+                           edit_rule_name=rule_name,
+                           edit_rule=movie_rules[rule_name],
+                           radarr_ok=True, radarr_msg='')
+
+
+@app.route('/movie-rules/<rule_name>/delete', methods=['POST'])
+def delete_movie_rule(rule_name):
+    """Delete a movie rule."""
+    config = load_config()
+    movie_rules = config.get('movie_rules', {})
+    movie_rules.pop(rule_name, None)
+    save_config(config)
+    return redirect(url_for('movie_rules_page'))
+
+
+@app.route('/api/movie-rules/ensure-tags', methods=['POST'])
+def ensure_movie_tags():
+    """Create Radarr tags for all movie rules (called on startup or demand)."""
+    try:
+        from movie_processor import ensure_movie_rule_tags
+        config = load_config()
+        movie_rules = config.get('movie_rules', {})
+        tag_ids = ensure_movie_rule_tags(movie_rules)
+        return jsonify({'success': True, 'created': len(tag_ids), 'tags': tag_ids})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ── Movie pending deletions ───────────────────────────────────────────────────
+
+@app.route('/pending-deletions/movies/approve', methods=['POST'])
+def approve_pending_movie_deletions():
+    """Approve and execute movie deletions."""
+    import pending_deletions
+    try:
+        data = request.get_json()
+        movie_ids = data.get('movie_ids', [])
+        if not movie_ids:
+            return jsonify({'success': False, 'error': 'No movies specified'}), 400
+        result = pending_deletions.approve_movie_deletions(movie_ids)
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        app.logger.error(f"Error approving movie deletions: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/pending-deletions/movies/reject', methods=['POST'])
+def reject_pending_movie_deletions():
+    """Reject movie deletions."""
+    import pending_deletions
+    try:
+        data = request.get_json()
+        movie_ids = data.get('movie_ids', [])
+        if not movie_ids:
+            return jsonify({'success': False, 'error': 'No movies specified'}), 400
+        rejected_count = pending_deletions.reject_movie_deletions(movie_ids)
+        return jsonify({'success': True, 'rejected_count': rejected_count})
+    except Exception as e:
+        app.logger.error(f"Error rejecting movie deletions: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # Add these routes to episeerr.py
 @app.route('/api/recent-cleanup-activity')
 def recent_cleanup_activity():
@@ -1962,7 +2162,7 @@ def _radarr_headers():
 
 @app.route('/api/radarr/movies')
 def radarr_movies():
-    """Fetch all movies from Radarr with quality profile names mapped."""
+    """Fetch all movies from Radarr with quality profile names and assigned movie rule."""
     cfg, headers = _radarr_headers()
     if not cfg:
         return jsonify({'success': False, 'error': 'Radarr not configured'}), 503
@@ -1978,12 +2178,28 @@ def radarr_movies():
         if qp_resp.ok:
             qp_map = {p['id']: p['name'] for p in qp_resp.json()}
 
+        # Fetch tags to resolve assigned movie rule per movie
+        tags_resp = http.get(f"{base}/api/v3/tag", headers=headers, timeout=10)
+        tag_id_to_label = {}
+        if tags_resp.ok:
+            tag_id_to_label = {t['id']: t['label'] for t in tags_resp.json()}
+
+        from movie_processor import _rule_to_tag_label
+        movie_rules = load_config().get('movie_rules', {})
+        slug_to_rule = {_rule_to_tag_label(rn): rn for rn in movie_rules}
+
         result = []
         for m in movies:
             poster = next(
                 (img['remoteUrl'] for img in m.get('images', []) if img.get('coverType') == 'poster'),
                 None
             )
+            assigned_rule = None
+            for tid in m.get('tags', []):
+                lbl = tag_id_to_label.get(tid, '')
+                if lbl.startswith('episeerr_') and lbl in slug_to_rule:
+                    assigned_rule = slug_to_rule[lbl]
+                    break
             result.append({
                 'id': m['id'],
                 'title': m.get('title', ''),
@@ -2000,11 +2216,61 @@ def radarr_movies():
                 'tmdbId': m.get('tmdbId'),
                 'poster': poster,
                 'titleSlug': m.get('titleSlug', ''),
+                'assigned_rule': assigned_rule,
             })
         result.sort(key=lambda x: x['title'].lower())
         return jsonify({'success': True, 'movies': result})
     except Exception as e:
         app.logger.error(f"Error fetching Radarr movies: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/movie-rules/assign', methods=['POST'])
+def api_assign_movie_rule():
+    """Assign or unassign a movie rule to a Radarr movie via episeerr_ tags."""
+    data = request.get_json(silent=True) or {}
+    movie_id = data.get('movie_id')
+    rule_name = (data.get('rule_name') or '').strip()
+
+    if not movie_id:
+        return jsonify({'success': False, 'error': 'movie_id required'}), 400
+
+    cfg, headers = _radarr_headers()
+    if not cfg:
+        return jsonify({'success': False, 'error': 'Radarr not configured'}), 503
+
+    try:
+        base = cfg['url'].rstrip('/')
+
+        movie_resp = http.get(f"{base}/api/v3/movie/{movie_id}", headers=headers, timeout=10)
+        if not movie_resp.ok:
+            return jsonify({'success': False, 'error': 'Movie not found'}), 404
+        movie = movie_resp.json()
+
+        tags_resp = http.get(f"{base}/api/v3/tag", headers=headers, timeout=10)
+        all_tags = tags_resp.json() if tags_resp.ok else []
+        tag_label_to_id = {t['label']: t['id'] for t in all_tags}
+        tag_id_to_label = {t['id']: t['label'] for t in all_tags}
+
+        # Strip existing episeerr_ tags, keep all others
+        new_tags = [tid for tid in movie.get('tags', [])
+                    if not tag_id_to_label.get(tid, '').startswith('episeerr_')]
+
+        if rule_name:
+            from movie_processor import _rule_to_tag_label, get_or_create_radarr_tag
+            tag_label = _rule_to_tag_label(rule_name)
+            tag_id = tag_label_to_id.get(tag_label) or get_or_create_radarr_tag(rule_name, base, cfg['api_key'])
+            if tag_id and tag_id not in new_tags:
+                new_tags.append(tag_id)
+
+        movie['tags'] = new_tags
+        put_resp = http.put(f"{base}/api/v3/movie/{movie_id}", headers=headers, json=movie, timeout=15)
+        if not put_resp.ok:
+            return jsonify({'success': False, 'error': f'Radarr update failed: {put_resp.status_code}'}), 500
+
+        return jsonify({'success': True, 'assigned_rule': rule_name or None})
+    except Exception as e:
+        app.logger.error(f"Error assigning movie rule: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -4105,21 +4371,27 @@ def scheduler_status_global():
                     "status": "Disabled - Cleanup always runs on schedule"
                 }
         
-        # Add configuration summary
+        # Add configuration summary (series + movie rules)
         config = load_config()
         rule_summary = {
-            "total_rules": len(config['rules']),
+            "total_rules": len(config.get('rules', {})),
             "cleanup_rules": 0,
-            "protected_rules": 0
+            "protected_rules": 0,
+            "movie_rules": len(config.get('movie_rules', {})),
+            "movie_cleanup_rules": 0,
         }
-        
-        for rule_name, rule in config['rules'].items():
+
+        for rule_name, rule in config.get('rules', {}).items():
             has_cleanup = rule.get('grace_watched') or rule.get('grace_unwatched') or rule.get('dormant_days')
             if has_cleanup:
                 rule_summary["cleanup_rules"] += 1
             else:
                 rule_summary["protected_rules"] += 1
-        
+
+        for rule_name, rule in config.get('movie_rules', {}).items():
+            if rule.get('grace_watched') or rule.get('grace_unwatched'):
+                rule_summary["movie_cleanup_rules"] += 1
+
         status["rule_summary"] = rule_summary
         return jsonify(status)
         
@@ -5320,6 +5592,19 @@ def initialize_episeerr():
         app.logger.warning("Sonarr not ready yet - will retry delay profile sync later")
     except Exception as e:
         app.logger.error(f"Error updating delay profile with control tags: {str(e)}")
+
+    # NEW: Create Radarr tags for movie rules
+    try:
+        from movie_processor import ensure_movie_rule_tags
+        config = load_config()
+        movie_rules = config.get('movie_rules', {})
+        if movie_rules:
+            tag_ids = ensure_movie_rule_tags(movie_rules)
+            app.logger.info(f"✓ Movie rule tags ensured in Radarr: {len(tag_ids)} tags")
+    except requests.exceptions.ConnectionError:
+        app.logger.warning("Radarr not ready — movie rule tags will be created when available")
+    except Exception as e:
+        app.logger.warning(f"Could not ensure movie rule tags: {e}")
     
     
 

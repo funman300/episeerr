@@ -480,10 +480,16 @@
                 <span>Library</span>
             </a>
 
-            <!-- Rules -->
+            <!-- Series Rules -->
             <a href="{{ url_for('rules_page') }}" class="sidebar-nav-item {% if request.endpoint == 'rules_page' %}active{% endif %}">
                 <i class="fas fa-list"></i>
-                <span>Rules</span>
+                <span>Series Rules</span>
+            </a>
+
+            <!-- Movie Rules -->
+            <a href="{{ url_for('movie_rules_page') }}" class="sidebar-nav-item {% if request.endpoint == 'movie_rules_page' %}active{% endif %}">
+                <i class="fas fa-film"></i>
+                <span>Movie Rules</span>
             </a>
 
             <div class="sidebar-divider"></div>
