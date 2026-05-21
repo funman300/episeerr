@@ -1,6 +1,16 @@
 # Changelog
 
-## v3.7.1
+## v3.7.2
+
+### ✨ Universal Sidebar Search
+
+A persistent search bar now lives in the sidebar, accessible from any page via the input or `Ctrl+K`.
+
+- **Tier 1 (instant):** settings index, nav index, quick links, and watch history — resolved from local data with no network calls
+- **Tier 2/3 (parallel):** fans out concurrently via `ThreadPoolExecutor` to Sonarr, Radarr, Plex, Jellyfin, Emby, TMDB, Jellyseerr, Tautulli, and Docker containers
+- Results grouped by source with poster art, media-type badges, and direct action links
+- Modal TMDB search (Ctrl+K / search icon) is now TMDB-only via `/api/discover/search`; full library/history search is handled by the new `/api/search` and `/search` page route
+- `Ctrl+K` keyboard shortcut focuses the sidebar search input from anywhere (`episeerr.py`, `templates/base.html`)
 
 ### ✨ Emby & Jellyfin Now Playing widget
 
@@ -13,6 +23,7 @@ Both Emby and Jellyfin now show a **Now Playing** widget on the dashboard alongs
 
 ### 🐛 Bug Fixes
 
+- **`process_always_have` ignores requested season for `e1+` rules** — in sequential mode, the function always started from the lowest-numbered season regardless of the season specified in the SeriesAdd webhook. Added `starting_season` parameter; sequential mode now uses the requested season and falls back to the lowest-numbered season only if the requested one isn't present. (`media_processor.py`, `webhooks.py`)
 - **SeriesAdd webhook does not respect held state from `+` modifier** — when a new series was added under a rule with an `always_have` `+` modifier (e.g. `e1+`), `process_always_have` correctly grabbed E1 and wrote `activation_seasons[1] = 'held'`, but the SeriesAdd handler continued into normal get-count processing (fetching E2, etc.) before the held gate was checked. Fixed by reloading config after `process_always_have` runs and skipping the entire episode-fetch/monitor/search block when any season is in held state — matching the activation gate that already existed in `process_episodes_for_webhook`. (`webhooks.py`)
 - Dashboard widget containers are now hidden (`display: none`) when an integration returns no data or the fetch fails, instead of leaving a blank box. (`templates/dashboard.html`)
 

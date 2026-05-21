@@ -378,7 +378,7 @@ def process_sonarr_webhook():
             skip_get_count = False
             if always_have:
                 try:
-                    media_processor.process_always_have(series_id, always_have)
+                    media_processor.process_always_have(series_id, always_have, starting_season=starting_season)
                 except Exception as e:
                     current_app.logger.error(f"always_have processing failed for series {series_id}: {e}")
 

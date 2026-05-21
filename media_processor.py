@@ -1864,7 +1864,7 @@ def is_protected_by_expression(season_num, episode_num, expression, total_season
     return False
 
 
-def process_always_have(series_id, expression):
+def process_always_have(series_id, expression, starting_season=None):
     """
     Monitor any episodes matching the always_have expression and trigger a search.
     Only ever adds monitoring — never unmonitors or deletes anything.
@@ -1872,7 +1872,8 @@ def process_always_have(series_id, expression):
     Handles +/- modifier suffixes:
       +  activation modifier — sets per-season held state; skips if series already watched
       -  removable modifier  — no special grab logic, only affects anchor protection
-    Sequential mode (eN without s prefix): grabs only the first season's EN.
+    Sequential mode (eN without s prefix): grabs only the requested starting season's EN,
+    falling back to the lowest-numbered season if starting_season is not in the series.
     """
     if not expression or not expression.strip():
         return
@@ -1904,16 +1905,16 @@ def process_always_have(series_id, expression):
         grabbed_seasons = set()
 
         if is_sequential and activation_ep is not None:
-            # Sequential mode: grab only the first (lowest-numbered) season's activation ep
+            # Sequential mode: grab the requested season's activation ep (fallback to lowest)
             season_nums = sorted(set(
                 ep['seasonNumber'] for ep in all_episodes
                 if ep['seasonNumber'] > 0
             ))
             if season_nums:
-                first_season = season_nums[0]
+                target_season = starting_season if starting_season and starting_season in season_nums else season_nums[0]
                 for ep in all_episodes:
-                    if ep['seasonNumber'] == first_season and ep['episodeNumber'] == activation_ep:
-                        grabbed_seasons.add(first_season)
+                    if ep['seasonNumber'] == target_season and ep['episodeNumber'] == activation_ep:
+                        grabbed_seasons.add(target_season)
                         if not ep.get('monitored', False):
                             to_monitor.append(ep['id'])
                         break
