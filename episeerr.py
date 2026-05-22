@@ -1,4 +1,4 @@
-__version__ = "3.7.5"
+__version__ = "3.7.6"
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import subprocess
 import os
@@ -1595,7 +1595,6 @@ def edit_movie_rule(rule_name):
                            radarr_ok=True, radarr_msg='')
 
 
-@app.route('/movie-rules/<rule_name>/delete', methods=['POST'])
 def _swap_movie_rule_tag_on_all(old_rule, new_rule=None):
     """
     Remove the episeerr-<old_rule> tag from every Radarr movie that has it.
@@ -1635,6 +1634,7 @@ def _swap_movie_rule_tag_on_all(old_rule, new_rule=None):
         app.logger.error(f"Error swapping movie rule tags ({old_rule} → {new_rule}): {e}")
 
 
+@app.route('/movie-rules/<rule_name>/delete', methods=['POST'])
 def delete_movie_rule(rule_name):
     """Delete a movie rule and remove its tag from all Radarr movies."""
     config = load_config()

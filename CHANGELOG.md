@@ -1,5 +1,6 @@
 # Changelog
-
+## v3.7.6
+fixed movie rule edit delete navigation
 ## v3.7.5
 
 ### ✨ Movie Rules
