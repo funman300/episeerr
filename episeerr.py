@@ -1,4 +1,4 @@
-__version__ = "3.7.6"
+__version__ = "3.7.7"
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import subprocess
 import os
@@ -1524,6 +1524,7 @@ def create_movie_rule():
         'dry_run': request.form.get('dry_run') == 'true',
         'delete_option': request.form.get('delete_option', 'file_only'),
         'description': request.form.get('description', '').strip(),
+        'movies': {},
     }
 
     config['movie_rules'][rule_name] = rule
@@ -1982,9 +1983,11 @@ def save_config(config):
             except Exception as e:
                 app.logger.warning(f"Could not backup config.json: {e}")
         
-        # Save the config
-        with open(config_path, 'w') as file:
+        # Write to a temp file then rename so concurrent writes can't corrupt the file
+        tmp_path = config_path + '.tmp'
+        with open(tmp_path, 'w') as file:
             json.dump(config, file, indent=4)
+        os.replace(tmp_path, config_path)
         app.logger.debug("Config saved successfully")
     except Exception as e:
         app.logger.error(f"Save failed: {str(e)}")
@@ -2265,18 +2268,26 @@ def radarr_movies():
         movie_rules = load_config().get('movie_rules', {})
         slug_to_rule = {_rule_to_tag_label(rn): rn for rn in movie_rules}
 
+        # Build config-based mapping (primary source, mirrors series rules)
+        config_movie_rule = {}
+        for rn, rd in movie_rules.items():
+            for mid in rd.get('movies', {}):
+                config_movie_rule[str(mid)] = rn
+
         result = []
         for m in movies:
             poster = next(
                 (img['remoteUrl'] for img in m.get('images', []) if img.get('coverType') == 'poster'),
                 None
             )
-            assigned_rule = None
-            for tid in m.get('tags', []):
-                lbl = tag_id_to_label.get(tid, '')
-                if lbl.startswith('episeerr_') and lbl in slug_to_rule:
-                    assigned_rule = slug_to_rule[lbl]
-                    break
+            # Prefer config.json assignment; fall back to Radarr tags
+            assigned_rule = config_movie_rule.get(str(m['id']))
+            if assigned_rule is None:
+                for tid in m.get('tags', []):
+                    lbl = tag_id_to_label.get(tid, '')
+                    if lbl.startswith('episeerr_') and lbl in slug_to_rule:
+                        assigned_rule = slug_to_rule[lbl]
+                        break
             result.append({
                 'id': m['id'],
                 'title': m.get('title', ''),
@@ -2344,6 +2355,16 @@ def api_assign_movie_rule():
         put_resp = http.put(f"{base}/api/v3/movie/{movie_id}", headers=headers, json=movie, timeout=15)
         if not put_resp.ok:
             return jsonify({'success': False, 'error': f'Radarr update failed: {put_resp.status_code}'}), 500
+
+        # Persist assignment in config.json (mirrors how series rules store series IDs)
+        config = load_config()
+        movie_id_str = str(movie_id)
+        for rn, rd in config.get('movie_rules', {}).items():
+            rd.setdefault('movies', {})
+            rd['movies'].pop(movie_id_str, None)
+        if rule_name and rule_name in config.get('movie_rules', {}):
+            config['movie_rules'][rule_name].setdefault('movies', {})[movie_id_str] = {}
+        save_config(config)
 
         return jsonify({'success': True, 'assigned_rule': rule_name or None})
     except Exception as e:
@@ -4195,7 +4216,7 @@ def cleanup_config_rules():
         existing_series_ids = set(str(series['id']) for series in existing_series)
         changes_made = False
         
-        # EXISTING: Remove series that don't exist in Sonarr
+        # Remove series that don't exist in Sonarr
         for rule_name, rule_details in config['rules'].items():
             original_count = len(rule_details.get('series', {}))
             rule_details['series'] = {
@@ -4206,6 +4227,26 @@ def cleanup_config_rules():
                 removed_count = original_count - len(rule_details['series'])
                 app.logger.info(f"Cleaned up rule '{rule_name}': Removed {removed_count} non-existent series")
                 changes_made = True
+
+        # Remove movies that don't exist in Radarr
+        try:
+            cfg, radarr_headers = _radarr_headers()
+            if cfg:
+                movies_resp = http.get(f"{cfg['url'].rstrip('/')}/api/v3/movie", headers=radarr_headers, timeout=15)
+                if movies_resp.ok:
+                    existing_movie_ids = {str(m['id']) for m in movies_resp.json()}
+                    for rule_name, rule_details in config.get('movie_rules', {}).items():
+                        original_count = len(rule_details.get('movies', {}))
+                        rule_details['movies'] = {
+                            mid: details for mid, details in rule_details.get('movies', {}).items()
+                            if mid in existing_movie_ids
+                        }
+                        if len(rule_details['movies']) != original_count:
+                            removed_count = original_count - len(rule_details['movies'])
+                            app.logger.info(f"Cleaned up movie rule '{rule_name}': Removed {removed_count} non-existent movies")
+                            changes_made = True
+        except Exception as e:
+            app.logger.warning(f"Could not clean movie rules (Radarr unreachable?): {e}")
         
         
         
