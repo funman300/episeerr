@@ -252,17 +252,24 @@ def record_movie_watched(tmdb_id: str, title: str, user: str = 'Unknown') -> Non
     or scrobble. build_movie_watch_cache() reads this file so the cleanup
     scheduler picks up the event without waiting for the next full library scan.
     """
+    import fcntl
     ts = int(time.time())
     try:
         os.makedirs(os.path.dirname(MOVIE_WATCH_EVENTS_FILE), exist_ok=True)
-        events: dict = {}
-        if os.path.exists(MOVIE_WATCH_EVENTS_FILE):
-            with open(MOVIE_WATCH_EVENTS_FILE, 'r') as f:
-                events = json.load(f)
-        if int(events.get(str(tmdb_id), 0)) < ts:
-            events[str(tmdb_id)] = ts
-        with open(MOVIE_WATCH_EVENTS_FILE, 'w') as f:
-            json.dump(events, f)
+        # Exclusive lock + atomic replace: concurrent movie events (multiple
+        # servers, multiple users) must not clobber each other's stamps.
+        with open(MOVIE_WATCH_EVENTS_FILE + '.lock', 'w') as lock_fh:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX)
+            events: dict = {}
+            if os.path.exists(MOVIE_WATCH_EVENTS_FILE):
+                with open(MOVIE_WATCH_EVENTS_FILE, 'r') as f:
+                    events = json.load(f)
+            if int(events.get(str(tmdb_id), 0)) < ts:
+                events[str(tmdb_id)] = ts
+            tmp_path = MOVIE_WATCH_EVENTS_FILE + '.tmp'
+            with open(tmp_path, 'w') as f:
+                json.dump(events, f)
+            os.replace(tmp_path, MOVIE_WATCH_EVENTS_FILE)
         logger.info(f"[movie] Recorded watch: '{title}' (tmdb={tmdb_id}) by {user}")
     except Exception as e:
         logger.warning(f"[movie] record_movie_watched error: {e}")

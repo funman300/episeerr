@@ -34,6 +34,7 @@ COPY dashboard.py .
 COPY webhooks.py .
 COPY settings_db.py .
 COPY multi_source.py .
+COPY reconcile.py .
 COPY logging_config.py .
 COPY integrations/ integrations/
 COPY templates/ templates/

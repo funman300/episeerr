@@ -96,6 +96,44 @@
                             </div>
                         </div>
 
+                        <!-- Vacation / Pause Section -->
+                        <h6 class="border-bottom pb-2 mb-3">
+                            <i class="fas fa-pause-circle me-2"></i>Pause
+                        </h6>
+                        <div class="row mb-4">
+                            <div class="col-md-8">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="automationPaused" name="automation_paused">
+                                    <label class="form-check-label" for="automationPaused">
+                                        <strong class="text-warning">Pause all automation (vacation mode)</strong>
+                                        <small class="text-muted d-block">Watch events and scheduled cleanup are logged but ignored - nothing is fetched or deleted. Combine with reconciliation to catch up afterwards.</small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Reconciliation Section -->
+                        <h6 class="border-bottom pb-2 mb-3">
+                            <i class="fas fa-sync me-2"></i>Missed-Event Reconciliation
+                        </h6>
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="reconcileEnabled" name="reconcile_enabled">
+                                    <label class="form-check-label" for="reconcileEnabled">
+                                        <strong>Sweep watch history for missed events</strong>
+                                        <small class="text-muted d-block">Periodically checks Plex/Jellyfin history and replays events missed while Episeerr was down or paused. First sweep only sets a watermark; history is never bulk-replayed.</small>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="reconcileIntervalHours" class="form-label">Sweep interval (hours)</label>
+                                    <input type="number" class="form-control" id="reconcileIntervalHours" name="reconcile_interval_hours" value="6" min="1">
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Multi-Source Section -->
                         <h6 class="border-bottom pb-2 mb-3">
                             <i class="fas fa-random me-2"></i>Multi-Source Coordination
@@ -386,6 +424,12 @@ async function loadGlobalSettings() {
                 globalSettings.multi_source_dedup_minutes ?? 360;
             document.getElementById('multiSourcePinTtlDays').value =
                 globalSettings.multi_source_pin_ttl_days ?? 30;
+            document.getElementById('automationPaused').checked =
+                globalSettings.automation_paused || false;
+            document.getElementById('reconcileEnabled').checked =
+                globalSettings.reconcile_enabled || false;
+            document.getElementById('reconcileIntervalHours').value =
+                globalSettings.reconcile_interval_hours ?? 6;
             loadMultiSourcePins();
                 
             // Update storage status if we have disk info
@@ -484,7 +528,10 @@ async function saveGlobalSettings(event) {
         multi_source_enabled: formData.has('multi_source_enabled'),
         multi_source_affinity: formData.has('multi_source_affinity'),
         multi_source_dedup_minutes: intOr(formData.get('multi_source_dedup_minutes'), 360),
-        multi_source_pin_ttl_days: intOr(formData.get('multi_source_pin_ttl_days'), 30)
+        multi_source_pin_ttl_days: intOr(formData.get('multi_source_pin_ttl_days'), 30),
+        automation_paused: formData.has('automation_paused'),
+        reconcile_enabled: formData.has('reconcile_enabled'),
+        reconcile_interval_hours: intOr(formData.get('reconcile_interval_hours'), 6)
     };
     
     try {

@@ -1518,11 +1518,15 @@ def load_global_settings():
 
             # MIGRATION: multi-source coordination settings (default: off)
             if ('multi_source_enabled' not in settings
-                    or 'multi_source_pin_ttl_days' not in settings):
+                    or 'multi_source_pin_ttl_days' not in settings
+                    or 'reconcile_enabled' not in settings):
                 settings.setdefault('multi_source_enabled', False)
                 settings.setdefault('multi_source_affinity', True)
                 settings.setdefault('multi_source_dedup_minutes', 360)
                 settings.setdefault('multi_source_pin_ttl_days', 30)
+                settings.setdefault('automation_paused', False)
+                settings.setdefault('reconcile_enabled', False)
+                settings.setdefault('reconcile_interval_hours', 6)
                 save_global_settings(settings)
                 logger.info("✓ Migrated global_settings.json - added multi_source settings")
 
@@ -1542,7 +1546,10 @@ def load_global_settings():
                 'multi_source_enabled': False,
                 'multi_source_affinity': True,
                 'multi_source_dedup_minutes': 360,
-                'multi_source_pin_ttl_days': 30
+                'multi_source_pin_ttl_days': 30,
+                'automation_paused': False,
+                'reconcile_enabled': False,
+                'reconcile_interval_hours': 6
             }
             save_global_settings(default_settings)
             return default_settings
@@ -3173,6 +3180,13 @@ def main():
 
 
 def _run(payload_path):
+    # Vacation mode: watch events and cleanup are logged but ignored.
+    # Missed events are recoverable afterwards via the reconciliation sweep.
+    if load_global_settings().get('automation_paused', False):
+        logger.info("⏸️ Automation paused (vacation mode) - ignoring "
+                    + ("watch event" if payload_path else "cleanup run"))
+        return False
+
     # Check if this is a webhook call (has recent webhook data)
     series_name, season_number, episode_number, thetvdb_id, themoviedb_id = get_server_activity(payload_path)
 

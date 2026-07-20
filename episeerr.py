@@ -1166,6 +1166,7 @@ class OCDarrScheduler:
         self.running = False
         self.last_cleanup = 0
         self.last_aired_check = 0
+        self.last_reconcile = 0
         self.update_interval_from_settings()
     
     def update_interval_from_settings(self):
@@ -1208,6 +1209,21 @@ class OCDarrScheduler:
                     except Exception as aired_err:
                         print(f"Aired not downloaded check error: {aired_err}")
                     self.last_aired_check = current_time
+
+                # Missed watch-event reconciliation sweep (gated internally
+                # on reconcile_enabled; first pass only sets the watermark)
+                try:
+                    import media_processor
+                    settings = media_processor.load_global_settings()
+                    reconcile_hours = settings.get('reconcile_interval_hours', 6) or 6
+                    if (settings.get('reconcile_enabled')
+                            and (current_time - self.last_reconcile) / 3600 >= reconcile_hours):
+                        import reconcile
+                        reconcile.run_reconciliation()
+                        self.last_reconcile = current_time
+                except Exception as rec_err:
+                    print(f"Reconciliation sweep error: {rec_err}")
+                    self.last_reconcile = current_time
 
                 time.sleep(600)  # Check every 10 minutes
             except Exception as e:
@@ -4535,6 +4551,9 @@ def update_global_settings():
 
         multi_source_dedup_minutes = _int_or(data.get('multi_source_dedup_minutes'), 360)
         multi_source_pin_ttl_days = _int_or(data.get('multi_source_pin_ttl_days'), 30)
+        automation_paused = data.get('automation_paused', False)
+        reconcile_enabled = data.get('reconcile_enabled', False)
+        reconcile_interval_hours = _int_or(data.get('reconcile_interval_hours'), 6)
 
         # Validate inputs
         if storage_min_gb is not None:
@@ -4556,6 +4575,9 @@ def update_global_settings():
             'multi_source_affinity': bool(multi_source_affinity),
             'multi_source_dedup_minutes': multi_source_dedup_minutes,
             'multi_source_pin_ttl_days': multi_source_pin_ttl_days,
+            'automation_paused': bool(automation_paused),
+            'reconcile_enabled': bool(reconcile_enabled),
+            'reconcile_interval_hours': max(1, reconcile_interval_hours),
         }
         
         media_processor.save_global_settings(settings)
