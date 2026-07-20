@@ -1,29 +1,29 @@
 services:
   episeerr:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    
-    env_file:
-      - .env
-    volumes:
-      - ./logs:/app/logs
-      - ./config:/app/config
-      - ./data:/app/data
-      - ./temp:/app/temp
-      - /home/joe/projects/spotify_shuffle:/spotify_shuffle
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # Image is built by GitHub Actions and pushed to GHCR (public).
+    # Pinned to an immutable commit tag on purpose, not :latest, so restarts
+    # are deterministic. Bump this tag when you want a newer CI build:
+    #   push to main -> Actions builds -> set the new sha-/b<n> tag here ->
+    #   docker compose pull && docker compose up -d
+    image: ghcr.io/funman300/episeerr:sha-619bacc
+    container_name: episeerr
+    restart: unless-stopped
     ports:
       - "5002:5002"
-    restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=INFO
-      - REQUIRE_AUTH=${REQUIRE_AUTH:-true}
-      - AUTH_USERNAME=${AUTH_USERNAME:-admin}
-      - AUTH_PASSWORD=${AUTH_PASSWORD}
-      - SECRET_KEY=${SECRET_KEY}
-      #- AUTH_BYPASS_LOCALHOST=true
-      #- AUTH_SESSION_TIMEOUT=86400
-      #- SESSION_SECURE=false
-    
+      - TZ=Etc/UTC
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./temp:/app/temp
+    networks:
+      - traefik-proxy
+
+# Episeerr shares the arr stack's Docker network so it can resolve `sonarr`
+# etc. by hostname. Create/rename to match your stack if different.
+networks:
+  traefik-proxy:
+    external: true

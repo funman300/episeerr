@@ -11,6 +11,7 @@ on:
       - '**.md'
       - 'runbook.md'
       - 'docs/**'
+      - 'docker-compose.yml'   # deployment ref, does not affect the image
   workflow_dispatch: {}
 
 concurrency:
