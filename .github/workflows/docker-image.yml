@@ -4,9 +4,12 @@ name: Build and push Docker image
 # Container Registry (GHCR) so the host can `docker compose pull` instead of
 # building locally. Runs on every push to main and on manual dispatch.
 #
-# The image is built and booted on the runner before anything is pushed.
-# Consumers pin immutable sha-/b<n> tags, so a broken image that reaches GHCR
-# cannot be withdrawn, only superseded — the gate has to come first.
+# The image is built exactly once and smoke-tested on the runner before
+# anything is pushed. The same local image that passed the smoke test is then
+# tagged and pushed under each computed tag — there is no second build, so a
+# cache miss can never publish different bits than what was tested. Consumers
+# pin immutable sha-/b<n> tags, so a broken image that reaches GHCR cannot be
+# withdrawn, only superseded — the gate has to come first.
 
 on:
   push:
@@ -66,23 +69,23 @@ jobs:
           push: false
           load: true
           tags: episeerr:candidate
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Smoke test candidate
         run: .github/scripts/smoke-test.sh episeerr:candidate episeerr-candidate
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Tag and push the tested image
+        run: |
+          set -euo pipefail
+          mapfile -t TAGS <<< "${{ steps.meta.outputs.tags }}"
+          for tag in "${TAGS[@]}"; do
+            [ -n "$tag" ] || continue
+            docker tag episeerr:candidate "$tag"
+            docker push "$tag"
+            echo "pushed $tag"
+          done
 
       - name: Summary
         run: |
