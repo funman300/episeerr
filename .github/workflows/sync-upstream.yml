@@ -59,15 +59,19 @@ jobs:
           echo "sha=$SHA"       >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
+          existing_pr_state() {
+            gh pr list --head "$BRANCH" --state all --json state --jq '.[0].state // empty'
+          }
+
           if git merge-base --is-ancestor "$UPSTREAM_REF" HEAD; then
             echo "action=skip" >> "$GITHUB_OUTPUT"
             echo "Already up to date with upstream/main ($SHA)."
-          elif [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')" ]; then
+          elif PR_STATE="$(existing_pr_state)" && [ -n "$PR_STATE" ]; then
             echo "action=skip" >> "$GITHUB_OUTPUT"
-            echo "Open pull request already exists for $BRANCH; nothing to do."
+            echo "A pull request for $BRANCH already exists (state: $PR_STATE); nothing to do."
           elif git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
             echo "action=recover" >> "$GITHUB_OUTPUT"
-            echo "Branch $BRANCH exists with no open pull request; recovering by opening the pull request."
+            echo "Branch $BRANCH exists with no pull request ever opened; recovering by opening the pull request."
           else
             echo "action=sync" >> "$GITHUB_OUTPUT"
             echo "Sync needed up to upstream $SHA."
@@ -149,9 +153,14 @@ jobs:
             echo
             echo "Failed run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } > /tmp/issue-body.md
-          gh issue create \
-            --title "Upstream sync blocked @ ${{ steps.check.outputs.sha }}" \
-            --body-file /tmp/issue-body.md
+          TITLE="Upstream sync blocked @ ${{ steps.check.outputs.sha }}"
+          EXISTING=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -1)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file /tmp/issue-body.md
+          else
+            gh issue create --title "$TITLE" --body-file /tmp/issue-body.md
+          fi
 
       - name: Open issue on merge conflict
         if: steps.merge.outputs.clean == 'false'
@@ -176,6 +185,11 @@ jobs:
             echo
             echo "Failed run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } > /tmp/issue-body.md
-          gh issue create \
-            --title "Upstream sync conflict @ ${{ steps.check.outputs.sha }}" \
-            --body-file /tmp/issue-body.md
+          TITLE="Upstream sync conflict @ ${{ steps.check.outputs.sha }}"
+          EXISTING=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -1)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file /tmp/issue-body.md
+          else
+            gh issue create --title "$TITLE" --body-file /tmp/issue-body.md
+          fi
