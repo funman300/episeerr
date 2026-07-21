@@ -3,6 +3,10 @@ name: Build and push Docker image
 # Builds the Episeerr image in GitHub's cloud and pushes it to the GitHub
 # Container Registry (GHCR) so the host can `docker compose pull` instead of
 # building locally. Runs on every push to main and on manual dispatch.
+#
+# The image is built and booted on the runner before anything is pushed.
+# Consumers pin immutable sha-/b<n> tags, so a broken image that reaches GHCR
+# cannot be withdrawn, only superseded — the gate has to come first.
 
 on:
   push:
@@ -52,6 +56,21 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=raw,value=b${{ github.run_number }}
             type=raw,value=${{ steps.ver.outputs.version }}-b${{ github.run_number }}
+
+      - name: Build candidate image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: episeerr:candidate
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test candidate
+        run: .github/scripts/smoke-test.sh episeerr:candidate episeerr-candidate
 
       - name: Build and push
         uses: docker/build-push-action@v6
