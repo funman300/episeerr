@@ -1,0 +1,204 @@
+name: Sync Upstream
+
+# Weekly check for new commits on Vansmak/episeerr. A clean merge becomes a pull
+# request; a conflicting merge becomes an issue. Never merges to main
+# automatically — this fork carries real behavioural divergence (multi_source.py,
+# cross-source dedup, per-series source affinity, see FORK.md) that must not be
+# resolved unattended.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_URL: https://github.com/Vansmak/episeerr.git
+  UPSTREAM_REF: upstream/main
+  # gh resolves its base repo by remote-name score, and the "upstream" remote
+  # added below outranks "origin" — without this, every gh call in this
+  # workflow would silently target Vansmak/episeerr instead of this fork.
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  sync:
+    name: Propose upstream merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # GITHUB_TOKEN is hard-blocked from pushing changes under
+          # .github/workflows/. When an upstream sync touches CI files,
+          # WORKFLOW_PUSH_TOKEN (a PAT with contents + workflows write) is
+          # required; without it the push fails and an issue is opened.
+          token: ${{ secrets.WORKFLOW_PUSH_TOKEN || github.token }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch --no-tags upstream main
+
+      - name: Decide what action is needed
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA="$(git rev-parse --short "$UPSTREAM_REF")"
+          BRANCH="upstream-sync/${SHA}"
+          echo "sha=$SHA"       >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+          existing_pr_state() {
+            gh pr list --head "$BRANCH" --state all --json state --jq '.[0].state // empty'
+          }
+
+          if git merge-base --is-ancestor "$UPSTREAM_REF" HEAD; then
+            echo "action=skip" >> "$GITHUB_OUTPUT"
+            echo "Already up to date with upstream/main ($SHA)."
+          elif PR_STATE="$(existing_pr_state)" && [ -n "$PR_STATE" ]; then
+            echo "action=skip" >> "$GITHUB_OUTPUT"
+            echo "A pull request for $BRANCH already exists (state: $PR_STATE); nothing to do."
+          elif git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "action=recover" >> "$GITHUB_OUTPUT"
+            echo "Branch $BRANCH exists with no pull request ever opened; recovering by opening the pull request."
+          else
+            echo "action=sync" >> "$GITHUB_OUTPUT"
+            echo "Sync needed up to upstream $SHA."
+          fi
+
+      - name: Prepare upstream commit list
+        id: commits
+        if: steps.check.outputs.action != 'skip'
+        run: |
+          git log --oneline --no-decorate "HEAD..${UPSTREAM_REF}" > /tmp/commits-all.txt
+          TOTAL=$(wc -l < /tmp/commits-all.txt)
+          if [ "$TOTAL" -gt 100 ]; then
+            head -n 100 /tmp/commits-all.txt > /tmp/commits.txt
+            OMITTED=$((TOTAL - 100))
+            {
+              echo
+              echo "... and $OMITTED further commits omitted."
+            } >> /tmp/commits.txt
+          else
+            cp /tmp/commits-all.txt /tmp/commits.txt
+          fi
+
+      - name: Merge upstream onto a sync branch
+        id: merge
+        if: steps.check.outputs.action == 'sync'
+        run: |
+          git checkout -b "${{ steps.check.outputs.branch }}"
+          if git merge "$UPSTREAM_REF" --no-edit; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U > /tmp/conflicts.txt
+            git merge --abort
+          fi
+
+      - name: Push branch and open pull request
+        id: push
+        if: (steps.check.outputs.action == 'sync' && steps.merge.outputs.clean == 'true') || steps.check.outputs.action == 'recover'
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_PUSH_TOKEN || github.token }}
+        run: |
+          BRANCH="${{ steps.check.outputs.branch }}"
+          ACTION="${{ steps.check.outputs.action }}"
+          if [ "$ACTION" = "sync" ]; then
+            if ! git push origin "$BRANCH"; then
+              echo "push_failed=true" >> "$GITHUB_OUTPUT"
+              echo "Push rejected — see the follow-up step."
+              exit 0
+            fi
+          fi
+          {
+            echo "Automated sync of upstream \`Vansmak/episeerr\` up to \`${{ steps.check.outputs.sha }}\`."
+            echo
+            echo "This pull request was opened by \`GITHUB_TOKEN\`, so CI is not triggered"
+            echo "automatically on it. A maintainer should push an empty commit to"
+            echo "\`${BRANCH}\` or close and reopen this pull request to run the checks,"
+            echo "or configure a \`WORKFLOW_PUSH_TOKEN\` PAT so future sync PRs trigger CI"
+            echo "automatically."
+            echo
+            echo "### Upstream commits included"
+            echo '```'
+            cat /tmp/commits.txt
+            echo '```'
+          } > /tmp/pr-body.md
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Sync upstream Vansmak/episeerr @ ${{ steps.check.outputs.sha }}" \
+            --body-file /tmp/pr-body.md
+
+      - name: Open issue when the push needs a PAT
+        if: steps.push.outputs.push_failed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "The upstream sync up to \`${{ steps.check.outputs.sha }}\` merged cleanly but could not be pushed."
+            echo
+            echo "This almost always means the merge touches files under \`.github/workflows/\`,"
+            echo "which \`GITHUB_TOKEN\` is not permitted to write. Configure a repository secret"
+            echo "named \`WORKFLOW_PUSH_TOKEN\` — a PAT with \`contents: write\` and"
+            echo "\`workflows: write\` on this repository — and re-run the workflow."
+            echo
+            echo "Failed run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > /tmp/issue-body.md
+          TITLE="Upstream sync blocked @ ${{ steps.check.outputs.sha }}"
+          EXISTING=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -1)
+          if [ -n "$EXISTING" ]; then
+            echo "Issue #$EXISTING already reports this exact situation ($TITLE); nothing to do."
+          else
+            gh issue create --title "$TITLE" --body-file /tmp/issue-body.md
+          fi
+
+      - name: Open issue on merge conflict
+        if: steps.merge.outputs.clean == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Merging upstream \`Vansmak/episeerr\` @ \`${{ steps.check.outputs.sha }}\` into \`main\` conflicts."
+            echo
+            echo "### Conflicting paths"
+            echo '```'
+            cat /tmp/conflicts.txt
+            echo '```'
+            echo
+            echo "Resolve locally:"
+            echo
+            echo '```bash'
+            echo "git fetch https://github.com/Vansmak/episeerr.git main"
+            echo "git checkout -b ${{ steps.check.outputs.branch }} main"
+            echo "git merge FETCH_HEAD"
+            echo '```'
+            echo
+            echo "Failed run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > /tmp/issue-body.md
+          TITLE="Upstream sync conflict @ ${{ steps.check.outputs.sha }}"
+          EXISTING=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -1)
+          if [ -n "$EXISTING" ]; then
+            echo "Issue #$EXISTING already reports this exact situation ($TITLE); nothing to do."
+          else
+            gh issue create --title "$TITLE" --body-file /tmp/issue-body.md
+          fi

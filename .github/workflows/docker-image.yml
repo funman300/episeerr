@@ -3,6 +3,13 @@ name: Build and push Docker image
 # Builds the Episeerr image in GitHub's cloud and pushes it to the GitHub
 # Container Registry (GHCR) so the host can `docker compose pull` instead of
 # building locally. Runs on every push to main and on manual dispatch.
+#
+# The image is built exactly once and smoke-tested on the runner before
+# anything is pushed. The same local image that passed the smoke test is then
+# tagged and pushed under each computed tag — there is no second build, so a
+# cache miss can never publish different bits than what was tested. Consumers
+# pin immutable sha-/b<n> tags, so a broken image that reaches GHCR cannot be
+# withdrawn, only superseded — the gate has to come first.
 
 on:
   push:
@@ -21,6 +28,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write        # push to ghcr.io/<owner>/<repo> with GITHUB_TOKEN
@@ -53,17 +61,45 @@ jobs:
             type=raw,value=b${{ github.run_number }}
             type=raw,value=${{ steps.ver.outputs.version }}-b${{ github.run_number }}
 
-      - name: Build and push
+      - name: Build candidate image (no push)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          push: false
+          load: true
+          tags: episeerr:candidate
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke test candidate
+        run: .github/scripts/smoke-test.sh episeerr:candidate episeerr-candidate
+
+      - name: Tag and push the tested image
+        run: |
+          set -euo pipefail
+          mapfile -t TAGS <<< "${{ steps.meta.outputs.tags }}"
+          # Push immutable tags first and any mutable "latest" tag last, so a
+          # partial-push failure can never leave "latest" pointing at a build
+          # whose immutable sha-/b<n> aliases were never published.
+          ORDERED_TAGS=()
+          LATEST_TAGS=()
+          for tag in "${TAGS[@]}"; do
+            [ -n "$tag" ] || continue
+            case "$tag" in
+              *:latest) LATEST_TAGS+=("$tag") ;;
+              *) ORDERED_TAGS+=("$tag") ;;
+            esac
+          done
+          ORDERED_TAGS+=("${LATEST_TAGS[@]}")
+          for tag in "${ORDERED_TAGS[@]}"; do
+            [ -n "$tag" ] || continue
+            docker tag episeerr:candidate "$tag"
+            docker push "$tag"
+            echo "pushed $tag"
+          done
 
       - name: Summary
         run: |

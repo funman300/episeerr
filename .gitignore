@@ -3,9 +3,11 @@ venv/
 node_modules
 preferences.json
 *.sh
+!.github/scripts/*.sh
 .env
 /logs/*
 /temp/*
 /config/*
 /data/*
 .claude/
+.superpowers/
