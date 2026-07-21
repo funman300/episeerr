@@ -1,0 +1,54 @@
+name: CI
+
+# Verification for pull requests and side branches. Builds the image and boots
+# it, but never publishes: pushes to main are handled by docker-image.yml, which
+# is the only workflow allowed to write to GHCR.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches-ignore: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dockerfile-coverage:
+    name: Dockerfile module coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check every root module is COPYed
+        run: .github/scripts/check-dockerfile-coverage.sh
+
+  build-and-smoke:
+    name: Build image and smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: episeerr:ci
+          # Read-only cache: PR builds must not evict the main build's cache.
+          cache-from: type=gha
+
+      - name: Smoke test
+        run: .github/scripts/smoke-test.sh episeerr:ci episeerr-ci
