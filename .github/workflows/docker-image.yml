@@ -28,6 +28,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write        # push to ghcr.io/<owner>/<repo> with GITHUB_TOKEN
@@ -80,7 +81,20 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t TAGS <<< "${{ steps.meta.outputs.tags }}"
+          # Push immutable tags first and any mutable "latest" tag last, so a
+          # partial-push failure can never leave "latest" pointing at a build
+          # whose immutable sha-/b<n> aliases were never published.
+          ORDERED_TAGS=()
+          LATEST_TAGS=()
           for tag in "${TAGS[@]}"; do
+            [ -n "$tag" ] || continue
+            case "$tag" in
+              *:latest) LATEST_TAGS+=("$tag") ;;
+              *) ORDERED_TAGS+=("$tag") ;;
+            esac
+          done
+          ORDERED_TAGS+=("${LATEST_TAGS[@]}")
+          for tag in "${ORDERED_TAGS[@]}"; do
             [ -n "$tag" ] || continue
             docker tag episeerr:candidate "$tag"
             docker push "$tag"

@@ -23,11 +23,16 @@ concurrency:
 env:
   UPSTREAM_URL: https://github.com/Vansmak/episeerr.git
   UPSTREAM_REF: upstream/main
+  # gh resolves its base repo by remote-name score, and the "upstream" remote
+  # added below outranks "origin" — without this, every gh call in this
+  # workflow would silently target Vansmak/episeerr instead of this fork.
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   sync:
     name: Propose upstream merge
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -125,7 +130,11 @@ jobs:
           {
             echo "Automated sync of upstream \`Vansmak/episeerr\` up to \`${{ steps.check.outputs.sha }}\`."
             echo
-            echo "Merged cleanly. CI on this PR must pass before merging."
+            echo "This pull request was opened by \`GITHUB_TOKEN\`, so CI is not triggered"
+            echo "automatically on it. A maintainer should push an empty commit to"
+            echo "\`${BRANCH}\` or close and reopen this pull request to run the checks,"
+            echo "or configure a \`WORKFLOW_PUSH_TOKEN\` PAT so future sync PRs trigger CI"
+            echo "automatically."
             echo
             echo "### Upstream commits included"
             echo '```'
@@ -157,7 +166,7 @@ jobs:
           EXISTING=$(gh issue list --state open --search "\"$TITLE\" in:title" \
             --json number,title --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -1)
           if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body-file /tmp/issue-body.md
+            echo "Issue #$EXISTING already reports this exact situation ($TITLE); nothing to do."
           else
             gh issue create --title "$TITLE" --body-file /tmp/issue-body.md
           fi
@@ -189,7 +198,7 @@ jobs:
           EXISTING=$(gh issue list --state open --search "\"$TITLE\" in:title" \
             --json number,title --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -1)
           if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body-file /tmp/issue-body.md
+            echo "Issue #$EXISTING already reports this exact situation ($TITLE); nothing to do."
           else
             gh issue create --title "$TITLE" --body-file /tmp/issue-body.md
           fi
