@@ -49,8 +49,10 @@ jobs:
           git remote add upstream "$UPSTREAM_URL"
           git fetch --no-tags upstream main
 
-      - name: Decide whether a sync is needed
+      - name: Decide what action is needed
         id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           SHA="$(git rev-parse --short "$UPSTREAM_REF")"
           BRANCH="upstream-sync/${SHA}"
@@ -58,22 +60,41 @@ jobs:
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
           if git merge-base --is-ancestor "$UPSTREAM_REF" HEAD; then
-            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "action=skip" >> "$GITHUB_OUTPUT"
             echo "Already up to date with upstream/main ($SHA)."
+          elif [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')" ]; then
+            echo "action=skip" >> "$GITHUB_OUTPUT"
+            echo "Open pull request already exists for $BRANCH; nothing to do."
           elif git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-            echo "needed=false" >> "$GITHUB_OUTPUT"
-            echo "Branch $BRANCH already exists; nothing to do."
+            echo "action=recover" >> "$GITHUB_OUTPUT"
+            echo "Branch $BRANCH exists with no open pull request; recovering by opening the pull request."
           else
-            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "action=sync" >> "$GITHUB_OUTPUT"
             echo "Sync needed up to upstream $SHA."
+          fi
+
+      - name: Prepare upstream commit list
+        id: commits
+        if: steps.check.outputs.action != 'skip'
+        run: |
+          git log --oneline --no-decorate "HEAD..${UPSTREAM_REF}" > /tmp/commits-all.txt
+          TOTAL=$(wc -l < /tmp/commits-all.txt)
+          if [ "$TOTAL" -gt 100 ]; then
+            head -n 100 /tmp/commits-all.txt > /tmp/commits.txt
+            OMITTED=$((TOTAL - 100))
+            {
+              echo
+              echo "... and $OMITTED further commits omitted."
+            } >> /tmp/commits.txt
+          else
+            cp /tmp/commits-all.txt /tmp/commits.txt
           fi
 
       - name: Merge upstream onto a sync branch
         id: merge
-        if: steps.check.outputs.needed == 'true'
+        if: steps.check.outputs.action == 'sync'
         run: |
           git checkout -b "${{ steps.check.outputs.branch }}"
-          git log --oneline --no-decorate "HEAD..${UPSTREAM_REF}" > /tmp/commits.txt
           if git merge "$UPSTREAM_REF" --no-edit; then
             echo "clean=true" >> "$GITHUB_OUTPUT"
           else
@@ -84,15 +105,18 @@ jobs:
 
       - name: Push branch and open pull request
         id: push
-        if: steps.merge.outputs.clean == 'true'
+        if: (steps.check.outputs.action == 'sync' && steps.merge.outputs.clean == 'true') || steps.check.outputs.action == 'recover'
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_PUSH_TOKEN || github.token }}
         run: |
           BRANCH="${{ steps.check.outputs.branch }}"
-          if ! git push origin "$BRANCH"; then
-            echo "push_failed=true" >> "$GITHUB_OUTPUT"
-            echo "Push rejected — see the follow-up step."
-            exit 0
+          ACTION="${{ steps.check.outputs.action }}"
+          if [ "$ACTION" = "sync" ]; then
+            if ! git push origin "$BRANCH"; then
+              echo "push_failed=true" >> "$GITHUB_OUTPUT"
+              echo "Push rejected — see the follow-up step."
+              exit 0
+            fi
           fi
           {
             echo "Automated sync of upstream \`Vansmak/episeerr\` up to \`${{ steps.check.outputs.sha }}\`."
