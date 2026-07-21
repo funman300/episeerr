@@ -11,6 +11,14 @@ cd "$(dirname "$0")/../.."
 # Root modules that are deliberately not part of the image.
 ALLOWLIST=(get_plex_token.py)
 
+# First argument of every COPY line, matched by awk field position so leading
+# whitespace is tolerated and commented-out lines (first field "#") are
+# naturally excluded.
+copy_targets=()
+while IFS= read -r target; do
+    copy_targets+=("$target")
+done < <(awk '$1 == "COPY" { print $2 }' Dockerfile)
+
 missing=()
 checked=0
 for f in *.py; do
@@ -18,7 +26,7 @@ for f in *.py; do
         continue
     fi
     checked=$((checked + 1))
-    if ! grep -qE "^COPY[[:space:]]+${f}([[:space:]]|\$)" Dockerfile; then
+    if ! printf '%s\n' "${copy_targets[@]}" | grep -qxF "$f"; then
         missing+=("$f")
     fi
 done
