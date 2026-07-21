@@ -529,9 +529,11 @@ jobs:
 
 Run:
 ```bash
-git diff .github/workflows/docker-image.yml | grep -E '^[-+].*type=' ; echo "exit=$?"
+git diff .github/workflows/docker-image.yml | grep -E '^[-+].*type=(raw|sha)' ; echo "exit=$?"
 ```
-Expected: no output, `exit=1`. Any diff on a `type=` line means the tag scheme changed, which Global Constraints forbid.
+Expected: no output, `exit=1`. Any diff on a `type=raw` or `type=sha` line means the tag scheme changed, which Global Constraints forbid.
+
+The pattern is scoped to `type=(raw|sha)` deliberately: a bare `type=` also matches the `cache-from: type=gha` and `cache-to: type=gha,mode=max` lines that this task legitimately adds to the new candidate-build step, which would make the check fail on a correct implementation.
 
 - [ ] **Step 3: Verify the smoke test precedes the push**
 
@@ -548,7 +550,7 @@ assert smoke < push, "smoke test must run before the push"
 print("OK")
 PY
 ```
-Expected: `smoke at 7, push at 8` then `OK`.
+Expected: `smoke at 6, push at 7` then `OK`. (Step indices are 0-based; the preceding steps are Checkout, Read VERSION, Set up Buildx, Log in to GHCR, Compute tags and labels, Build candidate image.)
 
 - [ ] **Step 4: Commit**
 
