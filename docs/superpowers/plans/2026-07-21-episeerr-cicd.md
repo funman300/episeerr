@@ -8,6 +8,24 @@
 
 **Tech Stack:** GitHub Actions, bash, Docker Buildx, `docker/build-push-action@v6`, `gh` CLI (preinstalled on GitHub runners).
 
+## Implementation notes (added during execution)
+
+The code blocks below are the plan as written, not a transcript of what shipped.
+Three of them were superseded by fixes found in review; the committed code is
+authoritative:
+
+- **Task 1** — regex matching replaced by exact comparison against COPY targets
+  parsed with awk. The original interpolated filenames into an extended regex,
+  so the `.` in every `*.py` name matched any character and `COPY appXpy`
+  satisfied the check for `app.py`. Also now handles COPY option flags,
+  multiple sources and `./` prefixes.
+- **Task 2** — `curl` gained `--connect-timeout 3 --max-time 5` and the loop
+  switched to bash's `SECONDS`. The original counted only its own `sleep`, so a
+  health route that accepted TCP but never responded hung the job indefinitely
+  and `SMOKE_TIMEOUT` bounded nothing.
+- **Task 4** — builds once and pushes the tested image, rather than building
+  twice and trusting the cache. See the task for the reasoning.
+
 ## Global Constraints
 
 - Everything lives inside this repository as GitHub Actions workflows. Nothing is installed on, or executed against, any deployment host. No SSH, tunnels, or host agents.
@@ -420,7 +438,9 @@ Today `docker-image.yml` builds and pushes in one step, so a broken image is pub
 
 - [ ] **Step 1: Replace the file with the gated version**
 
-The only changes from the current file are the header comment, the new "Build candidate image" and "Smoke test candidate" steps, and the rename of the final build step to "Push image". Everything else — triggers, `paths-ignore`, concurrency, permissions, `VERSION` reading, login, `metadata-action` tags, cache, summary — is byte-for-byte as it was.
+The changes from the current file are the header comment, the new "Build candidate image (no push)" and "Smoke test candidate" steps, and the replacement of the publishing `docker/build-push-action` invocation with a "Tag and push the tested image" run step. Everything else — triggers, `paths-ignore`, concurrency, permissions, `VERSION` reading, login, `metadata-action` tags, cache, summary — is byte-for-byte as it was.
+
+**The image is built exactly once.** An earlier draft of this task built twice — once to smoke-test, once to push — relying on the layer cache to make the two identical. That was rejected during implementation: nothing asserted the cache hit, and `requirements.txt` pins loosely (`Flask>=3.0.0`, `requests>=2.31.0`), so a cache miss could resolve different package versions for the published image than for the one that passed the gate, while the gate still reported success. Building once and pushing that exact local image removes the divergence entirely. The cost is losing multi-platform build capability, which is irrelevant at `linux/amd64` only.
 
 ```yaml
 name: Build and push Docker image
@@ -491,23 +511,23 @@ jobs:
           push: false
           load: true
           tags: episeerr:candidate
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Smoke test candidate
         run: .github/scripts/smoke-test.sh episeerr:candidate episeerr-candidate
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Tag and push the tested image
+        run: |
+          set -euo pipefail
+          mapfile -t TAGS <<< "${{ steps.meta.outputs.tags }}"
+          for tag in "${TAGS[@]}"; do
+            [ -n "$tag" ] || continue
+            docker tag episeerr:candidate "$tag"
+            docker push "$tag"
+            echo "pushed $tag"
+          done
 
       - name: Summary
         run: |
@@ -544,7 +564,7 @@ import yaml
 steps = yaml.safe_load(open('.github/workflows/docker-image.yml'))['jobs']['build']['steps']
 names = [s.get('name') for s in steps]
 smoke = names.index('Smoke test candidate')
-push  = names.index('Build and push')
+push  = names.index('Tag and push the tested image')
 print(f"smoke at {smoke}, push at {push}")
 assert smoke < push, "smoke test must run before the push"
 print("OK")
@@ -814,7 +834,7 @@ Open the `Build and push Docker image` run for the merge commit. Confirm, in ord
 
 1. `Build candidate image (no push)` succeeds.
 2. `Smoke test candidate` prints `OK: healthy after Ns`.
-3. `Build and push` succeeds and is largely a cache hit (it should take seconds, not minutes).
+3. `Tag and push the tested image` pushes every tag, logging one `pushed <tag>` line each.
 4. The job summary lists all four tags: `latest`, `sha-<short>`, `b<n>`, `<VERSION>-b<n>`.
 
 - [ ] **Step 5: Confirm the published tags exist**
