@@ -23,10 +23,10 @@ trap cleanup EXIT
 docker run -d --name "$NAME" -p "${PORT}:5002" "$IMAGE" >/dev/null
 echo "Started '${NAME}' from '${IMAGE}'; polling ${URL} for up to ${TIMEOUT}s"
 
-elapsed=0
-while [ "$elapsed" -lt "$TIMEOUT" ]; do
-    if curl -fsS -o /dev/null "$URL"; then
-        echo "OK: healthy after ${elapsed}s"
+SECONDS=0
+while [ "$SECONDS" -lt "$TIMEOUT" ]; do
+    if curl -fsS --connect-timeout 3 --max-time 5 -o /dev/null "$URL"; then
+        echo "OK: healthy after ${SECONDS}s"
         exit 0
     fi
     if ! docker ps --format '{{.Names}}' | grep -qxF "$NAME"; then
@@ -35,7 +35,6 @@ while [ "$elapsed" -lt "$TIMEOUT" ]; do
         exit 1
     fi
     sleep 3
-    elapsed=$((elapsed + 3))
 done
 
 echo "::error::Timed out after ${TIMEOUT}s waiting for ${URL}"
